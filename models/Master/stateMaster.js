@@ -1,8 +1,8 @@
 const Sequelize = require("sequelize");
 const MySqlConnection = require("../../connections/mysql_connection");
 
-const BranchMasterModel = MySqlConnection._instance.define(
-  "branchMaster",
+const StateMasterModel = MySqlConnection._instance.define(
+  "stateMaster",
   {
     id: {
       type: Sequelize.DataTypes.INTEGER,
@@ -11,20 +11,8 @@ const BranchMasterModel = MySqlConnection._instance.define(
       autoIncrement: true
     },
     name: {
-      type: Sequelize.STRING(100),
+      type: Sequelize.DataTypes.STRING(100),
       allowNull: false
-    },
-    cityId: {
-      type: Sequelize.DataTypes.INTEGER,
-      allowNull: true
-    },
-    branchCode: {
-      type: Sequelize.DataTypes.STRING(10),
-      allowNull: true
-    },
-    address: {
-      type: Sequelize.DataTypes.TEXT,
-      allowNull: true
     },
     isActive: {
       type: Sequelize.DataTypes.BOOLEAN,
@@ -51,8 +39,8 @@ const BranchMasterModel = MySqlConnection._instance.define(
     }
   },
   {
-    tableName: "branch_master"
+    tableName: "state_master"
   }
 );
 
-module.exports = BranchMasterModel;
+module.exports = StateMasterModel;

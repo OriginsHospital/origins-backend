@@ -136,6 +136,204 @@ class IpController {
       data: data
     });
   }
+
+  // ========== LAYOUT MANAGEMENT HANDLERS ==========
+
+  // State handlers
+  async createStateHandler() {
+    const data = await this._service.createStateService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getStatesHandler() {
+    const data = await this._service.getStatesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateStateHandler() {
+    const data = await this._service.updateStateService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // City handlers
+  async createCityHandler() {
+    const data = await this._service.createCityService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getCitiesHandler() {
+    const data = await this._service.getCitiesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateCityHandler() {
+    const data = await this._service.updateCityService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // Branch handlers
+  async createBranchHandler() {
+    const data = await this._service.createBranchService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getBranchesHandler() {
+    const data = await this._service.getBranchesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateBranchHandler() {
+    const data = await this._service.updateBranchService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // Building handlers
+  async createBuildingHandler() {
+    const data = await this._service.createBuildingService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateBuildingHandler() {
+    const data = await this._service.updateBuildingService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // Floor handlers
+  async createFloorHandler() {
+    const data = await this._service.createFloorService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateFloorHandler() {
+    const data = await this._service.updateFloorService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // Room handlers
+  async createRoomHandler() {
+    const data = await this._service.createRoomService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateRoomHandler() {
+    const data = await this._service.updateRoomService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  // Bed handlers
+  async createBedHandler() {
+    const data = await this._service.createBedService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async createBedsBulkHandler() {
+    const data = await this._service.createBedsBulkService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateBedHandler() {
+    const data = await this._service.updateBedService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteBedHandler() {
+    const data = await this._service.deleteBedService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteRoomHandler() {
+    const data = await this._service.deleteRoomService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteFloorHandler() {
+    const data = await this._service.deleteFloorService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = IpController;

@@ -18,6 +18,19 @@ const BranchBuildingAssociationModel = MySqlConnection._instance.define(
       type: Sequelize.DataTypes.STRING(100),
       allowNull: false
     },
+    buildingCode: {
+      type: Sequelize.DataTypes.STRING(20),
+      allowNull: true
+    },
+    totalFloors: {
+      type: Sequelize.DataTypes.INTEGER,
+      allowNull: true
+    },
+    isActive: {
+      type: Sequelize.DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     createdBy: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: false
