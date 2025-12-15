@@ -562,16 +562,19 @@ class IpService {
       throw new createError.Conflict("State with this name already exists");
     }
 
+    // Convert boolean isActive to status string
+    const status = isActive ? "Active" : "Inactive";
+
     return await StateMasterModel.create({
       name: name.trim(),
-      isActive,
+      status,
       createdBy: createdByUserId
     });
   }
 
   async getStatesService() {
     return await StateMasterModel.findAll({
-      where: { isActive: true },
+      where: { status: "Active" },
       order: [["name", "ASC"]]
     });
   }
@@ -598,7 +601,8 @@ class IpService {
     }
 
     if (isActive !== undefined) {
-      state.isActive = isActive;
+      // Convert boolean isActive to status string
+      state.status = isActive ? "Active" : "Inactive";
     }
 
     state.updatedBy = updatedByUserId;

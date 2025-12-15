@@ -12,12 +12,13 @@ const StateMasterModel = MySqlConnection._instance.define(
     },
     name: {
       type: Sequelize.DataTypes.STRING(100),
-      allowNull: false
-    },
-    isActive: {
-      type: Sequelize.DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: true
+      unique: true
+    },
+    status: {
+      type: Sequelize.DataTypes.ENUM("Active", "Inactive"),
+      allowNull: false,
+      defaultValue: "Active"
     },
     createdBy: {
       type: Sequelize.DataTypes.INTEGER,
