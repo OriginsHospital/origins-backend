@@ -1,0 +1,7 @@
+{
+  "gender": ["Male", "Female", "Other"],
+  "maritalStatus": ["Single", "Married", "Divorced", "Widowed"],
+  "paymentMethod": ["Cash", "Card", "Online Transfer"],
+  "createType": ["Consultation", "Treatment"],
+  "consultationTypes": ["Initial Consultation", "FollowUp Consultation"]
+}

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Laboratory Report</title>
+    <style>
+      body {
+        font-family: sans-serif;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body style="font-family: sans-serif;">
+    <div style="text-align: right;">
+      <p>
+        <span>{{downloadTime}}</span>
+      </p>
+    </div>
+    <h2 style="text-align: center;">LABORATORY REPORT</h2>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <th style="text-align: left;">Patient ID</th>
+        <td>{{patientInfo.patientId}}</td>
+        <th style="text-align: left;">Patient Name</th>
+        <td>{{patientInfo.patientName}}</td>
+      </tr>
+      <tr>
+        <th style="text-align: left;">Age / Gender</th>
+        <td>{{patientInfo.patientGender}}</td>
+        <th style="text-align: left;">Req Date:</th>
+        <td>{{req_date}}</td>
+      </tr>
+      <tr>
+        <th style="text-align: left;">Sample Type</th>
+        <td>{{patientInfo.sampleType}}</td>
+        <th style="text-align: left;">Sample Collection on</th>
+        <td>{{sample_collection_date}}</td>
+      </tr>
+      <tr>
+        <th style="text-align: left;">Doctor Name</th>
+        <td>{{patientInfo.doctorName}}</td>
+      </tr>
+    </table>
+
+    <h3 style="text-align: center;">{{labTestInformation.labTestGroup}}</h3>
+    <h4 style="text-align: center;">{{labTestInformation.labTestName}}</h4>
+    <table width="100%" border="1" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="left" valign="top"><strong>Test Name</strong></td>
+        <td align="center" valign="top" width="80"><strong>Result</strong></td>
+        <td align="center" valign="top" width="250"><strong>Units</strong></td>
+        <td align="center" valign="top" width="250">
+          <strong>Reference Range</strong>
+        </td>
+      </tr>
+      {{#each labResults}}
+      <tr>
+        <td align="left" valign="top">{{this.testName}} &nbsp;</td>
+        <td align="center" valign="top">{{this.value}}&nbsp;</td>
+        <td align="center" valign="top">{{this.defaultRange}}&nbsp;</td>
+        <td align="center" valign="top">{{this.units}}&nbsp;</td>
+      </tr>
+      {{/each}}
+    </table>
+
+    <p style="text-align: center;">*** End of Report ***</p>
+    <div style="text-align: right;">
+      <p>Lab Technician</p>
+    </div>
+    <p style="text-align: left;">
+      <br />
+      Reported Date: {{reported_date}}
+      <br />
+      Printed Date: {{printed_date}}
+      <br />
+    </p>
+  </body>
+</html>

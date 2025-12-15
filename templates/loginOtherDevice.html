@@ -1,0 +1,42 @@
+<div style="width:600px; font-family: Helvetica, Arial, sans-serif;">
+  <div
+    style="padding: 10px; color: rgba(255, 255, 255, 0.75); background-color:#e6e6e6;"
+  >
+    <div
+      style="background-color: #fff; color:#444; padding:20px 40px; font-weight: 400; font-size:15px; text-align:justify;"
+    >
+      <h3 style="font-weight: 400;">Dear {{name}},</h3>
+      <br />
+      <h3 style="font-weight: 500; letter-spacing: 0.9px;">
+        New Login Detected for your account {{email}}. If not you, please logout
+        by clicking below button.
+      </h3>
+      <table style="color:#444;">
+        <tr style="border: 1px solid #b2b2b2;">
+          <td style="background-color: #f2f2f2; padding: 6px; width: 200px;">
+            User Agent
+          </td>
+          <td style="background-color: #fff; padding: 6px; width: 240px;">
+            {{agent}}
+          </td>
+        </tr>
+      </table>
+
+      <center>
+        <div style="width:60%;">
+          <a
+            href="{{logoutLink}}"
+            target="_blank"
+            style="text-decoration: none;"
+          >
+            <p
+              style="background-color:rgb(242, 18, 44); color:#fff; padding:15px; letter-spacing:1.5px; margin:0;"
+            >
+              Logout
+            </p>
+          </a>
+        </div>
+      </center>
+    </div>
+  </div>
+</div>
