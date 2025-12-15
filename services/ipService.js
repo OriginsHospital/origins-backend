@@ -139,7 +139,11 @@ class IpService {
   async getBuildingsService() {
     const { branchId } = this._request.params;
     return await BranchBuildingAssociationModel.findAll({
-      where: { branchId }
+      where: {
+        branchId,
+        isActive: true
+      },
+      order: [["name", "ASC"]]
     }).catch(err => {
       console.log("Error while getting buildings", err.message);
       throw new createError.InternalServerError(
@@ -151,7 +155,11 @@ class IpService {
   async getFloorsService() {
     const { buildingId } = this._request.params;
     return await BuildingFloorAssociationModel.findAll({
-      where: { buildingId }
+      where: {
+        buildingId,
+        isActive: true
+      },
+      order: [["floorNumber", "ASC"], ["name", "ASC"]]
     }).catch(err => {
       console.log("Error while getting floors", err.message);
       throw new createError.InternalServerError(
@@ -163,7 +171,11 @@ class IpService {
   async getRoomService() {
     const { floorId } = this._request.params;
     return await FloorRoomAssociationModel.findAll({
-      where: { floorId }
+      where: {
+        floorId,
+        isActive: true
+      },
+      order: [["roomNumber", "ASC"], ["name", "ASC"]]
     }).catch(err => {
       console.log("Error while getting rooms", err.message);
       throw new createError.InternalServerError(
@@ -175,7 +187,11 @@ class IpService {
   async getBedsService() {
     const { roomId } = this._request.params;
     return await RoomBedAssociationModel.findAll({
-      where: { roomId }
+      where: {
+        roomId,
+        status: "Available" // Only return available beds for IP creation
+      },
+      order: [["bedNumber", "ASC"]]
     }).catch(err => {
       console.log("Error while getting beds", err.message);
       throw new createError.InternalServerError(
