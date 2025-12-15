@@ -704,7 +704,6 @@ class IpService {
   async createBranchService() {
     const createdByUserId = this._request?.userDetails?.id;
     const {
-      stateId,
       cityId,
       name,
       branchCode,
