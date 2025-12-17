@@ -14,7 +14,7 @@ class TeamsRoute {
     this.intializeRoutes();
   }
 
-  async intializeRoutes() {
+  intializeRoutes() {
     // ============ CHAT Routes ============
     
     this._route.get(

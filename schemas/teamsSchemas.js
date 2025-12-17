@@ -59,17 +59,6 @@ const sendMessageSchema = Joi.object({
     .items(Joi.number().integer())
     .optional()
     .allow(null)
-}).custom((value, helpers) => {
-  // At least message or fileUrl must be provided
-  const hasMessage = value.message && value.message.trim().length > 0;
-  const hasFile = value.fileUrl && value.fileUrl.trim().length > 0;
-
-  if (!hasMessage && !hasFile) {
-    return helpers.error("any.custom", {
-      message: "Either message or file must be provided"
-    });
-  }
-  return value;
 });
 
 const editMessageSchema = Joi.object({
