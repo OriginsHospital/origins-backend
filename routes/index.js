@@ -33,6 +33,7 @@ const AlertsRoute = require("./alerts_route");
 const ConsultantRoaster = require("./consultant_roaster_route.js");
 const OtherPaymentsRoute = require("./other_payments_routes.js");
 const IPRoute = require("./ip_route.js");
+const TeamsRoute = require("./teams_route.js");
 
 class IndexRoute {
   constructor(expressApplication) {
@@ -78,6 +79,7 @@ class IndexRoute {
     this._app.use("/consultantRoaster", new ConsultantRoaster()._route);
     this._app.use("/otherPayments", new OtherPaymentsRoute()._route);
     this._app.use("/ip", new IPRoute()._route);
+    this._app.use("/teams", new TeamsRoute()._route);
   }
 }
 
