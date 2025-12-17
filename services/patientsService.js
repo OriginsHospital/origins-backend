@@ -476,13 +476,37 @@ class PatientsService extends BaseService {
       throw new createError.Conflict(Constants.CREATE_PATIENT_CONFLICT);
     }
 
+    // Prepare update data object - only include fields that should be updated
+    const updateData = {
+      branchId: validatedEditData.branchId,
+      aadhaarNo: validatedEditData.aadhaarNo,
+      mobileNo: validatedEditData.mobileNo,
+      email: validatedEditData.email,
+      firstName: validatedEditData.firstName,
+      lastName: validatedEditData.lastName,
+      gender: validatedEditData.gender,
+      maritalStatus: validatedEditData.maritalStatus,
+      dateOfBirth: validatedEditData.dateOfBirth,
+      bloodGroup: validatedEditData.bloodGroup,
+      addressLine1: validatedEditData.addressLine1,
+      addressLine2: validatedEditData.addressLine2,
+      patientTypeId: validatedEditData.patientTypeId,
+      cityId: validatedEditData.cityId,
+      stateId: validatedEditData.stateId,
+      referralId: validatedEditData.referralId,
+      referralName: validatedEditData.referralName,
+      pincode: validatedEditData.pincode,
+      updatedBy: createdByUserId
+    };
+
+    // Handle file uploads - only update if new files are provided
     if (this._request.files && this._request.files.file) {
       const uploadedPhotoPath = await this.uploadPatientImage(
         isExistedPatient.dataValues.id,
         this._request.files.file[0],
         "patient"
       );
-      validatedEditData.photoPath = uploadedPhotoPath;
+      updateData.photoPath = uploadedPhotoPath;
     }
 
     //aadhaarCard
@@ -492,7 +516,7 @@ class PatientsService extends BaseService {
         this._request.files.aadhaarCard[0],
         "aadhaarCard"
       );
-      validatedEditData.aadhaarCard = uploadedAadhaar;
+      updateData.aadhaarCard = uploadedAadhaar;
     }
 
     //marriageCertificate
@@ -502,7 +526,7 @@ class PatientsService extends BaseService {
         this._request.files.marriageCertificate[0],
         "marriageCertificate"
       );
-      validatedEditData.marriageCertificate = uploadedMarriageCertificate;
+      updateData.marriageCertificate = uploadedMarriageCertificate;
     }
 
     //affidavit
@@ -512,47 +536,22 @@ class PatientsService extends BaseService {
         this._request.files.affidavit[0],
         "affidavit"
       );
-      validatedEditData.affidavit = uploadedAffidavit;
+      updateData.affidavit = uploadedAffidavit;
     }
 
-    let documentPaths = [];
+    // Handle uploaded documents
     if (this._request.files && this._request.files.uploadedDocuments) {
       const uploadedDocuments = this._request.files.uploadedDocuments;
       const documentUploadPromises = uploadedDocuments.map(doc =>
         this.uploadDocumentToS3(isExistedPatient.dataValues.id, doc)
       );
-      documentPaths = await Promise.all(documentUploadPromises);
+      const documentPaths = await Promise.all(documentUploadPromises);
+      updateData.uploadedDocuments = documentPaths;
     }
 
-    await PatientMasterModel.update(
-      {
-        branchId: validatedEditData.branchId,
-        aadhaarNo: validatedEditData.aadhaarNo,
-        mobileNo: validatedEditData.mobileNo,
-        email: validatedEditData.email,
-        firstName: validatedEditData.firstName,
-        lastName: validatedEditData.lastName,
-        gender: validatedEditData.gender,
-        maritalStatus: validatedEditData.maritalStatus,
-        dateOfBirth: validatedEditData.dateOfBirth,
-        bloodGroup: validatedEditData.bloodGroup,
-        addressLine1: validatedEditData.addressLine1,
-        addressLine2: validatedEditData.addressLine2,
-        patientTypeId: validatedEditData.patientTypeId,
-        cityId: validatedEditData.cityId,
-        stateId: validatedEditData.stateId,
-        referralId: validatedEditData.referralId,
-        referralName: validatedEditData.referralName,
-        pincode: validatedEditData.pincode,
-        photoPath: validatedEditData.photoPath,
-        aadhaarCard: validatedEditData.aadhaarCard,
-        marriageCertificate: validatedEditData.marriageCertificate,
-        affidavit: validatedEditData.affidavit,
-        updatedBy: createdByUserId,
-        uploadedDocuments: documentPaths
-      },
-      { where: { id: isExistedPatient.dataValues.id } }
-    ).catch(err => {
+    await PatientMasterModel.update(updateData, {
+      where: { id: isExistedPatient.dataValues.id }
+    }).catch(err => {
       console.log("Error while updating existing patient Details", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
