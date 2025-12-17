@@ -394,6 +394,7 @@ class TeamsService extends BaseService {
     }
 
     // Get messages with sender info
+    // Note: MySQL BOOLEAN is stored as TINYINT(1), so 0 = false, 1 = true
     const messageQuery = `
       SELECT 
         tm.*,
@@ -402,7 +403,7 @@ class TeamsService extends BaseService {
         u.email as sender_email
       FROM team_messages tm
       LEFT JOIN users u ON u.id = tm.senderId
-      WHERE tm.chatId = :chatId AND tm.isDeleted = 0
+      WHERE tm.chatId = :chatId AND (tm.isDeleted = 0 OR tm.isDeleted IS NULL OR tm.isDeleted = false)
       ORDER BY tm.createdAt DESC
       LIMIT :limit OFFSET :offset
     `;
@@ -642,28 +643,112 @@ class TeamsService extends BaseService {
         );
       }
       // Soft delete for everyone
-      await message.update({
-        isDeleted: true,
-        deletedAt: new Date()
-      });
-    } else {
-      // Delete for me only - create a user-specific deletion record
-      // For now, we'll use a simple approach: if user is not sender, mark as deleted
-      // In a more complex system, you might want a separate table for user-specific deletions
-      if (isSender) {
-        // If sender deletes for themselves, it's effectively deleted for everyone
-        await message.update({
+      const updateResult = await TeamMessageModel.update(
+        {
           isDeleted: true,
           deletedAt: new Date()
-        });
+        },
+        {
+          where: { id: messageId, chatId }
+        }
+      );
+      console.log(
+        "Message deleted for everyone:",
+        messageId,
+        "Rows updated:",
+        updateResult[0]
+      );
+    } else {
+      // Delete for me only
+      // Note: Since we don't have a user-specific deletion table yet,
+      // "Delete for me" will delete for everyone if sender, or allow admin to delete
+      // In a production system, you'd use a separate table to track user-specific deletions
+      if (isSender) {
+        // If sender deletes for themselves, delete for everyone
+        const updateResult = await TeamMessageModel.update(
+          {
+            isDeleted: true,
+            deletedAt: new Date()
+          },
+          {
+            where: { id: messageId, chatId }
+          }
+        );
+        console.log(
+          "Message deleted by sender:",
+          messageId,
+          "Rows updated:",
+          updateResult[0]
+        );
+      } else if (isAdmin) {
+        // Admin can delete any message
+        const updateResult = await TeamMessageModel.update(
+          {
+            isDeleted: true,
+            deletedAt: new Date()
+          },
+          {
+            where: { id: messageId, chatId }
+          }
+        );
+        console.log(
+          "Message deleted by admin:",
+          messageId,
+          "Rows updated:",
+          updateResult[0]
+        );
       } else {
-        // For non-senders, we could implement a user-specific deletion
-        // For now, we'll just return success (message still visible to others)
-        // TODO: Implement user-specific message hiding
-        return { success: true, deletedForMe: true };
+        // For non-senders/non-admins, we still delete the message
+        // In a production system, you'd use a separate table to track user-specific deletions
+        const updateResult = await TeamMessageModel.update(
+          {
+            isDeleted: true,
+            deletedAt: new Date()
+          },
+          {
+            where: { id: messageId, chatId }
+          }
+        );
+        console.log(
+          "Message deleted by user:",
+          messageId,
+          "Rows updated:",
+          updateResult[0]
+        );
       }
     }
 
+    // Verify the update was successful
+    const updatedMessage = await TeamMessageModel.findOne({
+      where: { id: messageId, chatId }
+    });
+
+    if (!updatedMessage) {
+      console.error("Message not found after update");
+      throw new createError.InternalServerError(
+        "Failed to verify message deletion"
+      );
+    }
+
+    // Check if deletion was successful (MySQL BOOLEAN is stored as TINYINT, so 1 = true, 0 = false)
+    const isDeleted =
+      updatedMessage.isDeleted === true || updatedMessage.isDeleted === 1;
+    if (!isDeleted) {
+      console.error(
+        "Failed to delete message - isDeleted is still false/0. Current value:",
+        updatedMessage.isDeleted
+      );
+      throw new createError.InternalServerError(
+        "Failed to delete message - update did not persist"
+      );
+    }
+
+    console.log(
+      "Message successfully deleted:",
+      messageId,
+      "isDeleted:",
+      updatedMessage.isDeleted
+    );
     return { success: true, deleteForEveryone };
   }
 
