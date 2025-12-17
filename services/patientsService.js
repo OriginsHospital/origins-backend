@@ -452,8 +452,37 @@ class PatientsService extends BaseService {
       JSON.stringify(this._request.body, null, 2)
     );
 
-    // Convert string numbers to actual numbers for FormData fields
-    const bodyData = { ...this._request.body };
+    // Only include fields that are in the edit schema to prevent validation errors
+    const allowedFields = [
+      "id",
+      "branchId",
+      "aadhaarNo",
+      "mobileNo",
+      "email",
+      "firstName",
+      "lastName",
+      "gender",
+      "maritalStatus",
+      "dateOfBirth",
+      "bloodGroup",
+      "addressLine1",
+      "addressLine2",
+      "patientTypeId",
+      "cityId",
+      "stateId",
+      "referralId",
+      "referralName",
+      "pincode",
+      "photoPath"
+    ];
+
+    // Filter out any fields not in the allowed list (like isZeroRegistration, createActiveVisit, etc.)
+    const bodyData = {};
+    allowedFields.forEach(field => {
+      if (this._request.body.hasOwnProperty(field)) {
+        bodyData[field] = this._request.body[field];
+      }
+    });
     if (bodyData.id) bodyData.id = Number(bodyData.id);
     if (bodyData.branchId) bodyData.branchId = Number(bodyData.branchId);
     if (bodyData.patientTypeId)
