@@ -953,7 +953,7 @@ SELECT
     ) AS referralSource,
     'N/A' AS plan,
     COALESCE(ttm.name, 'N/A') AS treatmentType,
-    'N/A' AS package,
+    COALESCE((SELECT pm2.name FROM package_master pm2 WHERE pm2.id = pva.packageChosen), 'N/A') AS package,
     COALESCE(vtca.cycleNumber, 1) AS cycle,
     CASE 
         WHEN pva.id IS NULL THEN 'On Hold'
@@ -984,7 +984,17 @@ SELECT
     vtca.id AS treatmentCycleId
 FROM patient_master pm
 INNER JOIN branch_master bm ON bm.id = pm.branchId
-LEFT JOIN patient_visits_association pva ON pva.patientId = pm.id AND pva.isActive = 1
+LEFT JOIN (
+    SELECT pva1.*
+    FROM patient_visits_association pva1
+    WHERE pva1.id = (
+        SELECT pva2.id 
+        FROM patient_visits_association pva2 
+        WHERE pva2.patientId = pva1.patientId 
+        ORDER BY pva2.isActive DESC, pva2.createdAt DESC 
+        LIMIT 1
+    )
+) pva ON pva.patientId = pm.id
 LEFT JOIN visit_treatment_cycles_associations vtca ON vtca.visitId = pva.id
 LEFT JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
 LEFT JOIN visit_packages_associations vpa ON vpa.visitId = pva.id
