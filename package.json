@@ -47,6 +47,7 @@
     "razorpay": "^2.9.4",
     "sequelize": "^6.37.2",
     "simple-crypto-js": "^3.0.1",
+    "socket.io": "^4.8.1",
     "time-slots-generator": "^1.0.6",
     "uuid": "^9.0.1"
   },
