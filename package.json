@@ -4,7 +4,8 @@
   "description": "Origins Hospital Management System",
   "main": "index.js",
   "scripts": {
-    "start:dev": "nodemon index.js"
+    "start:dev": "nodemon index.js",
+    "migrate:teams": "node database/migrations/run_teams_migration.js"
   },
   "husky": {
     "hooks": {
