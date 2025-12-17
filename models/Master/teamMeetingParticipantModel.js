@@ -48,6 +48,7 @@ const TeamMeetingParticipantModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_meeting_participants",
+    timestamps: false, // Using joinedAt and leftAt instead
     indexes: [
       {
         unique: true,

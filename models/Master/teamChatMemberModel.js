@@ -43,6 +43,7 @@ const TeamChatMemberModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_chat_members",
+    timestamps: false, // Using joinedAt instead
     indexes: [
       {
         unique: true,

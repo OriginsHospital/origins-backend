@@ -72,6 +72,9 @@ const TeamMeetingModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_meetings",
+    timestamps: true,
+    createdAt: "createdAt",
+    updatedAt: "updatedAt",
     indexes: [
       {
         fields: ["startTime"]

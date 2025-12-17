@@ -75,6 +75,9 @@ const TeamCalendarEventModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_calendar_events",
+    timestamps: true,
+    createdAt: "createdAt",
+    updatedAt: "updatedAt",
     indexes: [
       {
         fields: ["startTime", "endTime"]

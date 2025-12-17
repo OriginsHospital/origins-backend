@@ -76,6 +76,9 @@ const TeamMessageModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_messages",
+    timestamps: true,
+    createdAt: "createdAt",
+    updatedAt: "updatedAt",
     indexes: [
       {
         fields: ["chatId", "createdAt"]

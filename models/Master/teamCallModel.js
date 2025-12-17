@@ -69,12 +69,13 @@ const TeamCallModel = MySqlConnection._instance.define(
   },
   {
     tableName: "team_calls",
+    timestamps: false, // Using startTime and endTime instead
     indexes: [
       {
-        fields: ["callerId", "createdAt"]
+        fields: ["callerId", "startTime"]
       },
       {
-        fields: ["receiverId", "createdAt"]
+        fields: ["receiverId", "startTime"]
       },
       {
         fields: ["callStatus"]

@@ -33,7 +33,10 @@ const TeamChatModel = MySqlConnection._instance.define(
     }
   },
   {
-    tableName: "team_chats"
+    tableName: "team_chats",
+    timestamps: true,
+    createdAt: "createdAt",
+    updatedAt: "updatedAt"
   }
 );
 
