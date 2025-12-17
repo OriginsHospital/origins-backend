@@ -559,12 +559,14 @@ class ReportsService {
     // Date filters
     if (fromDate) {
       whereConditions.push(
-        "COALESCE(pva.visitDate, pm.createdAt) >= :fromDate"
+        "DATE(COALESCE(pva.visitDate, pm.createdAt)) >= DATE(:fromDate)"
       );
       replacements.fromDate = fromDate;
     }
     if (toDate) {
-      whereConditions.push("COALESCE(pva.visitDate, pm.createdAt) <= :toDate");
+      whereConditions.push(
+        "DATE(COALESCE(pva.visitDate, pm.createdAt)) <= DATE(:toDate)"
+      );
       replacements.toDate = toDate;
     }
 
@@ -680,6 +682,8 @@ class ReportsService {
     query = query.replace("{{pagination}}", paginationClause);
 
     // Execute query
+    console.log("Patient Report Query:", query.substring(0, 500));
+    console.log("Patient Report Replacements:", JSON.stringify(replacements));
     let data = await this.mySqlConnection
       .query(query, {
         type: Sequelize.QueryTypes.SELECT,
@@ -687,22 +691,22 @@ class ReportsService {
       })
       .catch(err => {
         console.log("Error while fetching patient report:", err);
+        console.log("Error message:", err.message);
+        console.log("Error SQL:", err.sql);
         throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
+          err.message || Constants.SOMETHING_ERROR_OCCURRED
         );
       });
 
-    // Get total count for pagination
-    let countQuery = patientReportQuery.replace(
-      "SELECT \n    DATE_FORMAT(COALESCE(pva.visitDate, pm.createdAt), '%d-%b-%Y') AS date,",
-      "SELECT COUNT(DISTINCT CONCAT(pm.id, '-', COALESCE(pva.id, 0), '-', COALESCE(vtca.id, 0))) AS total"
-    );
-    countQuery = countQuery.replace("{{whereConditions}}", whereClause);
-    countQuery = countQuery.replace("{{pagination}}", "");
-    countQuery = countQuery.replace(
-      "GROUP BY pm.id, pva.id, vtca.id\nORDER BY pm.createdAt DESC, vtca.createdAt DESC",
-      ""
-    );
+    // Get total count for pagination - simpler count query
+    let countQuery = `
+      SELECT COUNT(DISTINCT pm.id) AS total
+      FROM patient_master pm
+      INNER JOIN branch_master bm ON bm.id = pm.branchId
+      LEFT JOIN patient_visits_association pva ON pva.patientId = pm.id AND pva.isActive = 1
+      WHERE 1=1
+      ${whereClause}
+    `;
 
     const countResult = await this.mySqlConnection
       .query(countQuery, {

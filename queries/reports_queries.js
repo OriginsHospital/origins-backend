@@ -951,11 +951,12 @@ SELECT
             ELSE '' 
         END
     ) AS referralSource,
-    COALESCE(pm.name, 'N/A') AS plan,
-    ttm.name AS treatmentType,
-    COALESCE(pm.name, 'N/A') AS package,
+    'N/A' AS plan,
+    COALESCE(ttm.name, 'N/A') AS treatmentType,
+    'N/A' AS package,
     COALESCE(vtca.cycleNumber, 1) AS cycle,
     CASE 
+        WHEN pva.id IS NULL THEN 'On Hold'
         WHEN pva.isActive = 1 AND (vpa.uptPositiveDate IS NULL OR vpa.uptPositiveDate = '') THEN 'Active'
         WHEN vpa.uptPositiveDate IS NOT NULL AND vpa.uptPositiveDate != '' THEN 'Completed'
         WHEN pva.isActive = 0 THEN 'Dropped'
@@ -973,6 +974,7 @@ SELECT
     COALESCE(embryoData.discardedEmbryos, 0) AS noOfEmbryosDiscarded,
     CASE 
         WHEN vpa.uptPositiveDate IS NOT NULL AND vpa.uptPositiveDate != '' THEN 'Positive'
+        WHEN pva.id IS NULL THEN 'Pending'
         WHEN vpa.uptPositiveDate IS NULL OR vpa.uptPositiveDate = '' THEN 
             CASE WHEN pva.isActive = 0 THEN 'Negative' ELSE 'Pending' END
         ELSE 'Pending'
@@ -1017,7 +1019,7 @@ WHERE 1=1
 GROUP BY 
     pm.id, 
     pva.id, 
-    vtca.id, 
+    vtca.id,
     bm.branchCode,
     rtm.name,
     pm.referralName,
@@ -1027,11 +1029,11 @@ GROUP BY
     pva.isActive,
     pva.visitDate,
     pm.createdAt,
-    paymentData.paidAmount, 
-    paymentData.pendingAmount, 
-    embryoData.totalEmbryos, 
-    embryoData.usedEmbryos, 
-    embryoData.remainingEmbryos, 
+    paymentData.paidAmount,
+    paymentData.pendingAmount,
+    embryoData.totalEmbryos,
+    embryoData.usedEmbryos,
+    embryoData.remainingEmbryos,
     embryoData.discardedEmbryos
 ORDER BY pm.createdAt DESC, COALESCE(vtca.createdAt, pva.createdAt) DESC
 {{pagination}}
