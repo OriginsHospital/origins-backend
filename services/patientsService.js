@@ -477,10 +477,13 @@ class PatientsService extends BaseService {
     ];
 
     // Filter out any fields not in the allowed list (like isZeroRegistration, createActiveVisit, etc.)
+    // Use safer property check that works with FormData/multer body objects
     const bodyData = {};
+    const requestBody = this._request.body || {};
+
     allowedFields.forEach(field => {
-      if (this._request.body.hasOwnProperty(field)) {
-        bodyData[field] = this._request.body[field];
+      if (field in requestBody && requestBody[field] !== undefined) {
+        bodyData[field] = requestBody[field];
       }
     });
     if (bodyData.id) bodyData.id = Number(bodyData.id);
