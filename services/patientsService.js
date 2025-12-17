@@ -478,6 +478,37 @@ class PatientsService extends BaseService {
     if (bodyData.stateId === "") bodyData.stateId = null;
     if (bodyData.referralId === "") bodyData.referralId = null;
 
+    // Handle dateOfBirth conversion - convert string to Date or null
+    if (
+      bodyData.dateOfBirth === "" ||
+      bodyData.dateOfBirth === null ||
+      bodyData.dateOfBirth === undefined
+    ) {
+      bodyData.dateOfBirth = null;
+    } else if (
+      typeof bodyData.dateOfBirth === "string" &&
+      bodyData.dateOfBirth.trim() !== ""
+    ) {
+      // Convert string date to Date object for Sequelize
+      const dateObj = new Date(bodyData.dateOfBirth);
+      if (isNaN(dateObj.getTime())) {
+        // Invalid date string, set to null
+        bodyData.dateOfBirth = null;
+      } else {
+        bodyData.dateOfBirth = dateObj;
+      }
+    }
+
+    // Ensure gender is not null (model requires it, but schema allows null)
+    // Default to 'Female' if null or empty
+    if (
+      !bodyData.gender ||
+      bodyData.gender === "" ||
+      bodyData.gender === null
+    ) {
+      bodyData.gender = "Female";
+    }
+
     const validatedEditData = await editPatientSchema
       .validateAsync(bodyData)
       .catch(err => {
@@ -613,7 +644,24 @@ class PatientsService extends BaseService {
       );
     }
 
-    return Constants.DATA_UPDATED_SUCCESS;
+    // Fetch and return the updated patient data
+    const updatedPatient = await PatientMasterModel.findOne({
+      where: { id: isExistedPatient.dataValues.id }
+    }).catch(err => {
+      console.log("Error while fetching updated patient Details", err.message);
+      // Even if fetch fails, return the existing patient data we had before update
+      // This ensures the frontend gets some data to work with
+      return isExistedPatient;
+    });
+
+    // Always return patient data (either updated or existing)
+    // This allows frontend to immediately update UI without refetching
+    if (updatedPatient) {
+      return updatedPatient.dataValues;
+    }
+
+    // Fallback: return existing patient data if fetch somehow failed
+    return isExistedPatient.dataValues;
   }
 
   async editGuardianService() {
