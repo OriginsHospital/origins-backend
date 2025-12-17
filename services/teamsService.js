@@ -193,12 +193,14 @@ class TeamsService extends BaseService {
   }
 
   async createChatService() {
-    const userId = this._request?.userDetails?.id;
-    const bodyData = { ...this._request.body };
-
-    if (!userId) {
-      throw new createError.Unauthorized("User not authenticated");
-    }
+    try {
+      const userId = this._request?.userDetails?.id;
+      
+      if (!userId) {
+        throw new createError.Unauthorized("User not authenticated");
+      }
+      
+      const bodyData = { ...this._request.body };
 
     // Validate input
     const validatedData = await createChatSchema
@@ -440,130 +442,191 @@ class TeamsService extends BaseService {
   }
 
   async sendMessageService() {
-    const userId = this._request?.userDetails?.id;
-    const chatId = parseInt(this._request.params.chatId);
+    try {
+      const userId = this._request?.userDetails?.id;
+      const chatId = parseInt(this._request.params.chatId);
 
-    if (!userId) {
-      throw new createError.Unauthorized("User not authenticated");
-    }
-
-    // Verify user is a member
-    const isMember = await TeamChatMemberModel.findOne({
-      where: { chatId, userId }
-    });
-
-    if (!isMember) {
-      throw new createError.Forbidden("You are not a member of this chat");
-    }
-
-    // Handle file upload if present
-    let fileUrl = null;
-    let fileName = null;
-    let fileSize = null;
-
-    if (this._request.files && this._request.files.file) {
-      const file = this._request.files.file[0];
-      fileName = file.originalname;
-      fileSize = file.size;
-
-      // Upload to S3
-      const uniqueFileName = `teams/messages/${chatId}/${Date.now()}_${
-        file.originalname
-      }`;
-      const uploadParams = {
-        Bucket: this.bucketName,
-        Key: uniqueFileName,
-        Body: file.buffer,
-        ContentType: file.mimetype
-      };
-
-      await this.s3.upload(uploadParams).promise();
-      fileUrl = `https://${this.bucketName}.s3.amazonaws.com/${uniqueFileName}`;
-    }
-
-    // Get message data from body or form data
-    const bodyData = { ...this._request.body };
-    if (bodyData.mentions && typeof bodyData.mentions === "string") {
-      try {
-        bodyData.mentions = JSON.parse(bodyData.mentions);
-      } catch (e) {
-        bodyData.mentions = null;
+      if (!userId) {
+        throw new createError.Unauthorized("User not authenticated");
       }
-    }
 
-    // Validate
-    const validatedData = await sendMessageSchema
-      .validateAsync({
-        ...bodyData,
-        fileUrl: fileUrl || bodyData.fileUrl,
-        fileName: fileName || bodyData.fileName,
-        fileSize: fileSize || bodyData.fileSize
-      })
-      .catch(err => {
-        throw new createError.BadRequest(err.message || "Validation failed");
+      if (!chatId || isNaN(chatId)) {
+        throw new createError.BadRequest("Invalid chat ID");
+      }
+
+      // Verify user is a member
+      const isMember = await TeamChatMemberModel.findOne({
+        where: { chatId, userId }
       });
 
-    // Create message
-    const newMessage = await TeamMessageModel.create({
-      chatId,
-      senderId: userId,
-      message: validatedData.message || null,
-      messageType: validatedData.messageType || "text",
-      fileUrl: validatedData.fileUrl || null,
-      fileName: validatedData.fileName || null,
-      fileSize: validatedData.fileSize || null,
-      replyToMessageId: validatedData.replyToMessageId || null,
-      mentions: validatedData.mentions || null
-    });
+      if (!isMember) {
+        throw new createError.Forbidden("You are not a member of this chat");
+      }
 
-    // Update chat updatedAt
-    await TeamChatModel.update(
-      { updatedAt: new Date(), updatedBy: userId },
-      { where: { id: chatId } }
-    );
+      // Handle file upload if present
+      let fileUrl = null;
+      let fileName = null;
+      let fileSize = null;
 
-    // Fetch message with sender
-    const messageQuery = `
-      SELECT 
-        tm.*,
-        u.id as sender_id,
-        u.fullName as sender_fullName,
-        u.email as sender_email
-      FROM team_messages tm
-      LEFT JOIN users u ON u.id = tm.senderId
-      WHERE tm.id = :messageId
-    `;
-    const messages = await this.mysqlConnection.query(messageQuery, {
-      replacements: { messageId: newMessage.id },
-      type: Sequelize.QueryTypes.SELECT
-    });
+      if (this._request.files && this._request.files.file) {
+        try {
+          const file = this._request.files.file[0];
+          if (!file) {
+            throw new createError.BadRequest("File upload failed");
+          }
+          
+          fileName = file.originalname;
+          fileSize = file.size;
 
-    const message = messages[0];
-    if (message) {
-      return {
-        id: message.id,
-        chatId: message.chatId,
-        senderId: message.senderId,
-        message: message.message,
-        messageType: message.messageType,
-        fileUrl: message.fileUrl,
-        fileName: message.fileName,
-        fileSize: message.fileSize,
-        replyToMessageId: message.replyToMessageId,
-        mentions: message.mentions,
-        isEdited: message.isEdited,
-        isDeleted: message.isDeleted,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-        sender: {
-          id: message.sender_id,
-          fullName: message.sender_fullName,
-          email: message.sender_email
+          // Upload to S3
+          if (this.s3 && this.bucketName) {
+            const uniqueFileName = `teams/messages/${chatId}/${Date.now()}_${
+              file.originalname
+            }`;
+            const uploadParams = {
+              Bucket: this.bucketName,
+              Key: uniqueFileName,
+              Body: file.buffer,
+              ContentType: file.mimetype
+            };
+
+            const uploadResult = await this.s3.upload(uploadParams).promise();
+            fileUrl = uploadResult.Location || `https://${this.bucketName}.s3.amazonaws.com/${uniqueFileName}`;
+          } else {
+            throw new createError.InternalServerError("File storage not configured");
+          }
+        } catch (error) {
+          console.error("Error uploading file:", error);
+          throw new createError.InternalServerError("Failed to upload file: " + error.message);
         }
-      };
-    }
+      }
 
-    return newMessage.toJSON();
+      // Get message data from body or form data
+      const bodyData = { ...this._request.body };
+      if (bodyData.mentions && typeof bodyData.mentions === "string") {
+        try {
+          bodyData.mentions = JSON.parse(bodyData.mentions);
+        } catch (e) {
+          bodyData.mentions = null;
+        }
+      }
+
+      // Validate that at least message or file is provided
+      const hasMessage = bodyData.message && bodyData.message.trim().length > 0;
+      const hasFile = fileUrl || bodyData.fileUrl;
+      
+      if (!hasMessage && !hasFile) {
+        throw new createError.BadRequest("Message or file is required");
+      }
+
+      // Validate
+      const validatedData = await sendMessageSchema
+        .validateAsync({
+          ...bodyData,
+          fileUrl: fileUrl || bodyData.fileUrl,
+          fileName: fileName || bodyData.fileName,
+          fileSize: fileSize || bodyData.fileSize
+        })
+        .catch(err => {
+          throw new createError.BadRequest(err.message || "Validation failed");
+        });
+
+      // Create message
+      const newMessage = await TeamMessageModel.create({
+        chatId,
+        senderId: userId,
+        message: validatedData.message || null,
+        messageType: validatedData.messageType || "text",
+        fileUrl: validatedData.fileUrl || null,
+        fileName: validatedData.fileName || null,
+        fileSize: validatedData.fileSize || null,
+        replyToMessageId: validatedData.replyToMessageId || null,
+        mentions: validatedData.mentions || null
+      }).catch(err => {
+        console.error("Error creating message:", err);
+        throw new createError.InternalServerError("Failed to create message: " + err.message);
+      });
+
+      // Update chat updatedAt
+      await TeamChatModel.update(
+        { updatedAt: new Date(), updatedBy: userId },
+        { where: { id: chatId } }
+      ).catch(err => {
+        console.error("Error updating chat:", err);
+        // Don't throw, just log - message was created successfully
+      });
+
+      // Fetch message with sender
+      const messageQuery = `
+        SELECT 
+          tm.*,
+          u.id as sender_id,
+          u.fullName as sender_fullName,
+          u.email as sender_email
+        FROM team_messages tm
+        LEFT JOIN users u ON u.id = tm.senderId
+        WHERE tm.id = :messageId
+      `;
+      const messages = await this.mysqlConnection.query(messageQuery, {
+        replacements: { messageId: newMessage.id },
+        type: Sequelize.QueryTypes.SELECT
+      }).catch(err => {
+        console.error("Error fetching message:", err);
+        // Return basic message if query fails
+        return [{
+          id: newMessage.id,
+          chatId: newMessage.chatId,
+          senderId: newMessage.senderId,
+          message: newMessage.message,
+          messageType: newMessage.messageType,
+          fileUrl: newMessage.fileUrl,
+          fileName: newMessage.fileName,
+          fileSize: newMessage.fileSize,
+          replyToMessageId: newMessage.replyToMessageId,
+          mentions: newMessage.mentions,
+          isEdited: newMessage.isEdited,
+          isDeleted: newMessage.isDeleted,
+          createdAt: newMessage.createdAt,
+          updatedAt: newMessage.updatedAt,
+          sender_id: null,
+          sender_fullName: null,
+          sender_email: null
+        }];
+      });
+
+      const message = messages[0];
+      if (message) {
+        return {
+          id: message.id,
+          chatId: message.chatId,
+          senderId: message.senderId,
+          message: message.message,
+          messageType: message.messageType,
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileSize: message.fileSize,
+          replyToMessageId: message.replyToMessageId,
+          mentions: message.mentions,
+          isEdited: message.isEdited,
+          isDeleted: message.isDeleted,
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+          sender: {
+            id: message.sender_id,
+            fullName: message.sender_fullName,
+            email: message.sender_email
+          }
+        };
+      }
+
+      return newMessage.toJSON();
+    } catch (error) {
+      console.error("Error in sendMessageService:", error);
+      if (error instanceof createError.HttpError) {
+        throw error;
+      }
+      throw new createError.InternalServerError("Failed to send message: " + error.message);
+    }
   }
 
   async editMessageService() {
