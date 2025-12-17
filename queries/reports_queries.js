@@ -938,6 +938,105 @@ INNER JOIN visit_treatment_cycles_associations vtca on vtca.visitId  = pva.id
 INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
 `;
 
+const patientReportQuery = `
+SELECT 
+    DATE_FORMAT(COALESCE(pva.visitDate, pm.createdAt), '%d-%b-%Y') AS date,
+    bm.branchCode AS branch,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    pm.patientId AS patientNumber,
+    CONCAT(
+        COALESCE(rtm.name, ''), 
+        CASE WHEN pm.referralName IS NOT NULL AND pm.referralName != '' 
+            THEN CONCAT(' - ', pm.referralName) 
+            ELSE '' 
+        END
+    ) AS referralSource,
+    COALESCE(pm.name, 'N/A') AS plan,
+    ttm.name AS treatmentType,
+    COALESCE(pm.name, 'N/A') AS package,
+    COALESCE(vtca.cycleNumber, 1) AS cycle,
+    CASE 
+        WHEN pva.isActive = 1 AND (vpa.uptPositiveDate IS NULL OR vpa.uptPositiveDate = '') THEN 'Active'
+        WHEN vpa.uptPositiveDate IS NOT NULL AND vpa.uptPositiveDate != '' THEN 'Completed'
+        WHEN pva.isActive = 0 THEN 'Dropped'
+        ELSE 'On Hold'
+    END AS status,
+    COALESCE(paymentData.paidAmount, 0) AS paidAmount,
+    COALESCE(paymentData.pendingAmount, 0) AS pendingAmount,
+    COALESCE(embryoData.totalEmbryos, 0) AS noOfEmbryos,
+    COALESCE(embryoData.usedEmbryos, 0) AS noOfEmbryosUsed,
+    COALESCE(embryoData.remainingEmbryos, 0) AS noOfEmbryosRemaining,
+    CASE 
+        WHEN vpa.registrationDate IS NOT NULL THEN DATE_FORMAT(vpa.registrationDate, '%d-%b-%Y')
+        ELSE 'N/A'
+    END AS lastRenewalDate,
+    COALESCE(embryoData.discardedEmbryos, 0) AS noOfEmbryosDiscarded,
+    CASE 
+        WHEN vpa.uptPositiveDate IS NOT NULL AND vpa.uptPositiveDate != '' THEN 'Positive'
+        WHEN vpa.uptPositiveDate IS NULL OR vpa.uptPositiveDate = '' THEN 
+            CASE WHEN pva.isActive = 0 THEN 'Negative' ELSE 'Pending' END
+        ELSE 'Pending'
+    END AS uptResult,
+    pm.id AS patientId,
+    pva.id AS visitId,
+    vtca.id AS treatmentCycleId
+FROM patient_master pm
+INNER JOIN branch_master bm ON bm.id = pm.branchId
+LEFT JOIN patient_visits_association pva ON pva.patientId = pm.id AND pva.isActive = 1
+LEFT JOIN visit_treatment_cycles_associations vtca ON vtca.visitId = pva.id
+LEFT JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+LEFT JOIN visit_packages_associations vpa ON vpa.visitId = pva.id
+LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
+LEFT JOIN (
+    SELECT 
+        COALESCE(pva2.visitId, vca.visitId) AS visitId,
+        SUM(CASE WHEN odm.paymentStatus = 'PAID' THEN odm.paidOrderAmount ELSE 0 END) AS paidAmount,
+        SUM(CASE WHEN odm.paymentStatus = 'DUE' THEN odm.totalOrderAmount ELSE 0 END) AS pendingAmount
+    FROM order_details_master odm
+    LEFT JOIN consultation_appointments_associations caa ON caa.id = odm.appointmentId AND odm.type = 'CONSULTATION'
+    LEFT JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+    LEFT JOIN treatment_appointments_associations taa ON taa.id = odm.appointmentId AND odm.type = 'TREATMENT'
+    LEFT JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa.treatmentCycleId
+    LEFT JOIN patient_visits_association pva2 ON pva2.id = vtca2.visitId
+    WHERE odm.appointmentId IS NOT NULL
+    GROUP BY COALESCE(pva2.visitId, vca.visitId)
+) AS paymentData ON paymentData.visitId = pva.id
+LEFT JOIN (
+    SELECT 
+        vtca3.id AS treatmentCycleId,
+        COUNT(DISTINCT tea.id) AS totalEmbryos,
+        SUM(CASE WHEN tea.categoryType LIKE '%used%' OR tea.categoryType LIKE '%transferred%' OR tea.categoryType LIKE '%transfer%' THEN 1 ELSE 0 END) AS usedEmbryos,
+        SUM(CASE WHEN tea.categoryType LIKE '%frozen%' OR tea.categoryType LIKE '%remaining%' OR tea.categoryType LIKE '%freeze%' THEN 1 ELSE 0 END) AS remainingEmbryos,
+        SUM(CASE WHEN tea.categoryType LIKE '%discarded%' OR tea.categoryType LIKE '%disposed%' OR tea.categoryType LIKE '%discard%' THEN 1 ELSE 0 END) AS discardedEmbryos
+    FROM visit_treatment_cycles_associations vtca3
+    LEFT JOIN treatement_embryology_association tea ON tea.treatmentCycleId = vtca3.id
+    GROUP BY vtca3.id
+) AS embryoData ON embryoData.treatmentCycleId = vtca.id
+WHERE 1=1
+{{whereConditions}}
+GROUP BY 
+    pm.id, 
+    pva.id, 
+    vtca.id, 
+    bm.branchCode,
+    rtm.name,
+    pm.referralName,
+    ttm.name,
+    vpa.registrationDate,
+    vpa.uptPositiveDate,
+    pva.isActive,
+    pva.visitDate,
+    pm.createdAt,
+    paymentData.paidAmount, 
+    paymentData.pendingAmount, 
+    embryoData.totalEmbryos, 
+    embryoData.usedEmbryos, 
+    embryoData.remainingEmbryos, 
+    embryoData.discardedEmbryos
+ORDER BY pm.createdAt DESC, COALESCE(vtca.createdAt, pva.createdAt) DESC
+{{pagination}}
+`;
+
 module.exports = {
   appointmentStageDurationReportQuery,
   grnVendorPaymentReportsQuery,
@@ -951,5 +1050,6 @@ module.exports = {
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
-  treatmentCycleHistoryQuery
+  treatmentCycleHistoryQuery,
+  patientReportQuery
 };

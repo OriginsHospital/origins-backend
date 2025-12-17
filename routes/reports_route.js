@@ -149,6 +149,11 @@ class ReportsRoute {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.treatmentCyclesReportHandler();
   })
+
+  patientReport = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.patientReportHandler();
+  })
 }
 
 module.exports = ReportsRoute;

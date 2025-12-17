@@ -132,6 +132,15 @@ class ReportsController {
       data: data
     });
   }
+
+  async patientReportHandler() {
+    const data = await this._service.patientReportService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = ReportsController;

@@ -16,7 +16,8 @@ const {
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
-  treatmentCycleHistoryQuery
+  treatmentCycleHistoryQuery,
+  patientReportQuery
 } = require("../queries/reports_queries");
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
@@ -529,6 +530,266 @@ class ReportsService {
       })
     );
     return data;
+  }
+
+  async patientReportService() {
+    const {
+      fromDate,
+      toDate,
+      branchIds,
+      referralSource,
+      treatmentType,
+      packageName,
+      cycle,
+      status,
+      uptResult,
+      paidAmountMin,
+      paidAmountMax,
+      pendingAmountMin,
+      pendingAmountMax,
+      search,
+      page = 1,
+      limit = 50
+    } = this._request.query;
+
+    // Build where conditions
+    let whereConditions = [];
+    const replacements = {};
+
+    // Date filters
+    if (fromDate) {
+      whereConditions.push(
+        "COALESCE(pva.visitDate, pm.createdAt) >= :fromDate"
+      );
+      replacements.fromDate = fromDate;
+    }
+    if (toDate) {
+      whereConditions.push("COALESCE(pva.visitDate, pm.createdAt) <= :toDate");
+      replacements.toDate = toDate;
+    }
+
+    // Branch filter (multi-select)
+    if (branchIds) {
+      const branchIdArray = Array.isArray(branchIds)
+        ? branchIds
+        : branchIds
+            .split(",")
+            .map(id => parseInt(id.trim()))
+            .filter(id => !isNaN(id));
+      if (branchIdArray.length > 0) {
+        whereConditions.push("pm.branchId IN (:branchIds)");
+        replacements.branchIds = branchIdArray;
+      }
+    }
+
+    // Referral source filter
+    if (referralSource) {
+      whereConditions.push("pm.referralId = :referralSource");
+      replacements.referralSource = parseInt(referralSource);
+    }
+
+    // Treatment type filter
+    if (treatmentType) {
+      whereConditions.push("vtca.treatmentTypeId = :treatmentType");
+      replacements.treatmentType = parseInt(treatmentType);
+    }
+
+    // Package filter
+    if (packageName) {
+      whereConditions.push("pva.packageChosen = :packageName");
+      replacements.packageName = parseInt(packageName);
+    }
+
+    // Cycle filter
+    if (cycle) {
+      whereConditions.push("vtca.cycleNumber = :cycle");
+      replacements.cycle = parseInt(cycle);
+    }
+
+    // Status filter
+    if (status) {
+      if (status === "Active") {
+        whereConditions.push(
+          "pva.isActive = 1 AND vpa.uptPositiveDate IS NULL"
+        );
+      } else if (status === "Completed") {
+        whereConditions.push("vpa.uptPositiveDate IS NOT NULL");
+      } else if (status === "Dropped") {
+        whereConditions.push("pva.isActive = 0");
+      } else if (status === "On Hold") {
+        whereConditions.push(
+          "pva.isActive = 1 AND vpa.uptPositiveDate IS NULL AND (vtca.id IS NULL OR vtca.id IS NOT NULL)"
+        );
+      }
+    }
+
+    // UPT Result filter
+    if (uptResult) {
+      if (uptResult === "Positive") {
+        whereConditions.push("vpa.uptPositiveDate IS NOT NULL");
+      } else if (uptResult === "Negative") {
+        whereConditions.push(
+          "vpa.uptPositiveDate IS NULL AND pva.isActive = 0"
+        );
+      } else if (uptResult === "Pending") {
+        whereConditions.push(
+          "(vpa.uptPositiveDate IS NULL AND pva.isActive = 1)"
+        );
+      }
+    }
+
+    // Paid amount filters
+    if (paidAmountMin) {
+      whereConditions.push("paidAmount >= :paidAmountMin");
+      replacements.paidAmountMin = parseFloat(paidAmountMin);
+    }
+    if (paidAmountMax) {
+      whereConditions.push("paidAmount <= :paidAmountMax");
+      replacements.paidAmountMax = parseFloat(paidAmountMax);
+    }
+
+    // Pending amount filters
+    if (pendingAmountMin) {
+      whereConditions.push("pendingAmount >= :pendingAmountMin");
+      replacements.pendingAmountMin = parseFloat(pendingAmountMin);
+    }
+    if (pendingAmountMax) {
+      whereConditions.push("pendingAmount <= :pendingAmountMax");
+      replacements.pendingAmountMax = parseFloat(pendingAmountMax);
+    }
+
+    // Search filter (patient name or patient number)
+    if (search) {
+      whereConditions.push(
+        "(pm.patientId LIKE :search OR CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) LIKE :search)"
+      );
+      replacements.search = `%${search.trim()}%`;
+    }
+
+    // Build the query
+    let query = patientReportQuery;
+    let whereClause = "";
+    if (whereConditions.length > 0) {
+      whereClause = " AND " + whereConditions.join(" AND ");
+    }
+    query = query.replace("{{whereConditions}}", whereClause);
+
+    // Pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const paginationClause = `LIMIT ${parseInt(limit)} OFFSET ${offset}`;
+    query = query.replace("{{pagination}}", paginationClause);
+
+    // Execute query
+    let data = await this.mySqlConnection
+      .query(query, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: replacements
+      })
+      .catch(err => {
+        console.log("Error while fetching patient report:", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    // Get total count for pagination
+    let countQuery = patientReportQuery.replace(
+      "SELECT \n    DATE_FORMAT(COALESCE(pva.visitDate, pm.createdAt), '%d-%b-%Y') AS date,",
+      "SELECT COUNT(DISTINCT CONCAT(pm.id, '-', COALESCE(pva.id, 0), '-', COALESCE(vtca.id, 0))) AS total"
+    );
+    countQuery = countQuery.replace("{{whereConditions}}", whereClause);
+    countQuery = countQuery.replace("{{pagination}}", "");
+    countQuery = countQuery.replace(
+      "GROUP BY pm.id, pva.id, vtca.id\nORDER BY pm.createdAt DESC, vtca.createdAt DESC",
+      ""
+    );
+
+    const countResult = await this.mySqlConnection
+      .query(countQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: replacements
+      })
+      .catch(err => {
+        console.log("Error while fetching patient report count:", err);
+        return [{ total: 0 }];
+      });
+
+    const total = countResult[0]?.total || 0;
+
+    // Calculate chart data
+    const chartData = {
+      statusDistribution: {
+        Active: 0,
+        Completed: 0,
+        Dropped: 0,
+        "On Hold": 0
+      },
+      revenueByBranch: {},
+      embryologySummary: {
+        totalEmbryos: 0,
+        used: 0,
+        remaining: 0,
+        discarded: 0
+      },
+      uptResults: {
+        Positive: 0,
+        Negative: 0,
+        Pending: 0
+      }
+    };
+
+    // Process data for charts
+    data.forEach(row => {
+      // Status distribution
+      const statusValue = row.status || "On Hold";
+      if (chartData.statusDistribution[statusValue] !== undefined) {
+        chartData.statusDistribution[statusValue]++;
+      }
+
+      // Revenue by branch
+      const branch = row.branch || "Unknown";
+      if (!chartData.revenueByBranch[branch]) {
+        chartData.revenueByBranch[branch] = {
+          paidAmount: 0,
+          pendingAmount: 0
+        };
+      }
+      chartData.revenueByBranch[branch].paidAmount += parseFloat(
+        row.paidAmount || 0
+      );
+      chartData.revenueByBranch[branch].pendingAmount += parseFloat(
+        row.pendingAmount || 0
+      );
+
+      // Embryology summary
+      chartData.embryologySummary.totalEmbryos += parseInt(
+        row.noOfEmbryos || 0
+      );
+      chartData.embryologySummary.used += parseInt(row.noOfEmbryosUsed || 0);
+      chartData.embryologySummary.remaining += parseInt(
+        row.noOfEmbryosRemaining || 0
+      );
+      chartData.embryologySummary.discarded += parseInt(
+        row.noOfEmbryosDiscarded || 0
+      );
+
+      // UPT Results
+      const uptValue = row.uptResult || "Pending";
+      if (chartData.uptResults[uptValue] !== undefined) {
+        chartData.uptResults[uptValue]++;
+      }
+    });
+
+    return {
+      data: data,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      },
+      charts: chartData
+    };
   }
 }
 
