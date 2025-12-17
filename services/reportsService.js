@@ -672,6 +672,9 @@ class ReportsService {
     }
     query = query.replace("{{whereConditions}}", whereClause);
 
+    // Store whereClause for count query
+    const whereClauseForCount = whereClause;
+
     // Pagination
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const paginationClause = `LIMIT ${parseInt(limit)} OFFSET ${offset}`;
@@ -700,7 +703,7 @@ class ReportsService {
       FROM patient_master pm
       INNER JOIN branch_master bm ON bm.id = pm.branchId
       WHERE 1=1
-      ${whereClause}
+      ${whereClauseForCount}
     `;
 
     const countResult = await this.mySqlConnection
@@ -737,47 +740,54 @@ class ReportsService {
       }
     };
 
-    // Process data for charts
-    data.forEach(row => {
-      // Status distribution
-      const statusValue = row.status || "On Hold";
-      if (chartData.statusDistribution[statusValue] !== undefined) {
-        chartData.statusDistribution[statusValue]++;
-      }
+    // Process data for charts - ensure we have data before processing
+    if (data && Array.isArray(data) && data.length > 0) {
+      data.forEach(row => {
+        // Status distribution
+        const statusValue = row.status || "On Hold";
+        if (chartData.statusDistribution[statusValue] !== undefined) {
+          chartData.statusDistribution[statusValue]++;
+        } else {
+          // Handle unknown status
+          chartData.statusDistribution["On Hold"]++;
+        }
 
-      // Revenue by branch
-      const branch = row.branch || "Unknown";
-      if (!chartData.revenueByBranch[branch]) {
-        chartData.revenueByBranch[branch] = {
-          paidAmount: 0,
-          pendingAmount: 0
-        };
-      }
-      chartData.revenueByBranch[branch].paidAmount += parseFloat(
-        row.paidAmount || 0
-      );
-      chartData.revenueByBranch[branch].pendingAmount += parseFloat(
-        row.pendingAmount || 0
-      );
+        // Revenue by branch
+        const branch = row.branch || "Unknown";
+        if (!chartData.revenueByBranch[branch]) {
+          chartData.revenueByBranch[branch] = {
+            paidAmount: 0,
+            pendingAmount: 0
+          };
+        }
+        chartData.revenueByBranch[branch].paidAmount += parseFloat(
+          row.paidAmount || 0
+        );
+        chartData.revenueByBranch[branch].pendingAmount += parseFloat(
+          row.pendingAmount || 0
+        );
 
-      // Embryology summary
-      chartData.embryologySummary.totalEmbryos += parseInt(
-        row.noOfEmbryos || 0
-      );
-      chartData.embryologySummary.used += parseInt(row.noOfEmbryosUsed || 0);
-      chartData.embryologySummary.remaining += parseInt(
-        row.noOfEmbryosRemaining || 0
-      );
-      chartData.embryologySummary.discarded += parseInt(
-        row.noOfEmbryosDiscarded || 0
-      );
+        // Embryology summary
+        chartData.embryologySummary.totalEmbryos += parseInt(
+          row.noOfEmbryos || 0
+        );
+        chartData.embryologySummary.used += parseInt(row.noOfEmbryosUsed || 0);
+        chartData.embryologySummary.remaining += parseInt(
+          row.noOfEmbryosRemaining || 0
+        );
+        chartData.embryologySummary.discarded += parseInt(
+          row.noOfEmbryosDiscarded || 0
+        );
 
-      // UPT Results
-      const uptValue = row.uptResult || "Pending";
-      if (chartData.uptResults[uptValue] !== undefined) {
-        chartData.uptResults[uptValue]++;
-      }
-    });
+        // UPT Results
+        const uptValue = row.uptResult || "Pending";
+        if (chartData.uptResults[uptValue] !== undefined) {
+          chartData.uptResults[uptValue]++;
+        } else {
+          chartData.uptResults["Pending"]++;
+        }
+      });
+    }
 
     return {
       data: data,
