@@ -445,8 +445,50 @@ class PatientsService extends BaseService {
 
   async editPatientService() {
     const createdByUserId = this._request?.userDetails?.id;
-    const validatedEditData = await editPatientSchema.validateAsync(
-      this._request.body
+
+    // Log incoming request body for debugging
+    console.log(
+      "Edit Patient Request Body:",
+      JSON.stringify(this._request.body, null, 2)
+    );
+
+    // Convert string numbers to actual numbers for FormData fields
+    const bodyData = { ...this._request.body };
+    if (bodyData.id) bodyData.id = Number(bodyData.id);
+    if (bodyData.branchId) bodyData.branchId = Number(bodyData.branchId);
+    if (bodyData.patientTypeId)
+      bodyData.patientTypeId = Number(bodyData.patientTypeId);
+    if (bodyData.cityId && bodyData.cityId !== "")
+      bodyData.cityId = Number(bodyData.cityId);
+    if (bodyData.stateId && bodyData.stateId !== "")
+      bodyData.stateId = Number(bodyData.stateId);
+    if (bodyData.referralId && bodyData.referralId !== "")
+      bodyData.referralId = Number(bodyData.referralId);
+
+    // Convert empty strings to null for optional fields
+    if (bodyData.email === "") bodyData.email = null;
+    if (bodyData.lastName === "") bodyData.lastName = null;
+    if (bodyData.gender === "") bodyData.gender = null;
+    if (bodyData.bloodGroup === "") bodyData.bloodGroup = null;
+    if (bodyData.addressLine1 === "") bodyData.addressLine1 = null;
+    if (bodyData.addressLine2 === "") bodyData.addressLine2 = null;
+    if (bodyData.referralName === "") bodyData.referralName = null;
+    if (bodyData.pincode === "") bodyData.pincode = null;
+    if (bodyData.cityId === "") bodyData.cityId = null;
+    if (bodyData.stateId === "") bodyData.stateId = null;
+    if (bodyData.referralId === "") bodyData.referralId = null;
+
+    const validatedEditData = await editPatientSchema
+      .validateAsync(bodyData)
+      .catch(err => {
+        console.log("Validation Error:", err.message);
+        console.log("Validation Details:", err.details);
+        throw new createError.BadRequest(err.message || "Validation failed");
+      });
+
+    console.log(
+      "Validated Edit Data:",
+      JSON.stringify(validatedEditData, null, 2)
     );
 
     const isExistedPatient = await PatientMasterModel.findOne({
@@ -549,7 +591,10 @@ class PatientsService extends BaseService {
       updateData.uploadedDocuments = documentPaths;
     }
 
-    await PatientMasterModel.update(updateData, {
+    console.log("Update Data:", JSON.stringify(updateData, null, 2));
+    console.log("Updating patient with ID:", isExistedPatient.dataValues.id);
+
+    const updateResult = await PatientMasterModel.update(updateData, {
       where: { id: isExistedPatient.dataValues.id }
     }).catch(err => {
       console.log("Error while updating existing patient Details", err);
@@ -557,6 +602,17 @@ class PatientsService extends BaseService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
+
+    console.log("Update Result:", updateResult);
+    console.log("Rows affected:", updateResult[0]);
+
+    if (updateResult[0] === 0) {
+      console.log("WARNING: No rows were updated!");
+      throw new createError.InternalServerError(
+        "Failed to update patient record. No rows were affected."
+      );
+    }
+
     return Constants.DATA_UPDATED_SUCCESS;
   }
 
