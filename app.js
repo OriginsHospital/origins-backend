@@ -15,7 +15,6 @@ const fs = require("fs");
 const cron = require("node-cron");
 const CronService = require("./services/cronService");
 const morgan = require("morgan");
-const { Server } = require("socket.io");
 
 let redisStore = new RedisStore({
   client: RedisConnection._instance,
@@ -24,7 +23,6 @@ let redisStore = new RedisStore({
 class App {
   constructor() {
     this.app = express();
-    this.io = null;
   }
 
   async startApp() {
@@ -111,43 +109,11 @@ class App {
       },
       this.app
     );
-
-    // Initialize Socket.io
-    this.io = new Server(sslServer, {
-      cors: {
-        origin: [
-          "http://localhost:3001",
-          "https://localhost:3001",
-          "http://localhost:3000",
-          "https://localhost:3000",
-          "http://13.234.149.138:42000",
-          "https://hms-app-alpha.vercel.app",
-          "https://www.originshms.com"
-        ],
-        credentials: true,
-        methods: ["GET", "POST"]
-      },
-      transports: ["websocket", "polling"],
-      allowEIO3: true,
-      pingTimeout: 60000,
-      pingInterval: 25000
-    });
-
-    // Handle connection errors
-    this.io.engine.on("connection_error", err => {
-      console.error("Socket.io connection error:", err);
-    });
-
-    // Initialize Teams Socket handler
-    const TeamsSocket = require("./socket/teamsSocket");
-    new TeamsSocket(this.io);
-
     sslServer.listen(process.env.PORT, err => {
       if (err) {
         throw new Error("Application Could not Start", err);
       }
       console.log(`Application Running on Port ${process.env.PORT}`);
-      console.log(`Socket.io server initialized for Teams module`);
     });
   }
 }
