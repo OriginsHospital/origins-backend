@@ -556,17 +556,13 @@ class ReportsService {
     let whereConditions = [];
     const replacements = {};
 
-    // Date filters
+    // Date filters - filter by patient creation date to show all patients
     if (fromDate) {
-      whereConditions.push(
-        "DATE(COALESCE(pva.visitDate, pm.createdAt)) >= DATE(:fromDate)"
-      );
+      whereConditions.push("DATE(pm.createdAt) >= DATE(:fromDate)");
       replacements.fromDate = fromDate;
     }
     if (toDate) {
-      whereConditions.push(
-        "DATE(COALESCE(pva.visitDate, pm.createdAt)) <= DATE(:toDate)"
-      );
+      whereConditions.push("DATE(pm.createdAt) <= DATE(:toDate)");
       replacements.toDate = toDate;
     }
 
@@ -703,7 +699,6 @@ class ReportsService {
       SELECT COUNT(DISTINCT pm.id) AS total
       FROM patient_master pm
       INNER JOIN branch_master bm ON bm.id = pm.branchId
-      LEFT JOIN patient_visits_association pva ON pva.patientId = pm.id AND pva.isActive = 1
       WHERE 1=1
       ${whereClause}
     `;
