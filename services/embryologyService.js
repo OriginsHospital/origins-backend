@@ -1303,14 +1303,28 @@ class EmbryologyService extends BaseService {
         reportPage.style.overflow = "hidden";
         reportPage.style.padding = "1mm";
       }
+
+      // Calculate if content fits, if not, reduce scale further
+      const bodyHeight = document.body.scrollHeight;
+      const maxHeight = 1123; // A4 height in pixels (297mm at 96 DPI)
+
+      if (bodyHeight > maxHeight) {
+        const scaleFactor = (maxHeight / bodyHeight) * 0.95; // 95% to ensure fit
+        document.body.style.transform = `scale(${scaleFactor})`;
+        document.body.style.transformOrigin = "top left";
+      }
     });
+
+    // Wait a bit more for all transformations
+    await page.waitForTimeout(300);
 
     let pdf_buffer = await page.pdf({
       format: "a4",
       scale: parseFloat("0.75"), // Scale down to ensure single page
       margin: { top: `0mm`, bottom: `0mm`, left: `0mm`, right: `0mm` },
       printBackground: true,
-      preferCSSPageSize: true
+      preferCSSPageSize: true,
+      displayHeaderFooter: false
     });
 
     await browser.close();
