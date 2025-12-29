@@ -722,158 +722,247 @@ class EmbryologyService extends BaseService {
   }
 
   optimizeTemplateForSinglePage(template, categoryType) {
-    // CSS for single-page optimization
+    // CSS for single-page optimization - MANDATORY FIXES
     const optimizationCSS = `
       <style>
+        /* 1️⃣ Lock Page Size & Remove Browser Margins */
         @page {
-          size: A4;
-          margin: 20px 15px;
+          size: A4 portrait;
+          margin: 10mm;
         }
         
         * {
           box-sizing: border-box;
+          page-break-before: avoid !important;
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
         }
         
-        
         html, body {
-          font-family: Arial, Helvetica, Roboto, sans-serif;
-          font-size: 10px;
-          line-height: 1.15;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 9px;
+          line-height: 1.0;
           margin: 0;
           padding: 0;
           width: 100%;
-          height: auto;
+          height: 100%;
         }
         
-        body {
-          padding: 5px;
+        /* 2️⃣ Wrap Entire Report in a Fixed Container */
+        .report-page {
+          width: 210mm;
+          height: 297mm;
+          box-sizing: border-box;
+          overflow: hidden;
+          padding: 3mm;
+          margin: 0 auto;
         }
         
-        /* Header optimization */
+        body > *:not(.report-page) {
+          margin: 0;
+          padding: 0;
+        }
+        
+        /* 6️⃣ Compress Header (MAJOR SPACE WASTE HERE) */
+        .report-header, [class*="header"], [class*="Header"] {
+          margin-bottom: 3px !important;
+          margin-top: 0 !important;
+        }
+        
+        .report-header h1, h1 {
+          font-size: 12px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 1.0 !important;
+        }
+        
+        .report-header p, header p {
+          margin: 0 !important;
+          line-height: 1.0 !important;
+          font-size: 8px !important;
+        }
+        
         img[src*="logo"], img[alt*="logo"], .logo, [class*="logo"], [id*="logo"] {
-          max-height: 35px !important;
+          max-height: 25px !important;
           width: auto !important;
-          margin: 2px 0 !important;
+          margin: 0 !important;
         }
         
-        /* Reduce header spacing */
-        h1, h2, h3, h4, h5, h6 {
-          margin: 3px 0 2px 0 !important;
-          padding: 1px 0 !important;
-          font-size: 11px !important;
-          line-height: 1.2 !important;
+        h2, h3, h4, h5, h6 {
+          margin: 1px 0 !important;
+          padding: 0 !important;
+          font-size: 10px !important;
+          line-height: 1.0 !important;
           font-weight: bold !important;
         }
         
-        /* Table optimization */
+        /* 4️⃣ Tables MUST Behave as ONE Block */
         table {
           width: 100% !important;
           border-collapse: collapse !important;
+          margin: 0 !important;
           page-break-inside: avoid !important;
-          margin: 2px 0 !important;
-          font-size: 10px !important;
-          table-layout: auto !important;
+          display: table !important;
         }
         
         table tr {
           page-break-inside: avoid !important;
-          page-break-after: auto !important;
+          page-break-after: avoid !important;
         }
         
-        table td, table th {
-          padding: 3px 4px !important;
+        tr, td, th {
+          padding: 2px 4px !important;
+          line-height: 1.0 !important;
           border: 1px solid #000 !important;
-          font-size: 10px !important;
-          line-height: 1.1 !important;
           vertical-align: top !important;
         }
         
-        table th {
+        /* 5️⃣ Reduce Font Size (THIS IS REQUIRED) */
+        body {
+          font-size: 9px !important;
+          font-family: Arial, Helvetica, sans-serif !important;
+        }
+        
+        th {
+          font-size: 9.5px !important;
           font-weight: bold !important;
-          font-size: 11px !important;
-          background-color: #f0f0f0 !important;
+          background-color: #f5f5f5 !important;
+          padding: 3px 4px !important;
         }
         
-        /* Remove excessive spacing */
-        p, div {
-          margin: 2px 0 !important;
-          padding: 1px 0 !important;
-          line-height: 1.15 !important;
+        td {
+          font-size: 9px !important;
         }
         
-        /* Compact sections */
-        .section, [class*="section"] {
-          margin: 4px 0 !important;
-          padding: 2px 0 !important;
+        /* 7️⃣ Merge Tables - Section Rows */
+        .section-row td, tr[class*="section"] td {
+          font-weight: bold !important;
+          background: #f5f5f5 !important;
+          padding: 2px 4px !important;
         }
         
-        /* Footer optimization */
-        .footer, [class*="footer"], [class*="signature"] {
-          margin-top: 8px !important;
-          padding: 2px 0 !important;
-          font-size: 10px !important;
+        /* Remove all margins and spacing */
+        p {
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 1.0 !important;
+          font-size: 9px !important;
         }
         
-        /* Prevent page breaks */
-        .no-break, table, tr {
+        div {
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 1.0 !important;
+        }
+        
+        /* Remove excessive spacing between tables */
+        table + table {
+          margin-top: 0 !important;
+        }
+        
+        /* Remove min-height and display block from tables */
+        table {
+          min-height: 0 !important;
+          display: table !important;
+        }
+        
+        /* 8️⃣ Fix Signature Area (COMMON PAGE-BREAK TRIGGER) */
+        .signature-section, [class*="signature"], [class*="Signature"], [class*="footer"] {
+          margin-top: 3px !important;
+          display: flex !important;
+          justify-content: space-between !important;
           page-break-inside: avoid !important;
+          font-size: 8px !important;
         }
         
-        /* Reduce empty space */
+        /* Remove extra breaks */
         br {
-          line-height: 0.5 !important;
+          line-height: 0.3 !important;
           margin: 0 !important;
         }
         
-        /* Optimize patient details section */
+        /* Remove fixed heights */
+        [style*="height"], [style*="min-height"] {
+          height: auto !important;
+          min-height: 0 !important;
+        }
+        
+        /* Patient details optimization */
         .patient-details, [class*="patient"], [class*="Patient"] {
           margin: 2px 0 !important;
+          padding: 0 !important;
         }
         
-        /* Compact grid layouts */
-        .grid, [class*="grid"], [class*="Grid"] {
-          gap: 1px !important;
-        }
-        
-        /* Reduce spacing for common elements */
-        table + table {
-          margin-top: 3px !important;
-        }
-        
-        h1 + table, h2 + table, h3 + table, h4 + table {
-          margin-top: 2px !important;
-        }
-        
-        /* Ensure content fits */
-        .container, [class*="container"], [class*="Container"] {
-          max-width: 100% !important;
-          padding: 0 2px !important;
-        }
-        
-        /* Optimize address blocks */
+        /* Address blocks */
         [class*="address"], [class*="Address"] {
+          margin: 0 !important;
+          padding: 0 !important;
+          font-size: 8px !important;
+          line-height: 1.0 !important;
+        }
+        
+        /* Force single page - remove all vertical spacing */
+        * {
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+        }
+        
+        table, p, div, h1, h2, h3, h4, h5, h6, tr {
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+        }
+        
+        /* Reduce row height in tables */
+        tr {
+          height: auto !important;
+          min-height: 0 !important;
+        }
+        
+        /* Compact impression and note sections */
+        [class*="impression"], [class*="Impression"], [class*="note"], [class*="Note"] {
           margin: 2px 0 !important;
-          padding: 1px 0 !important;
+          padding: 0 !important;
           font-size: 9px !important;
-          line-height: 1.1 !important;
         }
         
-        /* Footer optimization */
-        .footer, [class*="footer"], [class*="signature"], [class*="Signature"] {
-          margin-top: 5px !important;
-          padding: 1px 0 !important;
-          font-size: 10px !important;
-        }
-        
-        /* Prevent page breaks in table sections */
-        thead, tbody {
-          page-break-inside: avoid !important;
+        /* 9️⃣ PRINT-SPECIFIC OVERRIDES (VERY IMPORTANT) */
+        @media print {
+          body {
+            zoom: 0.85 !important;
+            transform: scale(0.85) !important;
+            transform-origin: top left !important;
+          }
+          
+          .no-print {
+            display: none !important;
+          }
+          
+          .report-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            overflow: hidden !important;
+            max-height: 297mm !important;
+          }
+          
+          table {
+            font-size: 8.5px !important;
+          }
+          
+          td, th {
+            padding: 1px 3px !important;
+            font-size: 8.5px !important;
+          }
         }
       </style>
     `;
 
     // Check if template already has a style tag or head tag
     let optimizedTemplate = template;
+
+    // Helper function to wrap body content in report-page div
+    const wrapInReportPage = bodyContent => {
+      return `<div class="report-page">${bodyContent}</div>`;
+    };
 
     // If template doesn't have HTML structure, wrap it
     if (!template.includes("<html") && !template.includes("<!DOCTYPE")) {
@@ -886,24 +975,58 @@ class EmbryologyService extends BaseService {
   ${optimizationCSS}
 </head>
 <body>
-  ${template}
+  ${wrapInReportPage(template)}
 </body>
 </html>`;
     } else if (template.includes("<head>")) {
-      // Insert CSS before closing head tag
+      // Insert CSS before closing head tag and wrap body content
       optimizedTemplate = template.replace(
         "</head>",
         `${optimizationCSS}</head>`
       );
+      // Wrap body content if body tag exists
+      if (
+        optimizedTemplate.includes("<body>") &&
+        optimizedTemplate.includes("</body>")
+      ) {
+        optimizedTemplate = optimizedTemplate.replace(
+          /<body[^>]*>([\s\S]*?)<\/body>/,
+          (match, bodyContent) => {
+            return match.replace(bodyContent, wrapInReportPage(bodyContent));
+          }
+        );
+      } else {
+        // If no body tag, wrap everything after head
+        optimizedTemplate = optimizedTemplate.replace(
+          /<\/head>([\s\S]*)$/,
+          `</head><body>${wrapInReportPage("$1")}</body>`
+        );
+      }
     } else if (template.includes("<html")) {
-      // Add head section with CSS
-      optimizedTemplate = template.replace(
-        "<html",
-        `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head>`
-      );
+      // Add head section with CSS and wrap body
+      if (template.includes("<body>") && template.includes("</body>")) {
+        optimizedTemplate = template.replace(
+          /<html[^>]*>/,
+          `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head>`
+        );
+        optimizedTemplate = optimizedTemplate.replace(
+          /<body[^>]*>([\s\S]*?)<\/body>/,
+          (match, bodyContent) => {
+            return match.replace(bodyContent, wrapInReportPage(bodyContent));
+          }
+        );
+      } else {
+        optimizedTemplate = template.replace(
+          "<html",
+          `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head><body>${wrapInReportPage(
+            ""
+          )}`
+        );
+        optimizedTemplate += "</body></html>";
+      }
     } else {
-      // Prepend CSS at the beginning
-      optimizedTemplate = optimizationCSS + template;
+      // Prepend CSS and wrap content
+      optimizedTemplate = optimizationCSS + wrapInReportPage(template);
     }
 
     return optimizedTemplate;
@@ -989,11 +1112,18 @@ class EmbryologyService extends BaseService {
       waitUntil: ["load", "domcontentloaded", "networkidle0"]
     });
 
+    // Force single page by setting viewport and applying scale
+    await page.setViewport({
+      width: 794, // A4 width in pixels at 96 DPI
+      height: 1123 // A4 height in pixels at 96 DPI
+    });
+
     let pdf_buffer = await page.pdf({
       format: "a4",
-      scale: parseFloat("1"),
-      margin: { top: `20px`, bottom: `20px`, left: `15px`, right: `15px` },
-      printBackground: true
+      scale: parseFloat("0.85"), // Scale down to ensure single page
+      margin: { top: `8mm`, bottom: `8mm`, left: `8mm`, right: `8mm` },
+      printBackground: true,
+      preferCSSPageSize: true
     });
 
     await browser.close();
