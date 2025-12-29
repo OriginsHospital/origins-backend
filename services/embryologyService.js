@@ -740,7 +740,7 @@ class EmbryologyService extends BaseService {
         
         html, body {
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 9px;
+          font-size: 8px;
           line-height: 1.0;
           margin: 0;
           padding: 0;
@@ -752,9 +752,10 @@ class EmbryologyService extends BaseService {
         .report-page {
           width: 210mm;
           height: 297mm;
+          max-height: 297mm;
           box-sizing: border-box;
           overflow: hidden;
-          padding: 3mm;
+          padding: 2mm;
           margin: 0 auto;
         }
         
@@ -770,7 +771,7 @@ class EmbryologyService extends BaseService {
         }
         
         .report-header h1, h1 {
-          font-size: 12px !important;
+          font-size: 10px !important;
           margin: 0 !important;
           padding: 0 !important;
           line-height: 1.0 !important;
@@ -779,19 +780,19 @@ class EmbryologyService extends BaseService {
         .report-header p, header p {
           margin: 0 !important;
           line-height: 1.0 !important;
-          font-size: 8px !important;
+          font-size: 7px !important;
         }
         
         img[src*="logo"], img[alt*="logo"], .logo, [class*="logo"], [id*="logo"] {
-          max-height: 25px !important;
+          max-height: 20px !important;
           width: auto !important;
           margin: 0 !important;
         }
         
         h2, h3, h4, h5, h6 {
-          margin: 1px 0 !important;
+          margin: 0 !important;
           padding: 0 !important;
-          font-size: 10px !important;
+          font-size: 9px !important;
           line-height: 1.0 !important;
           font-weight: bold !important;
         }
@@ -811,7 +812,7 @@ class EmbryologyService extends BaseService {
         }
         
         tr, td, th {
-          padding: 2px 4px !important;
+          padding: 1px 3px !important;
           line-height: 1.0 !important;
           border: 1px solid #000 !important;
           vertical-align: top !important;
@@ -819,19 +820,19 @@ class EmbryologyService extends BaseService {
         
         /* 5️⃣ Reduce Font Size (THIS IS REQUIRED) */
         body {
-          font-size: 9px !important;
+          font-size: 8px !important;
           font-family: Arial, Helvetica, sans-serif !important;
         }
         
         th {
-          font-size: 9.5px !important;
+          font-size: 8.5px !important;
           font-weight: bold !important;
           background-color: #f5f5f5 !important;
-          padding: 3px 4px !important;
+          padding: 2px 3px !important;
         }
         
         td {
-          font-size: 9px !important;
+          font-size: 8px !important;
         }
         
         /* 7️⃣ Merge Tables - Section Rows */
@@ -846,7 +847,7 @@ class EmbryologyService extends BaseService {
           margin: 0 !important;
           padding: 0 !important;
           line-height: 1.0 !important;
-          font-size: 9px !important;
+          font-size: 8px !important;
         }
         
         div {
@@ -925,12 +926,31 @@ class EmbryologyService extends BaseService {
           font-size: 9px !important;
         }
         
+        /* Override ALL inline styles */
+        [style*="margin"], [style*="padding"], [style*="font-size"], [style*="line-height"] {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        
+        table[style], tr[style], td[style], th[style] {
+          margin: 0 !important;
+          padding: 2px 4px !important;
+          font-size: 9px !important;
+          line-height: 1.0 !important;
+        }
+        
         /* 9️⃣ PRINT-SPECIFIC OVERRIDES (VERY IMPORTANT) */
         @media print {
+          * {
+            zoom: 0.80 !important;
+          }
+          
           body {
-            zoom: 0.85 !important;
-            transform: scale(0.85) !important;
+            zoom: 0.80 !important;
+            transform: scale(0.80) !important;
             transform-origin: top left !important;
+            width: 210mm !important;
+            height: 297mm !important;
           }
           
           .no-print {
@@ -942,18 +962,81 @@ class EmbryologyService extends BaseService {
             height: 297mm !important;
             overflow: hidden !important;
             max-height: 297mm !important;
+            padding: 2mm !important;
           }
           
           table {
-            font-size: 8.5px !important;
+            font-size: 8px !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           
           td, th {
-            padding: 1px 3px !important;
-            font-size: 8.5px !important;
+            padding: 1px 2px !important;
+            font-size: 8px !important;
+            line-height: 1.0 !important;
+          }
+          
+          tr {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+          }
+          
+          h1, h2, h3, h4, h5, h6 {
+            font-size: 9px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          p {
+            font-size: 8px !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
         }
       </style>
+      <script>
+        // Force single page by removing all inline styles and applying optimizations
+        (function() {
+          // Remove all inline styles that cause spacing
+          document.querySelectorAll('[style*="margin"], [style*="padding"], [style*="height"], [style*="min-height"]').forEach(el => {
+            const style = el.getAttribute('style') || '';
+            let newStyle = style
+              .replace(/margin[^;]*;?/gi, '')
+              .replace(/padding[^;]*;?/gi, '')
+              .replace(/height[^;]*;?/gi, '')
+              .replace(/min-height[^;]*;?/gi, '')
+              .replace(/line-height[^;]*;?/gi, '');
+            if (newStyle.trim()) {
+              el.setAttribute('style', newStyle);
+            } else {
+              el.removeAttribute('style');
+            }
+          });
+          
+          // Force table cells to minimal padding
+          document.querySelectorAll('td, th').forEach(cell => {
+            cell.style.padding = '1px 2px';
+            cell.style.fontSize = '8px';
+            cell.style.lineHeight = '1.0';
+            cell.style.margin = '0';
+          });
+          
+          // Force tables to no margins
+          document.querySelectorAll('table').forEach(table => {
+            table.style.margin = '0';
+            table.style.padding = '0';
+            table.style.fontSize = '8px';
+          });
+          
+          // Remove all br spacing
+          document.querySelectorAll('br').forEach(br => {
+            br.style.lineHeight = '0.3';
+            br.style.margin = '0';
+          });
+        })();
+      </script>
     `;
 
     // Check if template already has a style tag or head tag
@@ -1112,16 +1195,73 @@ class EmbryologyService extends BaseService {
       waitUntil: ["load", "domcontentloaded", "networkidle0"]
     });
 
+    // Wait for script to execute and modify DOM
+    await page.waitForTimeout(500);
+
     // Force single page by setting viewport and applying scale
     await page.setViewport({
       width: 794, // A4 width in pixels at 96 DPI
       height: 1123 // A4 height in pixels at 96 DPI
     });
 
+    // Execute additional JavaScript to force single page
+    await page.evaluate(() => {
+      // Remove all inline styles that cause spacing
+      document.querySelectorAll("*").forEach(el => {
+        const style = el.getAttribute("style") || "";
+        if (
+          style.includes("margin") ||
+          style.includes("padding") ||
+          style.includes("height") ||
+          style.includes("min-height")
+        ) {
+          let newStyle = style
+            .replace(/margin[^;]*;?/gi, "")
+            .replace(/padding[^;]*;?/gi, "")
+            .replace(/height[^;]*;?/gi, "")
+            .replace(/min-height[^;]*;?/gi, "")
+            .replace(/line-height[^;]*;?/gi, "");
+          if (newStyle.trim()) {
+            el.setAttribute("style", newStyle);
+          } else {
+            el.removeAttribute("style");
+          }
+        }
+      });
+
+      // Force table cells to minimal padding
+      document.querySelectorAll("td, th").forEach(cell => {
+        cell.style.padding = "1px 2px";
+        cell.style.fontSize = "8px";
+        cell.style.lineHeight = "1.0";
+        cell.style.margin = "0";
+      });
+
+      // Force tables to no margins
+      document.querySelectorAll("table").forEach(table => {
+        table.style.margin = "0";
+        table.style.padding = "0";
+        table.style.fontSize = "8px";
+        table.style.borderCollapse = "collapse";
+      });
+
+      // Remove all br spacing
+      document.querySelectorAll("br").forEach(br => {
+        br.style.lineHeight = "0.3";
+        br.style.margin = "0";
+      });
+
+      // Force body scale
+      document.body.style.transform = "scale(0.80)";
+      document.body.style.transformOrigin = "top left";
+      document.body.style.width = "210mm";
+      document.body.style.height = "297mm";
+    });
+
     let pdf_buffer = await page.pdf({
       format: "a4",
-      scale: parseFloat("0.85"), // Scale down to ensure single page
-      margin: { top: `8mm`, bottom: `8mm`, left: `8mm`, right: `8mm` },
+      scale: parseFloat("0.80"), // Scale down to ensure single page
+      margin: { top: `5mm`, bottom: `5mm`, left: `5mm`, right: `5mm` },
       printBackground: true,
       preferCSSPageSize: true
     });
