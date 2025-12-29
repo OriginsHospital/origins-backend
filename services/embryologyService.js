@@ -731,34 +731,44 @@ class EmbryologyService extends BaseService {
           margin: 0mm;
         }
         
+        /* 4️⃣ KILL ALL PAGE BREAKS COMPLETELY */
         * {
           box-sizing: border-box;
           page-break-before: avoid !important;
           page-break-after: avoid !important;
           page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          break-before: avoid !important;
+          break-after: avoid !important;
         }
         
         html, body {
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 7px;
-          line-height: 0.9;
+          font-size: 10px;
+          line-height: 1.05;
           margin: 0;
           padding: 0;
           width: 100%;
           height: 100%;
         }
         
-        /* 2️⃣ Wrap Entire Report in a Fixed Container */
-        .report-page {
-          width: 210mm;
-          height: 297mm;
+        /* 2️⃣ Wrap Entire Report in a Fixed Container - HARD LIMIT PAGE HEIGHT */
+        #print-root {
+          width: 100%;
+          height: 100%;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .a4-page, .report-page {
+          width: 210mm !important;
+          height: 297mm !important;
           max-height: 297mm !important;
-          box-sizing: border-box;
-          overflow: hidden !important;
-          padding: 1mm !important;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
+          box-sizing: border-box !important;
+          overflow: hidden !important;  /* 🔥 PREVENTS PAGE 2 */
+          padding: 2mm !important;
+          margin: 0 auto !important;
+          display: block !important;
         }
         
         body > *:not(.report-page) {
@@ -766,29 +776,29 @@ class EmbryologyService extends BaseService {
           padding: 0;
         }
         
-        /* 6️⃣ Compress Header (MAJOR SPACE WASTE HERE) */
+        /* 6️⃣ HEADER HEIGHT REDUCTION (HUGE SPACE SAVER) */
         .report-header, [class*="header"], [class*="Header"] {
-          margin-bottom: 1px !important;
+          margin-bottom: 4px !important;
           margin-top: 0 !important;
           padding: 0 !important;
         }
         
         .report-header h1, h1 {
-          font-size: 9px !important;
+          font-size: 13px !important;
           margin: 0 !important;
           padding: 0 !important;
-          line-height: 0.9 !important;
+          line-height: 1.05 !important;
         }
         
         .report-header p, header p {
           margin: 0 !important;
-          line-height: 0.9 !important;
-          font-size: 6px !important;
+          line-height: 1.05 !important;
+          font-size: 9px !important;
           padding: 0 !important;
         }
         
         img[src*="logo"], img[alt*="logo"], .logo, [class*="logo"], [id*="logo"] {
-          max-height: 15px !important;
+          max-height: 30px !important;
           width: auto !important;
           margin: 0 !important;
         }
@@ -796,12 +806,12 @@ class EmbryologyService extends BaseService {
         h2, h3, h4, h5, h6 {
           margin: 0 !important;
           padding: 0 !important;
-          font-size: 8px !important;
-          line-height: 0.9 !important;
+          font-size: 11px !important;
+          line-height: 1.05 !important;
           font-weight: bold !important;
         }
         
-        /* 4️⃣ Tables MUST Behave as ONE Block */
+        /* 5️⃣ TABLE COMPRESSION (YOU MUST DO THIS) */
         table {
           width: 100% !important;
           border-collapse: collapse !important;
@@ -809,6 +819,7 @@ class EmbryologyService extends BaseService {
           margin-top: 0 !important;
           margin-bottom: 0 !important;
           page-break-inside: avoid !important;
+          break-inside: avoid !important;
           display: table !important;
           border-spacing: 0 !important;
         }
@@ -816,6 +827,7 @@ class EmbryologyService extends BaseService {
         table tr {
           page-break-inside: avoid !important;
           page-break-after: avoid !important;
+          break-inside: avoid !important;
           height: auto !important;
           min-height: 0 !important;
           max-height: none !important;
@@ -827,28 +839,41 @@ class EmbryologyService extends BaseService {
           margin-bottom: 0 !important;
         }
         
-        tr, td, th {
-          padding: 1px 2px !important;
-          line-height: 0.9 !important;
+        /* Remove <br> tags inside tables */
+        table br {
+          display: none !important;
+        }
+        
+        /* Remove empty rows */
+        tr:empty {
+          display: none !important;
+        }
+        
+        th, td {
+          padding: 3px 5px !important;
+          font-size: 10px !important;
+          line-height: 1.05 !important;
           border: 1px solid #000 !important;
           vertical-align: top !important;
+          margin: 0 !important;
         }
         
         /* 5️⃣ Reduce Font Size (THIS IS REQUIRED) */
         body {
-          font-size: 7px !important;
+          font-size: 10px !important;
           font-family: Arial, Helvetica, sans-serif !important;
         }
         
         th {
-          font-size: 7.5px !important;
           font-weight: bold !important;
           background-color: #f5f5f5 !important;
-          padding: 1px 2px !important;
         }
         
-        td {
-          font-size: 7px !important;
+        /* 7️⃣ MERGE TABLES - Section Rows */
+        tr.section td, tr[class*="section"] td {
+          font-weight: bold !important;
+          background: #f2f2f2 !important;
+          padding: 2px 5px !important;
         }
         
         /* 7️⃣ Merge Tables - Section Rows */
@@ -862,14 +887,14 @@ class EmbryologyService extends BaseService {
         p {
           margin: 0 !important;
           padding: 0 !important;
-          line-height: 0.9 !important;
-          font-size: 7px !important;
+          line-height: 1.05 !important;
+          font-size: 10px !important;
         }
         
         div {
           margin: 0 !important;
           padding: 0 !important;
-          line-height: 0.9 !important;
+          line-height: 1.05 !important;
         }
         
         /* Remove min-height and display block from tables */
@@ -878,21 +903,36 @@ class EmbryologyService extends BaseService {
           display: table !important;
         }
         
-        /* 8️⃣ Fix Signature Area (COMMON PAGE-BREAK TRIGGER) */
+        /* 8️⃣ SIGNATURE SECTION (COMMON BREAK CAUSE) */
         .signature-section, [class*="signature"], [class*="Signature"], [class*="footer"] {
-          margin-top: 1px !important;
-          margin-bottom: 0 !important;
           display: flex !important;
           justify-content: space-between !important;
+          margin-top: 4px !important;
+          margin-bottom: 0 !important;
           page-break-inside: avoid !important;
-          font-size: 7px !important;
+          break-inside: avoid !important;
+          font-size: 9px !important;
           padding: 0 !important;
+        }
+        
+        .signature-section div, [class*="signature"] div {
+          width: 45% !important;
+          text-align: center !important;
+        }
+        
+        /* Remove <br> in signature section */
+        .signature-section br, [class*="signature"] br {
+          display: none !important;
         }
         
         /* Remove extra breaks */
         br {
           line-height: 0.1 !important;
           margin: 0 !important;
+        }
+        
+        /* Remove <br> in tables */
+        table br {
           display: none !important;
         }
         
@@ -935,10 +975,10 @@ class EmbryologyService extends BaseService {
         
         /* Compact impression and note sections */
         [class*="impression"], [class*="Impression"], [class*="note"], [class*="Note"] {
-          margin: 0 !important;
+          margin: 2px 0 !important;
           padding: 0 !important;
-          font-size: 7px !important;
-          line-height: 0.9 !important;
+          font-size: 10px !important;
+          line-height: 1.05 !important;
         }
         
         /* Override ALL inline styles */
@@ -954,18 +994,10 @@ class EmbryologyService extends BaseService {
           line-height: 1.0 !important;
         }
         
-        /* 9️⃣ PRINT-SPECIFIC OVERRIDES (VERY IMPORTANT) */
+        /* 9️⃣ FINAL SAFETY NET (GUARANTEED ONE PAGE) */
         @media print {
-          * {
-            zoom: 0.75 !important;
-          }
-          
           body {
-            zoom: 0.75 !important;
-            transform: scale(0.75) !important;
-            transform-origin: top left !important;
-            width: 210mm !important;
-            height: 297mm !important;
+            zoom: 0.90 !important;   /* 🔥 FINAL GUARANTEE */
             margin: 0 !important;
             padding: 0 !important;
           }
@@ -974,54 +1006,35 @@ class EmbryologyService extends BaseService {
             display: none !important;
           }
           
-          .report-page {
+          .a4-page, .report-page {
             width: 210mm !important;
             height: 297mm !important;
-            overflow: hidden !important;
             max-height: 297mm !important;
-            padding: 1mm !important;
-            margin: 0 !important;
+            overflow: hidden !important;
+            padding: 2mm !important;
+            margin: 0 auto !important;
+          }
+          
+          /* Kill all page breaks in print */
+          * {
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            break-before: avoid !important;
+            break-after: avoid !important;
           }
           
           table {
-            font-size: 7px !important;
             margin: 0 !important;
             padding: 0 !important;
             border-spacing: 0 !important;
           }
           
           td, th {
-            padding: 0.5px 1.5px !important;
-            font-size: 7px !important;
-            line-height: 0.9 !important;
-          }
-          
-          tr {
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          
-          h1, h2, h3, h4, h5, h6 {
-            font-size: 8px !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 0.9 !important;
-          }
-          
-          p {
-            font-size: 7px !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 0.9 !important;
-          }
-          
-          /* Remove all gaps */
-          * {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
+            padding: 3px 5px !important;
+            font-size: 10px !important;
+            line-height: 1.05 !important;
           }
         }
       </style>
@@ -1071,9 +1084,9 @@ class EmbryologyService extends BaseService {
     // Check if template already has a style tag or head tag
     let optimizedTemplate = template;
 
-    // Helper function to wrap body content in report-page div
+    // Helper function to wrap body content in print-root and a4-page divs (MANDATORY STRUCTURE)
     const wrapInReportPage = bodyContent => {
-      return `<div class="report-page">${bodyContent}</div>`;
+      return `<div id="print-root"><div class="a4-page report-page">${bodyContent}</div></div>`;
     };
 
     // If template doesn't have HTML structure, wrap it
@@ -1258,11 +1271,11 @@ class EmbryologyService extends BaseService {
         }
       });
 
-      // Force table cells to minimal padding
+      // Force table cells to proper padding (as per requirements)
       document.querySelectorAll("td, th").forEach(cell => {
-        cell.style.padding = "0.5px 1.5px";
-        cell.style.fontSize = "7px";
-        cell.style.lineHeight = "0.9";
+        cell.style.padding = "3px 5px";
+        cell.style.fontSize = "10px";
+        cell.style.lineHeight = "1.05";
         cell.style.margin = "0";
       });
 
@@ -1270,16 +1283,21 @@ class EmbryologyService extends BaseService {
       document.querySelectorAll("table").forEach(table => {
         table.style.margin = "0";
         table.style.padding = "0";
-        table.style.fontSize = "7px";
+        table.style.fontSize = "10px";
         table.style.borderCollapse = "collapse";
         table.style.borderSpacing = "0";
         table.style.marginTop = "0";
         table.style.marginBottom = "0";
       });
 
-      // Remove all br spacing - hide them
-      document.querySelectorAll("br").forEach(br => {
+      // Remove <br> tags inside tables only
+      document.querySelectorAll("table br").forEach(br => {
         br.style.display = "none";
+      });
+
+      // Remove empty rows
+      document.querySelectorAll("tr:empty").forEach(row => {
+        row.style.display = "none";
       });
 
       // Remove all gaps between elements
@@ -1288,20 +1306,31 @@ class EmbryologyService extends BaseService {
         el.style.marginBottom = "0";
       });
 
-      // Force body scale
-      document.body.style.transform = "scale(0.75)";
-      document.body.style.transformOrigin = "top left";
-      document.body.style.width = "210mm";
-      document.body.style.height = "297mm";
+      // Force body margins to zero
       document.body.style.margin = "0";
       document.body.style.padding = "0";
 
-      // Force report-page container
-      const reportPage = document.querySelector(".report-page");
-      if (reportPage) {
-        reportPage.style.maxHeight = "297mm";
-        reportPage.style.overflow = "hidden";
-        reportPage.style.padding = "1mm";
+      // Force a4-page container (MANDATORY STRUCTURE)
+      const a4Page = document.querySelector(".a4-page, .report-page");
+      if (a4Page) {
+        a4Page.style.width = "210mm";
+        a4Page.style.height = "297mm";
+        a4Page.style.maxHeight = "297mm";
+        a4Page.style.overflow = "hidden";
+        a4Page.style.padding = "2mm";
+        a4Page.style.boxSizing = "border-box";
+      }
+
+      // Ensure print-root exists
+      let printRoot = document.querySelector("#print-root");
+      if (!printRoot) {
+        printRoot = document.createElement("div");
+        printRoot.id = "print-root";
+        const a4Page = document.querySelector(".a4-page, .report-page");
+        if (a4Page && a4Page.parentNode) {
+          a4Page.parentNode.insertBefore(printRoot, a4Page);
+          printRoot.appendChild(a4Page);
+        }
       }
 
       // Calculate if content fits, if not, reduce scale further
@@ -1320,8 +1349,8 @@ class EmbryologyService extends BaseService {
 
     let pdf_buffer = await page.pdf({
       format: "a4",
-      scale: parseFloat("0.75"), // Scale down to ensure single page
-      margin: { top: `0mm`, bottom: `0mm`, left: `0mm`, right: `0mm` },
+      scale: parseFloat("0.90"), // Scale to match print zoom
+      margin: { top: `8mm`, bottom: `8mm`, left: `8mm`, right: `8mm` },
       printBackground: true,
       preferCSSPageSize: true,
       displayHeaderFooter: false
