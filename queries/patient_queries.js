@@ -12,7 +12,29 @@ dateOfBirth,
 JSON_OBJECT('id', cityId, 'name', cm.name) AS city,
 JSON_OBJECT('id', referralId, 'referralSource', rtm.name) AS referralSource,
 referralName,
-(select pva.id from patient_visits_association pva where pva.patientId = pm.id and pva.isActive = 1 LIMIT 1) as activeVisitId 
+(select pva.id from patient_visits_association pva where pva.patientId = pm.id and pva.isActive = 1 LIMIT 1) as activeVisitId,
+COALESCE(
+    (
+        SELECT cdm.name 
+        FROM consultation_appointments_associations caa
+        INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+        INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+        INNER JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
+        WHERE pva.patientId = pm.id
+        ORDER BY caa.appointmentDate DESC, caa.createdAt DESC
+        LIMIT 1
+    ),
+    (
+        SELECT cdm.name 
+        FROM treatment_appointments_associations taa
+        INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+        INNER JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
+        WHERE pva.patientId = pm.id
+        ORDER BY taa.appointmentDate DESC, taa.createdAt DESC
+        LIMIT 1
+    )
+) AS assignedDoctor
 from patient_master pm 
 INNER JOIN patient_type_master ptm ON ptm.id = patientTypeId 
 INNER JOIN city_master cm ON cm.id = cityId

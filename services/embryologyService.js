@@ -721,6 +721,194 @@ class EmbryologyService extends BaseService {
     return data;
   }
 
+  optimizeTemplateForSinglePage(template, categoryType) {
+    // CSS for single-page optimization
+    const optimizationCSS = `
+      <style>
+        @page {
+          size: A4;
+          margin: 20px 15px;
+        }
+        
+        * {
+          box-sizing: border-box;
+        }
+        
+        
+        html, body {
+          font-family: Arial, Helvetica, Roboto, sans-serif;
+          font-size: 10px;
+          line-height: 1.15;
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: auto;
+        }
+        
+        body {
+          padding: 5px;
+        }
+        
+        /* Header optimization */
+        img[src*="logo"], img[alt*="logo"], .logo, [class*="logo"], [id*="logo"] {
+          max-height: 35px !important;
+          width: auto !important;
+          margin: 2px 0 !important;
+        }
+        
+        /* Reduce header spacing */
+        h1, h2, h3, h4, h5, h6 {
+          margin: 3px 0 2px 0 !important;
+          padding: 1px 0 !important;
+          font-size: 11px !important;
+          line-height: 1.2 !important;
+          font-weight: bold !important;
+        }
+        
+        /* Table optimization */
+        table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          page-break-inside: avoid !important;
+          margin: 2px 0 !important;
+          font-size: 10px !important;
+          table-layout: auto !important;
+        }
+        
+        table tr {
+          page-break-inside: avoid !important;
+          page-break-after: auto !important;
+        }
+        
+        table td, table th {
+          padding: 3px 4px !important;
+          border: 1px solid #000 !important;
+          font-size: 10px !important;
+          line-height: 1.1 !important;
+          vertical-align: top !important;
+        }
+        
+        table th {
+          font-weight: bold !important;
+          font-size: 11px !important;
+          background-color: #f0f0f0 !important;
+        }
+        
+        /* Remove excessive spacing */
+        p, div {
+          margin: 2px 0 !important;
+          padding: 1px 0 !important;
+          line-height: 1.15 !important;
+        }
+        
+        /* Compact sections */
+        .section, [class*="section"] {
+          margin: 4px 0 !important;
+          padding: 2px 0 !important;
+        }
+        
+        /* Footer optimization */
+        .footer, [class*="footer"], [class*="signature"] {
+          margin-top: 8px !important;
+          padding: 2px 0 !important;
+          font-size: 10px !important;
+        }
+        
+        /* Prevent page breaks */
+        .no-break, table, tr {
+          page-break-inside: avoid !important;
+        }
+        
+        /* Reduce empty space */
+        br {
+          line-height: 0.5 !important;
+          margin: 0 !important;
+        }
+        
+        /* Optimize patient details section */
+        .patient-details, [class*="patient"], [class*="Patient"] {
+          margin: 2px 0 !important;
+        }
+        
+        /* Compact grid layouts */
+        .grid, [class*="grid"], [class*="Grid"] {
+          gap: 1px !important;
+        }
+        
+        /* Reduce spacing for common elements */
+        table + table {
+          margin-top: 3px !important;
+        }
+        
+        h1 + table, h2 + table, h3 + table, h4 + table {
+          margin-top: 2px !important;
+        }
+        
+        /* Ensure content fits */
+        .container, [class*="container"], [class*="Container"] {
+          max-width: 100% !important;
+          padding: 0 2px !important;
+        }
+        
+        /* Optimize address blocks */
+        [class*="address"], [class*="Address"] {
+          margin: 2px 0 !important;
+          padding: 1px 0 !important;
+          font-size: 9px !important;
+          line-height: 1.1 !important;
+        }
+        
+        /* Footer optimization */
+        .footer, [class*="footer"], [class*="signature"], [class*="Signature"] {
+          margin-top: 5px !important;
+          padding: 1px 0 !important;
+          font-size: 10px !important;
+        }
+        
+        /* Prevent page breaks in table sections */
+        thead, tbody {
+          page-break-inside: avoid !important;
+        }
+      </style>
+    `;
+
+    // Check if template already has a style tag or head tag
+    let optimizedTemplate = template;
+
+    // If template doesn't have HTML structure, wrap it
+    if (!template.includes("<html") && !template.includes("<!DOCTYPE")) {
+      optimizedTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${categoryType || "Report"}</title>
+  ${optimizationCSS}
+</head>
+<body>
+  ${template}
+</body>
+</html>`;
+    } else if (template.includes("<head>")) {
+      // Insert CSS before closing head tag
+      optimizedTemplate = template.replace(
+        "</head>",
+        `${optimizationCSS}</head>`
+      );
+    } else if (template.includes("<html")) {
+      // Add head section with CSS
+      optimizedTemplate = template.replace(
+        "<html",
+        `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head>`
+      );
+    } else {
+      // Prepend CSS at the beginning
+      optimizedTemplate = optimizationCSS + template;
+    }
+
+    return optimizedTemplate;
+  }
+
   async downloadEmbryologyService() {
     const { id, type, categoryType } = this._request.query;
     if (!id) {
@@ -784,6 +972,12 @@ class EmbryologyService extends BaseService {
       throw new createError.BadRequest(Constants.EMBRYOLOGY_RECORD_NOT_FOUND);
     }
 
+    // Optimize template for single-page layout (especially for Semen Analysis)
+    const optimizedTemplate = this.optimizeTemplateForSinglePage(
+      data.template,
+      categoryType
+    );
+
     const browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"]
@@ -791,16 +985,14 @@ class EmbryologyService extends BaseService {
 
     const page = await browser.newPage();
 
-    await page.setContent(data.template, {
+    await page.setContent(optimizedTemplate, {
       waitUntil: ["load", "domcontentloaded", "networkidle0"]
     });
 
     let pdf_buffer = await page.pdf({
       format: "a4",
       scale: parseFloat("1"),
-      margin: { top: `0.2in`, bottom: `0.2in`, left: `0.2in`, right: `0.2in` },
-      height: `11in`,
-      width: `8.5in`,
+      margin: { top: `20px`, bottom: `20px`, left: `15px`, right: `15px` },
       printBackground: true
     });
 
