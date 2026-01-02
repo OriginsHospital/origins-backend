@@ -9,7 +9,10 @@ const saveEmbryologyTreatmentSchema = Joi.object({
 const editEmbryologyTreatmentSchema = Joi.object({
   categoryType: Joi.string().required(),
   template: Joi.string().required(),
-  embryologyType: Joi.number().required()
+  embryologyType: Joi.number().required(),
+  updateTemplateForAll: Joi.boolean()
+    .optional()
+    .default(false)
 });
 
 const saveEmbryologyConsultationSchema = Joi.object({
@@ -22,7 +25,10 @@ const saveEmbryologyConsultationSchema = Joi.object({
 const editEmbryologyConsultationSchema = Joi.object({
   categoryType: Joi.string().required(),
   template: Joi.string().required(),
-  embryologyType: Joi.number().required()
+  embryologyType: Joi.number().required(),
+  updateTemplateForAll: Joi.boolean()
+    .optional()
+    .default(false)
 });
 
 const uploadEmbryologyImageSchema = Joi.object({

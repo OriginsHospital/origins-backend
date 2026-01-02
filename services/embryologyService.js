@@ -551,6 +551,65 @@ class EmbryologyService extends BaseService {
         }
       );
 
+      // If updateTemplateForAll is true, update base template and all existing reports
+      if (validatedEditData.updateTemplateForAll === true) {
+        const embryologyId = validatedEditData.embryologyType;
+
+        // Update base template in embryology_formats table
+        await EmbryologyFormatMaster.update(
+          {
+            embryologyTemplate: validatedEditData.template
+          },
+          {
+            where: {
+              embryologyId: embryologyId.toString()
+            }
+          }
+        ).catch(err => {
+          console.log(
+            "Error updating base template in embryology_formats",
+            err
+          );
+        });
+
+        // Update all existing treatment reports with the same embryologyType and categoryType
+        await treatmentEmbryology
+          .update(
+            {
+              template: validatedEditData.template
+            },
+            {
+              where: {
+                embryologyType: embryologyId,
+                categoryType: validatedEditData.categoryType
+              }
+            }
+          )
+          .catch(err => {
+            console.log("Error updating all treatment embryology reports", err);
+          });
+
+        // Update all existing consultation reports with the same embryologyType and categoryType
+        await consultationEmbryology
+          .update(
+            {
+              template: validatedEditData.template
+            },
+            {
+              where: {
+                embryologyType: embryologyId,
+                categoryType: validatedEditData.categoryType
+              }
+            }
+          )
+          .catch(err => {
+            console.log(
+              "Error updating all consultation embryology reports",
+              err
+            );
+          });
+      }
+
       return Constants.SUCCESS;
     } catch (err) {
       throw err;
@@ -611,6 +670,65 @@ class EmbryologyService extends BaseService {
           }
         }
       );
+
+      // If updateTemplateForAll is true, update base template and all existing reports
+      if (validatedEditData.updateTemplateForAll === true) {
+        const embryologyId = validatedEditData.embryologyType;
+
+        // Update base template in embryology_formats table
+        await EmbryologyFormatMaster.update(
+          {
+            embryologyTemplate: validatedEditData.template
+          },
+          {
+            where: {
+              embryologyId: embryologyId.toString()
+            }
+          }
+        ).catch(err => {
+          console.log(
+            "Error updating base template in embryology_formats",
+            err
+          );
+        });
+
+        // Update all existing treatment reports with the same embryologyType and categoryType
+        await treatmentEmbryology
+          .update(
+            {
+              template: validatedEditData.template
+            },
+            {
+              where: {
+                embryologyType: embryologyId,
+                categoryType: validatedEditData.categoryType
+              }
+            }
+          )
+          .catch(err => {
+            console.log("Error updating all treatment embryology reports", err);
+          });
+
+        // Update all existing consultation reports with the same embryologyType and categoryType
+        await consultationEmbryology
+          .update(
+            {
+              template: validatedEditData.template
+            },
+            {
+              where: {
+                embryologyType: embryologyId,
+                categoryType: validatedEditData.categoryType
+              }
+            }
+          )
+          .catch(err => {
+            console.log(
+              "Error updating all consultation embryology reports",
+              err
+            );
+          });
+      }
 
       return Constants.SUCCESS;
     } catch (err) {
