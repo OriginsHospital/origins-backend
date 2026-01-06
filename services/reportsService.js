@@ -718,7 +718,23 @@ class ReportsService {
 
     const total = countResult[0]?.total || 0;
 
-    // Calculate chart data
+    // Calculate chart data from ALL matching records (not just current page)
+    // Run the same query without pagination to get chart aggregates
+    let chartQuery = patientReportQuery;
+    chartQuery = chartQuery.replace("{{whereConditions}}", whereClause);
+    chartQuery = chartQuery.replace("{{pagination}}", ""); // Remove pagination for charts
+
+    let chartDataRaw = await this.mySqlConnection
+      .query(chartQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: replacements
+      })
+      .catch(err => {
+        console.log("Error while fetching chart data:", err);
+        return [];
+      });
+
+    // Initialize chart data
     const chartData = {
       statusDistribution: {
         Active: 0,
@@ -740,9 +756,13 @@ class ReportsService {
       }
     };
 
-    // Process data for charts - ensure we have data before processing
-    if (data && Array.isArray(data) && data.length > 0) {
-      data.forEach(row => {
+    // Process chart data from ALL matching records
+    if (
+      chartDataRaw &&
+      Array.isArray(chartDataRaw) &&
+      chartDataRaw.length > 0
+    ) {
+      chartDataRaw.forEach(row => {
         // Status distribution
         const statusValue = row.status || "On Hold";
         if (chartData.statusDistribution[statusValue] !== undefined) {
