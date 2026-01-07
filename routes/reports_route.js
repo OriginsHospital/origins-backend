@@ -88,13 +88,6 @@ class ReportsRoute {
       tokenVerified,
       this.treatmentCyclesPaymentsReport
     );
-
-    this._route.get(
-      "/patient-report",
-      checkActiveSession,
-      tokenVerified,
-      this.patientReport
-    );
   }
 
   getStageDurationReportRoute = asyncHandler(async (req, res, next) => {
@@ -155,11 +148,6 @@ class ReportsRoute {
   treatmentCyclesReport = asyncHandler(async (req, res, next) => {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.treatmentCyclesReportHandler();
-  })
-
-  patientReport = asyncHandler(async (req, res, next) => {
-    const controllerObj = new ReportsController(req, res, next);
-    await controllerObj.patientReportHandler();
   })
 }
 

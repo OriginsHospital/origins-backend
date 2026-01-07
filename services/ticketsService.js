@@ -199,64 +199,98 @@ class TicketsService {
 
   // Create new ticket
   async createTicketService() {
-    const validatedPayload = await createTicketSchema.validateAsync(
-      this._request.body
-    );
+    try {
+      // Log incoming request for debugging
+      console.log("Creating ticket with payload:", {
+        body: this._request.body,
+        userId: this.currentUserId
+      });
 
-    const {
-      taskDescription,
-      assignedTo,
-      priority = "MEDIUM",
-      category,
-      tags = []
-    } = validatedPayload;
-
-    // Generate ticket code
-    const ticketCode = await this.generateTicketCode();
-
-    // Create ticket
-    const createdTicket = await TicketsModel.create({
-      ticketCode,
-      taskDescription,
-      assignedTo,
-      priority,
-      category: category || null,
-      status: "OPEN",
-      createdBy: this.currentUserId
-    }).catch(err => {
-      console.log("Error while creating ticket", err);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
+      const validatedPayload = await createTicketSchema.validateAsync(
+        this._request.body,
+        { abortEarly: false }
       );
-    });
 
-    // Create tags if provided
-    if (tags && tags.length > 0) {
-      const tagRecords = tags
-        .filter(tag => tag && tag.trim().length > 0)
-        .map(tag => ({
-          ticketId: createdTicket.id,
-          tagName: tag.trim()
-        }));
+      console.log("Validated payload:", validatedPayload);
 
-      if (tagRecords.length > 0) {
-        await TicketTagsModel.bulkCreate(tagRecords).catch(err => {
-          console.log("Error while creating ticket tags", err);
-          // Don't throw error, just log it
-        });
+      const {
+        taskDescription,
+        assignedTo,
+        priority = "MEDIUM",
+        category,
+        tags = []
+      } = validatedPayload;
+
+      // Ensure assignedTo is a number
+      const assignedToNumber = parseInt(assignedTo, 10);
+      if (isNaN(assignedToNumber)) {
+        throw new createError.BadRequest(
+          "Invalid assignedTo value. Must be a valid user ID."
+        );
       }
+
+      // Generate ticket code
+      const ticketCode = await this.generateTicketCode();
+
+      // Create ticket
+      const createdTicket = await TicketsModel.create({
+        ticketCode,
+        taskDescription,
+        assignedTo: assignedToNumber,
+        priority,
+        category: category || null,
+        status: "OPEN",
+        createdBy: this.currentUserId
+      }).catch(err => {
+        console.error("Error while creating ticket:", err);
+        console.error("Error details:", {
+          name: err.name,
+          message: err.message,
+          errors: err.errors
+        });
+        throw new createError.InternalServerError(
+          err.message || Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      // Create tags if provided
+      if (tags && tags.length > 0) {
+        const tagRecords = tags
+          .filter(tag => tag && tag.trim().length > 0)
+          .map(tag => ({
+            ticketId: createdTicket.id,
+            tagName: tag.trim()
+          }));
+
+        if (tagRecords.length > 0) {
+          await TicketTagsModel.bulkCreate(tagRecords).catch(err => {
+            console.log("Error while creating ticket tags", err);
+            // Don't throw error, just log it
+          });
+        }
+      }
+
+      // Log creation activity
+      await this.logActivity(
+        createdTicket.id,
+        "CREATED",
+        null,
+        null,
+        `Ticket created: ${taskDescription.substring(0, 50)}...`
+      );
+
+      console.log("Ticket created successfully:", createdTicket.id);
+      return createdTicket;
+    } catch (error) {
+      console.error("Error in createTicketService:", error);
+      // Re-throw validation errors and other errors as-is
+      if (error.isJoi || error.status) {
+        throw error;
+      }
+      throw new createError.InternalServerError(
+        error.message || Constants.SOMETHING_ERROR_OCCURRED
+      );
     }
-
-    // Log creation activity
-    await this.logActivity(
-      createdTicket.id,
-      "CREATED",
-      null,
-      null,
-      `Ticket created: ${taskDescription.substring(0, 50)}...`
-    );
-
-    return createdTicket;
   }
 
   // Update ticket
