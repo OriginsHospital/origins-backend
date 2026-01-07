@@ -556,13 +556,12 @@ class ReportsService {
     let whereConditions = [];
     const replacements = {};
 
-    // Date filters - filter by patient creation date
-    if (fromDate) {
+    // Date filters - filter by patient creation date (optional)
+    // Only apply if both dates are provided, otherwise show all patients
+    if (fromDate && toDate) {
       whereConditions.push("DATE(pm.createdAt) >= DATE(:fromDate)");
-      replacements.fromDate = fromDate;
-    }
-    if (toDate) {
       whereConditions.push("DATE(pm.createdAt) <= DATE(:toDate)");
+      replacements.fromDate = fromDate;
       replacements.toDate = toDate;
     }
 
@@ -681,12 +680,11 @@ class ReportsService {
     query = query.replace("{{pagination}}", paginationClause);
 
     // Execute query
-    console.log(
-      "Patient Report Query (first 1000 chars):",
-      query.substring(0, 1000)
-    );
-    console.log("Patient Report Replacements:", JSON.stringify(replacements));
-    console.log("Patient Report Where Clause:", whereClause);
+    console.log("=== Patient Report Query Debug ===");
+    console.log("Where Conditions Count:", whereConditions.length);
+    console.log("Where Clause:", whereClause);
+    console.log("Replacements:", JSON.stringify(replacements, null, 2));
+    console.log("Query (first 500 chars):", query.substring(0, 500));
 
     let data = [];
     try {
@@ -694,6 +692,10 @@ class ReportsService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
       });
+      console.log("Patient Report Data Count:", data.length);
+      if (data.length > 0) {
+        console.log("First Patient Sample:", JSON.stringify(data[0], null, 2));
+      }
     } catch (err) {
       console.error("Error while fetching patient report:", err.message);
       console.error("SQL Error:", err.sql);
@@ -702,11 +704,14 @@ class ReportsService {
       );
     }
 
-    // Get total count for pagination
+    // Get total count for pagination - must match the main query structure
     let countQuery = `
       SELECT COUNT(DISTINCT pm.id) AS total
       FROM patient_master pm
       INNER JOIN branch_master bm ON bm.id = pm.branchId
+      INNER JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId
+      INNER JOIN city_master cm ON cm.id = pm.cityId
+      INNER JOIN referral_type_master rtm ON rtm.id = pm.referralId
       WHERE 1=1
       ${whereClauseForCount}
     `;
@@ -717,8 +722,10 @@ class ReportsService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
       });
+      console.log("Patient Report Count Result:", countResult[0]?.total || 0);
     } catch (err) {
       console.error("Error while fetching patient report count:", err.message);
+      console.error("Count Query:", countQuery);
       countResult = [{ total: 0 }];
     }
 

@@ -946,23 +946,15 @@ SELECT
     pm.patientId AS patientNumber,
     pm.mobileNo AS mobileNo,
     COALESCE(pm.email, '') AS email,
-    CASE 
-        WHEN pm.dateOfBirth IS NOT NULL THEN DATE_FORMAT(pm.dateOfBirth, '%d-%b-%Y')
-        ELSE ''
-    END AS dateOfBirth,
-    COALESCE(pm.aadhaarNo, '') AS aadhaarNo,
-    COALESCE(ptm.patientType, 'N/A') AS patientType,
-    COALESCE(cm.name, '') AS city,
+    pm.dateOfBirth AS dateOfBirth,
+    pm.aadhaarNo AS aadhaarNo,
+    ptm.patientType AS patientType,
+    cm.name AS city,
     COALESCE(assignedDoctorData.assignedDoctor, 'Not assigned') AS assignedDoctor,
-    COALESCE(pm.photoPath, '') AS photoPath,
-    CONCAT(
-        COALESCE(rtm.name, ''), 
-        CASE WHEN pm.referralName IS NOT NULL AND pm.referralName != '' 
-            THEN CONCAT(' - ', pm.referralName) 
-            ELSE '' 
-        END
-    ) AS referralSource,
+    pm.photoPath AS photoPath,
+    rtm.name AS referralSource,
     pm.referralName AS referralName,
+    CAST(pm.createdAt as DATE) AS registeredDate,
     'N/A' AS plan,
     COALESCE(ttm.name, 'N/A') AS treatmentType,
     COALESCE((SELECT pm2.name FROM package_master pm2 WHERE pm2.id = pva.packageChosen), 'N/A') AS package,
@@ -996,9 +988,9 @@ SELECT
     vtca.id AS treatmentCycleId
 FROM patient_master pm
 INNER JOIN branch_master bm ON bm.id = pm.branchId
-LEFT JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId
-LEFT JOIN city_master cm ON cm.id = pm.cityId
-LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
+INNER JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId
+INNER JOIN city_master cm ON cm.id = pm.cityId
+INNER JOIN referral_type_master rtm ON rtm.id = pm.referralId
 LEFT JOIN (
     SELECT pva1.*
     FROM patient_visits_association pva1
