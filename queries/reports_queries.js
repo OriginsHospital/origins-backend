@@ -944,6 +944,14 @@ SELECT
     bm.branchCode AS branch,
     CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
     pm.patientId AS patientNumber,
+    pm.mobileNo AS mobileNo,
+    COALESCE(pm.email, '') AS email,
+    DATE_FORMAT(pm.dateOfBirth, '%d-%b-%Y') AS dateOfBirth,
+    COALESCE(pm.aadhaarNo, '') AS aadhaarNo,
+    COALESCE(ptm.patientType, 'N/A') AS patientType,
+    COALESCE(cm.name, '') AS city,
+    COALESCE(assignedDoctorData.assignedDoctor, 'Not assigned') AS assignedDoctor,
+    COALESCE(pm.photoPath, '') AS photoPath,
     CONCAT(
         COALESCE(rtm.name, ''), 
         CASE WHEN pm.referralName IS NOT NULL AND pm.referralName != '' 
@@ -951,6 +959,7 @@ SELECT
             ELSE '' 
         END
     ) AS referralSource,
+    pm.referralName AS referralName,
     'N/A' AS plan,
     COALESCE(ttm.name, 'N/A') AS treatmentType,
     COALESCE((SELECT pm2.name FROM package_master pm2 WHERE pm2.id = pva.packageChosen), 'N/A') AS package,
@@ -984,6 +993,8 @@ SELECT
     vtca.id AS treatmentCycleId
 FROM patient_master pm
 INNER JOIN branch_master bm ON bm.id = pm.branchId
+LEFT JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId
+LEFT JOIN city_master cm ON cm.id = pm.cityId
 LEFT JOIN (
     SELECT pva1.*
     FROM patient_visits_association pva1
@@ -999,6 +1010,27 @@ LEFT JOIN visit_treatment_cycles_associations vtca ON vtca.visitId = pva.id
 LEFT JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
 LEFT JOIN visit_packages_associations vpa ON vpa.visitId = pva.id
 LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
+LEFT JOIN (
+    SELECT DISTINCT
+        pva_doctor.patientId,
+        COALESCE(
+            (SELECT cdm.name 
+             FROM consultation_appointments_associations caa
+             INNER JOIN visit_consultations_associations vca_doc ON vca_doc.id = caa.consultationId
+             INNER JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
+             WHERE vca_doc.visitId = pva_doctor.id
+             ORDER BY caa.appointmentDate DESC, caa.createdAt DESC 
+             LIMIT 1),
+            (SELECT cdm.name 
+             FROM treatment_appointments_associations taa
+             INNER JOIN visit_treatment_cycles_associations vtca_doc ON vtca_doc.id = taa.treatmentCycleId
+             INNER JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
+             WHERE vtca_doc.visitId = pva_doctor.id
+             ORDER BY taa.appointmentDate DESC, taa.createdAt DESC 
+             LIMIT 1)
+        ) AS assignedDoctor
+    FROM patient_visits_association pva_doctor
+) AS assignedDoctorData ON assignedDoctorData.patientId = pm.id
 LEFT JOIN (
     SELECT 
         COALESCE(pva2.visitId, vca.visitId) AS visitId,
@@ -1044,7 +1076,15 @@ GROUP BY
     embryoData.totalEmbryos,
     embryoData.usedEmbryos,
     embryoData.remainingEmbryos,
-    embryoData.discardedEmbryos
+    embryoData.discardedEmbryos,
+    pm.mobileNo,
+    pm.email,
+    pm.dateOfBirth,
+    pm.aadhaarNo,
+    ptm.patientType,
+    cm.name,
+    assignedDoctorData.assignedDoctor,
+    pm.photoPath
 ORDER BY pm.createdAt DESC, COALESCE(vtca.createdAt, pva.createdAt) DESC
 {{pagination}}
 `;

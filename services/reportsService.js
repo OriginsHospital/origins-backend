@@ -681,21 +681,35 @@ class ReportsService {
     query = query.replace("{{pagination}}", paginationClause);
 
     // Execute query
-    console.log("Patient Report Query:", query.substring(0, 500));
+    console.log(
+      "Patient Report Query (first 1000 chars):",
+      query.substring(0, 1000)
+    );
     console.log("Patient Report Replacements:", JSON.stringify(replacements));
-    let data = await this.mySqlConnection
-      .query(query, {
+    console.log("Patient Report Where Clause:", whereClause);
+
+    let data = [];
+    try {
+      data = await this.mySqlConnection.query(query, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
-      })
-      .catch(err => {
-        console.log("Error while fetching patient report:", err);
-        console.log("Error message:", err.message);
-        console.log("Error SQL:", err.sql);
-        throw new createError.InternalServerError(
-          err.message || Constants.SOMETHING_ERROR_OCCURRED
-        );
       });
+      console.log("Patient Report Data Count:", data?.length || 0);
+      if (data && data.length > 0) {
+        console.log(
+          "First Patient Record Sample:",
+          JSON.stringify(data[0], null, 2)
+        );
+      }
+    } catch (err) {
+      console.log("Error while fetching patient report:", err);
+      console.log("Error message:", err.message);
+      console.log("Error SQL:", err.sql);
+      console.log("Error stack:", err.stack);
+      throw new createError.InternalServerError(
+        err.message || Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
 
     // Get total count for pagination - simpler count query
     let countQuery = `
@@ -724,15 +738,20 @@ class ReportsService {
     chartQuery = chartQuery.replace("{{whereConditions}}", whereClause);
     chartQuery = chartQuery.replace("{{pagination}}", ""); // Remove pagination for charts
 
-    let chartDataRaw = await this.mySqlConnection
-      .query(chartQuery, {
+    let chartDataRaw = [];
+    try {
+      chartDataRaw = await this.mySqlConnection.query(chartQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
-      })
-      .catch(err => {
-        console.log("Error while fetching chart data:", err);
-        return [];
       });
+      console.log("Chart Data Raw Count:", chartDataRaw?.length || 0);
+    } catch (err) {
+      console.log("Error while fetching chart data:", err);
+      console.log("Chart Query Error:", err.message);
+      console.log("Chart Query SQL:", err.sql);
+      // Don't throw error for chart data, just return empty array
+      chartDataRaw = [];
+    }
 
     // Initialize chart data
     const chartData = {
@@ -809,8 +828,8 @@ class ReportsService {
       });
     }
 
-    return {
-      data: data,
+    const result = {
+      data: data || [],
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -819,6 +838,14 @@ class ReportsService {
       },
       charts: chartData
     };
+
+    console.log("Patient Report Service Result:", {
+      dataCount: result.data.length,
+      total: result.pagination.total,
+      chartsKeys: Object.keys(result.charts)
+    });
+
+    return result;
   }
 }
 
