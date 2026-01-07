@@ -946,7 +946,10 @@ SELECT
     pm.patientId AS patientNumber,
     pm.mobileNo AS mobileNo,
     COALESCE(pm.email, '') AS email,
-    DATE_FORMAT(pm.dateOfBirth, '%d-%b-%Y') AS dateOfBirth,
+    CASE 
+        WHEN pm.dateOfBirth IS NOT NULL THEN DATE_FORMAT(pm.dateOfBirth, '%d-%b-%Y')
+        ELSE ''
+    END AS dateOfBirth,
     COALESCE(pm.aadhaarNo, '') AS aadhaarNo,
     COALESCE(ptm.patientType, 'N/A') AS patientType,
     COALESCE(cm.name, '') AS city,
@@ -995,6 +998,7 @@ FROM patient_master pm
 INNER JOIN branch_master bm ON bm.id = pm.branchId
 LEFT JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId
 LEFT JOIN city_master cm ON cm.id = pm.cityId
+LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
 LEFT JOIN (
     SELECT pva1.*
     FROM patient_visits_association pva1
@@ -1009,7 +1013,6 @@ LEFT JOIN (
 LEFT JOIN visit_treatment_cycles_associations vtca ON vtca.visitId = pva.id
 LEFT JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
 LEFT JOIN visit_packages_associations vpa ON vpa.visitId = pva.id
-LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
 LEFT JOIN (
     SELECT DISTINCT
         pva_doctor.patientId,

@@ -556,7 +556,7 @@ class ReportsService {
     let whereConditions = [];
     const replacements = {};
 
-    // Date filters - filter by patient creation date to show all patients
+    // Date filters - filter by patient creation date
     if (fromDate) {
       whereConditions.push("DATE(pm.createdAt) >= DATE(:fromDate)");
       replacements.fromDate = fromDate;
@@ -694,24 +694,15 @@ class ReportsService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
       });
-      console.log("Patient Report Data Count:", data?.length || 0);
-      if (data && data.length > 0) {
-        console.log(
-          "First Patient Record Sample:",
-          JSON.stringify(data[0], null, 2)
-        );
-      }
     } catch (err) {
-      console.log("Error while fetching patient report:", err);
-      console.log("Error message:", err.message);
-      console.log("Error SQL:", err.sql);
-      console.log("Error stack:", err.stack);
+      console.error("Error while fetching patient report:", err.message);
+      console.error("SQL Error:", err.sql);
       throw new createError.InternalServerError(
         err.message || Constants.SOMETHING_ERROR_OCCURRED
       );
     }
 
-    // Get total count for pagination - simpler count query
+    // Get total count for pagination
     let countQuery = `
       SELECT COUNT(DISTINCT pm.id) AS total
       FROM patient_master pm
@@ -720,20 +711,20 @@ class ReportsService {
       ${whereClauseForCount}
     `;
 
-    const countResult = await this.mySqlConnection
-      .query(countQuery, {
+    let countResult = [{ total: 0 }];
+    try {
+      countResult = await this.mySqlConnection.query(countQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
-      })
-      .catch(err => {
-        console.log("Error while fetching patient report count:", err);
-        return [{ total: 0 }];
       });
+    } catch (err) {
+      console.error("Error while fetching patient report count:", err.message);
+      countResult = [{ total: 0 }];
+    }
 
     const total = countResult[0]?.total || 0;
 
     // Calculate chart data from ALL matching records (not just current page)
-    // Run the same query without pagination to get chart aggregates
     let chartQuery = patientReportQuery;
     chartQuery = chartQuery.replace("{{whereConditions}}", whereClause);
     chartQuery = chartQuery.replace("{{pagination}}", ""); // Remove pagination for charts
@@ -744,12 +735,8 @@ class ReportsService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: replacements
       });
-      console.log("Chart Data Raw Count:", chartDataRaw?.length || 0);
     } catch (err) {
-      console.log("Error while fetching chart data:", err);
-      console.log("Chart Query Error:", err.message);
-      console.log("Chart Query SQL:", err.sql);
-      // Don't throw error for chart data, just return empty array
+      console.error("Error while fetching chart data:", err.message);
       chartDataRaw = [];
     }
 
@@ -828,24 +815,19 @@ class ReportsService {
       });
     }
 
-    const result = {
-      data: data || [],
+    // Ensure data is an array
+    const finalData = Array.isArray(data) ? data : [];
+
+    return {
+      data: finalData,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: total,
-        totalPages: Math.ceil(total / parseInt(limit))
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 50,
+        total: total || 0,
+        totalPages: Math.ceil((total || 0) / (parseInt(limit) || 50))
       },
       charts: chartData
     };
-
-    console.log("Patient Report Service Result:", {
-      dataCount: result.data.length,
-      total: result.pagination.total,
-      chartsKeys: Object.keys(result.charts)
-    });
-
-    return result;
   }
 }
 
