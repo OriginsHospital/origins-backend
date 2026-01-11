@@ -28,6 +28,18 @@ const addChatMembersSchema = Joi.object({
     .required()
 });
 
+const updateChatSchema = Joi.object({
+  name: Joi.string()
+    .max(255)
+    .optional()
+    .allow(null)
+    .allow(""),
+  description: Joi.string()
+    .optional()
+    .allow(null)
+    .allow("")
+});
+
 // ============ MESSAGE Schemas ============
 
 const sendMessageSchema = Joi.object({
@@ -288,6 +300,7 @@ const updateCallStatusSchema = Joi.object({
 module.exports = {
   createChatSchema,
   addChatMembersSchema,
+  updateChatSchema,
   sendMessageSchema,
   editMessageSchema,
   createMeetingSchema,

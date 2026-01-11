@@ -60,6 +60,13 @@ class TeamsRoute {
       this.deleteMessageRoute
     );
 
+    this._route.put(
+      "/chats/:chatId",
+      checkActiveSession,
+      tokenVerified,
+      this.updateChatRoute
+    );
+
     this._route.post(
       "/chats/:chatId/members",
       checkActiveSession,
@@ -230,6 +237,11 @@ class TeamsRoute {
   addChatMembersRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new TeamsController(req, res, next);
     await controllerObj.addChatMembersHandler();
+  });
+
+  updateChatRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new TeamsController(req, res, next);
+    await controllerObj.updateChatHandler();
   });
 
   removeChatMemberRoute = asyncHandler(async (req, res, next) => {

@@ -74,6 +74,15 @@ class TeamsController {
     });
   }
 
+  async updateChatHandler() {
+    const data = await this._service.updateChatService();
+    this._response.status(200).send({
+      status: 200,
+      message: "Chat updated successfully",
+      data: data
+    });
+  }
+
   async removeChatMemberHandler() {
     const data = await this._service.removeChatMemberService();
     this._response.status(200).send({

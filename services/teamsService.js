@@ -20,6 +20,7 @@ const UserModel = require("../models/Users/userModel");
 const {
   createChatSchema,
   addChatMembersSchema,
+  updateChatSchema,
   sendMessageSchema,
   editMessageSchema,
   createMeetingSchema,
@@ -791,6 +792,52 @@ class TeamsService extends BaseService {
     await Promise.all(memberPromises);
 
     return { success: true, addedCount: validatedData.memberIds.length };
+  }
+
+  async updateChatService() {
+    const userId = this._request?.userDetails?.id;
+    const chatId = parseInt(this._request.params.chatId);
+
+    if (!userId) {
+      throw new createError.Unauthorized("User not authenticated");
+    }
+
+    // Get chat
+    const chat = await TeamChatModel.findOne({
+      where: { id: chatId }
+    });
+
+    if (!chat) {
+      throw new createError.NotFound("Chat not found");
+    }
+
+    // Verify user is admin of the chat
+    const member = await TeamChatMemberModel.findOne({
+      where: { chatId, userId }
+    });
+
+    if (!member || member.role !== "admin") {
+      throw new createError.Forbidden("Only admins can update group details");
+    }
+
+    // Validate
+    const validatedData = await updateChatSchema
+      .validateAsync(this._request.body)
+      .catch(err => {
+        throw new createError.BadRequest(err.message || "Validation failed");
+      });
+
+    // Update chat
+    await chat.update({
+      name: validatedData.name !== undefined ? validatedData.name : chat.name,
+      description:
+        validatedData.description !== undefined
+          ? validatedData.description
+          : chat.description,
+      updatedBy: userId
+    });
+
+    return chat.toJSON();
   }
 
   async removeChatMemberService() {
