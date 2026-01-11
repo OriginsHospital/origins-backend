@@ -5,6 +5,8 @@ WHERE DATE_FORMAT(updatedAt, '%d/%m/%Y') BETWEEN :fromDate AND :toDate`;
 const getPatientsQuery = `
 select pm.id, patientId,
 pm.photoPath ,
+pm.branchId,
+(SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
 CAST(pm.createdAt as DATE) as registeredDate,
 JSON_OBJECT('id', patientTypeId, 'name', ptm.patientType) AS patientType,
 aadhaarNo,mobileNo,CONCAT(lastName,' ',firstName) as Name, 

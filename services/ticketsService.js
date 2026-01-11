@@ -49,31 +49,55 @@ class TicketsService {
   // Generate ticket code (e.g., TCK-2025-0001)
   async generateTicketCode() {
     const year = new Date().getFullYear();
-    const result = await this.mysqlConnection
-      .query(getNextTicketCodeQuery, {
+
+    try {
+      const result = await this.mysqlConnection.query(getNextTicketCodeQuery, {
         type: Sequelize.QueryTypes.SELECT
-      })
-      .catch(err => {
-        console.error("Error while generating ticket code:", err);
-        console.error("Error details:", {
-          name: err.name,
-          message: err.message,
-          sql: err.sql
-        });
-        throw new createError.InternalServerError(
-          "Failed to generate ticket code. Please try again."
-        );
       });
 
-    if (!result || !result[0]) {
+      if (!result || !result[0]) {
+        // No result returned, start from 1
+        console.warn("No result from ticket code query, starting from 0001");
+        return `TCK-${year}-0001`;
+      }
+
+      const nextNumber = result[0]?.nextNumber || 1;
+      const paddedNumber = String(nextNumber).padStart(4, "0");
+      const ticketCode = `TCK-${year}-${paddedNumber}`;
+      console.log("Generated ticket code:", ticketCode);
+      return ticketCode;
+    } catch (err) {
+      console.error("Error while generating ticket code:", err);
+      console.error("Error details:", {
+        name: err.name,
+        message: err.message,
+        sql: err.sql,
+        original: err.original,
+        code: err.code
+      });
+
+      // Check if it's a table doesn't exist error
+      if (err.original && err.original.code === "ER_NO_SUCH_TABLE") {
+        throw new createError.InternalServerError(
+          "Tickets table does not exist. Please run the database migrations first."
+        );
+      }
+
+      // Check if it's a database connection error
+      if (
+        err.name === "SequelizeConnectionError" ||
+        err.original?.code === "ECONNREFUSED"
+      ) {
+        throw new createError.InternalServerError(
+          "Database connection failed. Please check your database connection."
+        );
+      }
+
+      // For other errors, provide generic message
       throw new createError.InternalServerError(
-        "Failed to generate ticket code. Please try again."
+        `Failed to generate ticket code: ${err.message || "Unknown error"}`
       );
     }
-
-    const nextNumber = result[0]?.nextNumber || 1;
-    const paddedNumber = String(nextNumber).padStart(4, "0");
-    return `TCK-${year}-${paddedNumber}`;
   }
 
   // Log ticket activity
