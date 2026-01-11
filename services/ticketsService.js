@@ -54,11 +54,22 @@ class TicketsService {
         type: Sequelize.QueryTypes.SELECT
       })
       .catch(err => {
-        console.log("Error while generating ticket code", err);
+        console.error("Error while generating ticket code:", err);
+        console.error("Error details:", {
+          name: err.name,
+          message: err.message,
+          sql: err.sql
+        });
         throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
+          "Failed to generate ticket code. Please try again."
         );
       });
+
+    if (!result || !result[0]) {
+      throw new createError.InternalServerError(
+        "Failed to generate ticket code. Please try again."
+      );
+    }
 
     const nextNumber = result[0]?.nextNumber || 1;
     const paddedNumber = String(nextNumber).padStart(4, "0");
@@ -200,6 +211,13 @@ class TicketsService {
   // Create new ticket
   async createTicketService() {
     try {
+      // Validate that user is authenticated
+      if (!this.currentUserId) {
+        throw new createError.Unauthorized(
+          "User authentication required to create a ticket"
+        );
+      }
+
       // Log incoming request for debugging
       console.log("Creating ticket with payload:", {
         body: this._request.body,
@@ -230,9 +248,27 @@ class TicketsService {
       }
 
       // Generate ticket code
-      const ticketCode = await this.generateTicketCode();
+      let ticketCode;
+      try {
+        ticketCode = await this.generateTicketCode();
+        console.log("Generated ticket code:", ticketCode);
+      } catch (codeError) {
+        console.error("Failed to generate ticket code:", codeError);
+        throw new createError.InternalServerError(
+          "Failed to generate ticket code. Please check database connection."
+        );
+      }
 
       // Create ticket
+      console.log("Attempting to create ticket with data:", {
+        ticketCode,
+        taskDescription: taskDescription.substring(0, 50) + "...",
+        assignedTo: assignedToNumber,
+        priority,
+        category: category || null,
+        createdBy: this.currentUserId
+      });
+
       const createdTicket = await TicketsModel.create({
         ticketCode,
         taskDescription,
@@ -246,8 +282,27 @@ class TicketsService {
         console.error("Error details:", {
           name: err.name,
           message: err.message,
-          errors: err.errors
+          errors: err.errors,
+          sql: err.sql
         });
+
+        // Handle specific database errors
+        if (err.name === "SequelizeForeignKeyConstraintError") {
+          throw new createError.BadRequest(
+            "Invalid user ID. The assigned user or creator does not exist."
+          );
+        }
+        if (err.name === "SequelizeUniqueConstraintError") {
+          throw new createError.Conflict(
+            "A ticket with this code already exists. Please try again."
+          );
+        }
+        if (err.name === "SequelizeValidationError") {
+          const validationMessages =
+            err.errors?.map(e => e.message).join(", ") || err.message;
+          throw new createError.BadRequest(validationMessages);
+        }
+
         throw new createError.InternalServerError(
           err.message || Constants.SOMETHING_ERROR_OCCURRED
         );
@@ -264,29 +319,65 @@ class TicketsService {
 
         if (tagRecords.length > 0) {
           await TicketTagsModel.bulkCreate(tagRecords).catch(err => {
-            console.log("Error while creating ticket tags", err);
-            // Don't throw error, just log it
+            console.error("Error while creating ticket tags:", err);
+            // Don't throw error, just log it - tags are optional
           });
         }
       }
 
-      // Log creation activity
-      await this.logActivity(
-        createdTicket.id,
-        "CREATED",
-        null,
-        null,
-        `Ticket created: ${taskDescription.substring(0, 50)}...`
-      );
+      // Log creation activity (non-blocking - don't fail ticket creation if logging fails)
+      try {
+        await this.logActivity(
+          createdTicket.id,
+          "CREATED",
+          null,
+          null,
+          `Ticket created: ${taskDescription.substring(0, 50)}...`
+        );
+      } catch (logError) {
+        console.error(
+          "Error while logging ticket activity (non-critical):",
+          logError
+        );
+        // Don't throw - activity logging failure shouldn't prevent ticket creation
+      }
 
       console.log("Ticket created successfully:", createdTicket.id);
       return createdTicket;
     } catch (error) {
       console.error("Error in createTicketService:", error);
-      // Re-throw validation errors and other errors as-is
+      console.error("Error stack:", error.stack);
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+
+      // Re-throw validation errors and HTTP errors as-is
       if (error.isJoi || error.status) {
         throw error;
       }
+
+      // Handle Sequelize database errors
+      if (error.name && error.name.includes("Sequelize")) {
+        console.error("Sequelize error details:", {
+          name: error.name,
+          message: error.message,
+          original: error.original,
+          sql: error.sql
+        });
+
+        if (error.name === "SequelizeDatabaseError") {
+          throw new createError.InternalServerError(
+            `Database error: ${error.message ||
+              "Please check database connection and table structure"}`
+          );
+        }
+
+        if (error.name === "SequelizeConnectionError") {
+          throw new createError.InternalServerError(
+            "Database connection error. Please try again later."
+          );
+        }
+      }
+
       throw new createError.InternalServerError(
         error.message || Constants.SOMETHING_ERROR_OCCURRED
       );
