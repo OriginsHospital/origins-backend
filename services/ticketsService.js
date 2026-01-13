@@ -8,7 +8,8 @@ const {
   getTicketsCountQuery,
   getTicketDetailsQuery,
   getActiveStaffQuery,
-  getNextTicketCodeQuery
+  getNextTicketCodeQuery,
+  getLastTicketCodeWithLockQuery
 } = require("../queries/tickets_queries");
 const {
   createTicketSchema,
@@ -46,26 +47,67 @@ class TicketsService {
     );
   }
 
-  // Generate ticket code (e.g., TCK-2025-0001)
+  // Check if a ticket code already exists
+  async ticketCodeExists(ticketCode) {
+    try {
+      const existingTicket = await TicketsModel.findOne({
+        where: { ticketCode }
+      });
+      return !!existingTicket;
+    } catch (err) {
+      console.error("Error checking ticket code existence:", err);
+      // If we can't check, assume it doesn't exist and let the unique constraint handle it
+      return false;
+    }
+  }
+
+  // Generate ticket code (e.g., TCK-2025-0001) - standalone version
   async generateTicketCode() {
     const year = new Date().getFullYear();
+    const maxAttempts = 10; // Maximum attempts to find a unique code
 
     try {
-      const result = await this.mysqlConnection.query(getNextTicketCodeQuery, {
-        type: Sequelize.QueryTypes.SELECT
-      });
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const result = await this.mysqlConnection.query(
+          getNextTicketCodeQuery,
+          {
+            type: Sequelize.QueryTypes.SELECT
+          }
+        );
 
-      if (!result || !result[0]) {
-        // No result returned, start from 1
-        console.warn("No result from ticket code query, starting from 0001");
-        return `TCK-${year}-0001`;
+        let nextNumber;
+        if (!result || !result[0]) {
+          // No result returned, start from 1
+          console.warn("No result from ticket code query, starting from 0001");
+          nextNumber = 1;
+        } else {
+          nextNumber = result[0]?.nextNumber || 1;
+        }
+
+        // If this is a retry attempt, increment the number to avoid collision
+        if (attempt > 0) {
+          nextNumber += attempt;
+        }
+
+        const paddedNumber = String(nextNumber).padStart(4, "0");
+        const ticketCode = `TCK-${year}-${paddedNumber}`;
+
+        // Check if this code already exists
+        const exists = await this.ticketCodeExists(ticketCode);
+        if (!exists) {
+          console.log("Generated ticket code:", ticketCode);
+          return ticketCode;
+        }
+
+        console.warn(
+          `Ticket code ${ticketCode} already exists, trying next number...`
+        );
       }
 
-      const nextNumber = result[0]?.nextNumber || 1;
-      const paddedNumber = String(nextNumber).padStart(4, "0");
-      const ticketCode = `TCK-${year}-${paddedNumber}`;
-      console.log("Generated ticket code:", ticketCode);
-      return ticketCode;
+      // If we've exhausted all attempts, throw an error
+      throw new createError.InternalServerError(
+        "Failed to generate a unique ticket code after multiple attempts."
+      );
     } catch (err) {
       console.error("Error while generating ticket code:", err);
       console.error("Error details:", {
@@ -91,6 +133,136 @@ class TicketsService {
         throw new createError.InternalServerError(
           "Database connection failed. Please check your database connection."
         );
+      }
+
+      // Re-throw if it's already an HTTP error
+      if (err.status) {
+        throw err;
+      }
+
+      // For other errors, provide generic message
+      throw new createError.InternalServerError(
+        `Failed to generate ticket code: ${err.message || "Unknown error"}`
+      );
+    }
+  }
+
+  // Generate ticket code within a transaction (more atomic with row locking)
+  async generateTicketCodeInTransaction(transaction) {
+    const year = new Date().getFullYear();
+    const maxAttempts = 20; // Increased attempts for high concurrency
+
+    try {
+      // Try multiple times to get a unique code
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // First, try to lock the last ticket row for this year
+        // This ensures only one transaction can generate a code at a time
+        const lastTicketResult = await this.mysqlConnection.query(
+          getLastTicketCodeWithLockQuery,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            transaction: transaction
+          }
+        );
+
+        let nextNumber;
+        if (!lastTicketResult || lastTicketResult.length === 0) {
+          // No tickets exist for this year, start from 1
+          if (attempt === 0) {
+            console.warn(
+              "No tickets found for current year, starting from 0001"
+            );
+          }
+          nextNumber = 1;
+        } else {
+          // Get the number from the last ticket and increment
+          const lastTicketNumber = lastTicketResult[0]?.ticket_number || 0;
+          nextNumber = lastTicketNumber + 1;
+        }
+
+        // Fallback: if locking didn't work, use the MAX query
+        // This provides redundancy
+        const maxResult = await this.mysqlConnection.query(
+          getNextTicketCodeQuery,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            transaction: transaction
+          }
+        );
+
+        // Use the higher of the two values to ensure we don't go backwards
+        const maxNextNumber = maxResult?.[0]?.nextNumber || 1;
+        nextNumber = Math.max(nextNumber, maxNextNumber);
+
+        // Add attempt number to avoid collisions if multiple transactions are racing
+        // This ensures each retry gets a different number
+        if (attempt > 0) {
+          nextNumber += attempt;
+        }
+
+        const paddedNumber = String(nextNumber).padStart(4, "0");
+        const ticketCode = `TCK-${year}-${paddedNumber}`;
+
+        // Verify it doesn't exist within the transaction
+        const exists = await TicketsModel.findOne({
+          where: { ticketCode },
+          transaction: transaction
+        });
+
+        if (!exists) {
+          console.log(
+            "Generated ticket code in transaction:",
+            ticketCode,
+            `(attempt ${attempt + 1})`
+          );
+          return ticketCode;
+        }
+
+        // If code exists, wait a tiny bit and try again with incremented number
+        console.warn(
+          `Ticket code ${ticketCode} exists, trying next number (attempt ${attempt +
+            1}/${maxAttempts})`
+        );
+        if (attempt < maxAttempts - 1) {
+          // Small delay to let other transactions complete
+          await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
+        }
+      }
+
+      // If we've exhausted all attempts, throw an error
+      throw new createError.InternalServerError(
+        "Failed to generate a unique ticket code after multiple attempts."
+      );
+    } catch (err) {
+      console.error("Error while generating ticket code in transaction:", err);
+      console.error("Error details:", {
+        name: err.name,
+        message: err.message,
+        sql: err.sql,
+        original: err.original,
+        code: err.code
+      });
+
+      // Check if it's a table doesn't exist error
+      if (err.original && err.original.code === "ER_NO_SUCH_TABLE") {
+        throw new createError.InternalServerError(
+          "Tickets table does not exist. Please run the database migrations first."
+        );
+      }
+
+      // Check if it's a database connection error
+      if (
+        err.name === "SequelizeConnectionError" ||
+        err.original?.code === "ECONNREFUSED"
+      ) {
+        throw new createError.InternalServerError(
+          "Database connection failed. Please check your database connection."
+        );
+      }
+
+      // Re-throw if it's already an HTTP error
+      if (err.status) {
+        throw err;
       }
 
       // For other errors, provide generic message
@@ -271,66 +443,200 @@ class TicketsService {
         );
       }
 
-      // Generate ticket code
-      let ticketCode;
-      try {
-        ticketCode = await this.generateTicketCode();
-        console.log("Generated ticket code:", ticketCode);
-      } catch (codeError) {
-        console.error("Failed to generate ticket code:", codeError);
-        throw new createError.InternalServerError(
-          "Failed to generate ticket code. Please check database connection."
-        );
+      // Use transaction with retry logic for handling race conditions
+      const maxRetries = 10;
+      let retryCount = 0;
+      let createdTicket = null;
+
+      while (retryCount < maxRetries && !createdTicket) {
+        try {
+          // Use transaction with REPEATABLE READ isolation level
+          // This provides good balance between consistency and avoiding deadlocks
+          createdTicket = await this.mysqlConnection.transaction(
+            {
+              isolationLevel:
+                Sequelize.Transaction.ISOLATION_LEVELS.REPEATABLE_READ
+            },
+            async t => {
+              // Generate ticket code within transaction
+              let ticketCode;
+              try {
+                ticketCode = await this.generateTicketCodeInTransaction(t);
+                console.log("Generated ticket code:", ticketCode);
+              } catch (codeError) {
+                console.error("Failed to generate ticket code:", codeError);
+                throw new createError.InternalServerError(
+                  "Failed to generate ticket code. Please check database connection."
+                );
+              }
+
+              // Verify code doesn't exist (double-check within transaction)
+              const existing = await TicketsModel.findOne({
+                where: { ticketCode },
+                transaction: t
+              });
+
+              if (existing) {
+                // Code exists, throw error to trigger retry
+                // Use a specific error that will be caught by retry logic
+                const collisionError = new Error(
+                  "Ticket code collision detected"
+                );
+                collisionError.name = "TicketCodeCollisionError";
+                collisionError.status = 409;
+                collisionError.isRetryable = true;
+                throw collisionError;
+              }
+
+              // Create ticket within transaction
+              console.log("Attempting to create ticket with data:", {
+                ticketCode,
+                taskDescription: taskDescription.substring(0, 50) + "...",
+                assignedTo: assignedToNumber,
+                priority,
+                category: category || null,
+                createdBy: this.currentUserId,
+                retryAttempt: retryCount + 1
+              });
+
+              const ticket = await TicketsModel.create(
+                {
+                  ticketCode,
+                  taskDescription,
+                  assignedTo: assignedToNumber,
+                  priority,
+                  category: category || null,
+                  status: "OPEN",
+                  createdBy: this.currentUserId
+                },
+                { transaction: t }
+              );
+
+              return ticket;
+            }
+          );
+
+          // Success - break out of retry loop
+          break;
+        } catch (err) {
+          console.error("Error while creating ticket:", err);
+          console.error("Error details:", {
+            name: err.name,
+            message: err.message,
+            errors: err.errors,
+            sql: err.sql,
+            retryAttempt: retryCount + 1,
+            status: err.status,
+            original: err.original,
+            originalCode: err.original?.code,
+            originalErrno: err.original?.errno,
+            originalMessage: err.original?.message,
+            stack: err.stack?.substring(0, 500)
+          });
+
+          // Handle specific database errors that shouldn't be retried
+          if (err.name === "SequelizeForeignKeyConstraintError") {
+            throw new createError.BadRequest(
+              "Invalid user ID. The assigned user or creator does not exist."
+            );
+          }
+
+          if (err.name === "SequelizeValidationError") {
+            const validationMessages =
+              err.errors?.map(e => e.message).join(", ") || err.message;
+            throw new createError.BadRequest(validationMessages);
+          }
+
+          // Handle duplicate code error or conflict - retry with new code
+          // Check for various forms of duplicate/unique constraint errors
+          // IMPORTANT: Check ALL possible error formats to catch duplicates
+          const isDuplicateError =
+            err.name === "SequelizeUniqueConstraintError" ||
+            err.name === "SequelizeDatabaseError" ||
+            err.name === "UniqueConstraintError" ||
+            (err.original &&
+              (err.original.code === "ER_DUP_ENTRY" ||
+              err.original.code === "23505" || // PostgreSQL duplicate key
+              err.original.errno === 1062 || // MySQL duplicate entry
+              err.original.errno === 1062 || // MySQL duplicate entry (redundant but explicit)
+                err.original.message?.includes("Duplicate entry") ||
+                err.original.message?.includes("duplicate") ||
+                err.original.message?.includes("UNIQUE"))) ||
+            (err.message &&
+              (err.message.toLowerCase().includes("duplicate") ||
+                err.message.toLowerCase().includes("already exists") ||
+                err.message.toLowerCase().includes("unique constraint") ||
+                err.message.toLowerCase().includes("unique key") ||
+                err.message.toLowerCase().includes("collision") ||
+                (err.message.toLowerCase().includes("ticket code") &&
+                  err.message.toLowerCase().includes("exists")))) ||
+            err.status === 409 ||
+            err.statusCode === 409 ||
+            err.isRetryable === true ||
+            err.name === "TicketCodeCollisionError" ||
+            (err.errors &&
+              Array.isArray(err.errors) &&
+              err.errors.some(
+                e =>
+                  e.type === "unique violation" ||
+                  e.type === "unique" ||
+                  e.message?.toLowerCase().includes("must be unique") ||
+                  e.message?.toLowerCase().includes("already exists") ||
+                  e.message?.toLowerCase().includes("duplicate")
+              )) ||
+            // Check if error is a Conflict error (409)
+            err.statusCode === 409 ||
+            // Check SQL error messages
+            (err.sql &&
+              (err.sql.includes("Duplicate entry") ||
+                err.sql.includes("ER_DUP_ENTRY")));
+
+          if (isDuplicateError) {
+            retryCount++;
+            console.log(
+              `Duplicate ticket code error detected (attempt ${retryCount}/${maxRetries}):`,
+              {
+                name: err.name,
+                message: err.message,
+                originalCode: err.original?.code,
+                originalErrno: err.original?.errno
+              }
+            );
+
+            if (retryCount >= maxRetries) {
+              console.error(
+                `Failed to create ticket after ${maxRetries} attempts due to duplicate codes`
+              );
+              throw new createError.Conflict(
+                "Unable to generate a unique ticket code. Please try again."
+              );
+            }
+            // Wait a bit before retrying (exponential backoff with jitter)
+            const baseDelay = 50;
+            const exponentialDelay = baseDelay * Math.pow(2, retryCount);
+            const jitter = Math.random() * 50; // Add randomness to avoid thundering herd
+            const delay = Math.min(exponentialDelay + jitter, 500);
+            console.log(
+              `Retrying ticket creation in ${Math.round(
+                delay
+              )}ms (attempt ${retryCount}/${maxRetries})...`
+            );
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue; // Retry with new code
+          }
+
+          // For other errors, throw immediately (don't retry)
+          throw new createError.InternalServerError(
+            err.message || Constants.SOMETHING_ERROR_OCCURRED
+          );
+        }
       }
 
-      // Create ticket
-      console.log("Attempting to create ticket with data:", {
-        ticketCode,
-        taskDescription: taskDescription.substring(0, 50) + "...",
-        assignedTo: assignedToNumber,
-        priority,
-        category: category || null,
-        createdBy: this.currentUserId
-      });
-
-      const createdTicket = await TicketsModel.create({
-        ticketCode,
-        taskDescription,
-        assignedTo: assignedToNumber,
-        priority,
-        category: category || null,
-        status: "OPEN",
-        createdBy: this.currentUserId
-      }).catch(err => {
-        console.error("Error while creating ticket:", err);
-        console.error("Error details:", {
-          name: err.name,
-          message: err.message,
-          errors: err.errors,
-          sql: err.sql
-        });
-
-        // Handle specific database errors
-        if (err.name === "SequelizeForeignKeyConstraintError") {
-          throw new createError.BadRequest(
-            "Invalid user ID. The assigned user or creator does not exist."
-          );
-        }
-        if (err.name === "SequelizeUniqueConstraintError") {
-          throw new createError.Conflict(
-            "A ticket with this code already exists. Please try again."
-          );
-        }
-        if (err.name === "SequelizeValidationError") {
-          const validationMessages =
-            err.errors?.map(e => e.message).join(", ") || err.message;
-          throw new createError.BadRequest(validationMessages);
-        }
-
+      if (!createdTicket) {
         throw new createError.InternalServerError(
-          err.message || Constants.SOMETHING_ERROR_OCCURRED
+          "Failed to create ticket after multiple attempts."
         );
-      });
+      }
 
       // Create tags if provided
       if (tags && tags.length > 0) {
@@ -380,13 +686,25 @@ class TicketsService {
       }
 
       // Handle Sequelize database errors
+      // BUT: Don't handle SequelizeUniqueConstraintError here - it should have been caught by retry logic
       if (error.name && error.name.includes("Sequelize")) {
-        console.error("Sequelize error details:", {
+        console.error("Sequelize error details (outer catch):", {
           name: error.name,
           message: error.message,
           original: error.original,
-          sql: error.sql
+          sql: error.sql,
+          status: error.status
         });
+
+        // If this is a unique constraint error that escaped retry logic, it's a serious issue
+        if (error.name === "SequelizeUniqueConstraintError") {
+          console.error(
+            "CRITICAL: SequelizeUniqueConstraintError escaped retry logic!"
+          );
+          throw new createError.Conflict(
+            "Unable to generate a unique ticket code after multiple attempts. Please try again."
+          );
+        }
 
         if (error.name === "SequelizeDatabaseError") {
           throw new createError.InternalServerError(

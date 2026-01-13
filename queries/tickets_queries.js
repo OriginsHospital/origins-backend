@@ -186,7 +186,7 @@ WHERE u.isAdminVerified = 1
 ORDER BY u.fullName ASC;
 `;
 
-// Query to generate next ticket code
+// Query to generate next ticket code (fallback query)
 const getNextTicketCodeQuery = `
 SELECT 
     COALESCE(
@@ -197,10 +197,23 @@ FROM tickets
 WHERE ticket_code LIKE CONCAT('TCK-', YEAR(NOW()), '-%');
 `;
 
+// Query to get and lock the last ticket for the current year (more atomic)
+const getLastTicketCodeWithLockQuery = `
+SELECT 
+    ticket_code,
+    CAST(SUBSTRING(ticket_code, 9) AS UNSIGNED) AS ticket_number
+FROM tickets
+WHERE ticket_code LIKE CONCAT('TCK-', YEAR(NOW()), '-%')
+ORDER BY CAST(SUBSTRING(ticket_code, 9) AS UNSIGNED) DESC
+LIMIT 1
+FOR UPDATE;
+`;
+
 module.exports = {
   getTicketsQuery,
   getTicketsCountQuery,
   getTicketDetailsQuery,
   getActiveStaffQuery,
-  getNextTicketCodeQuery
+  getNextTicketCodeQuery,
+  getLastTicketCodeWithLockQuery
 };
