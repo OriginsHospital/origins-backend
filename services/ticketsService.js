@@ -499,20 +499,45 @@ class TicketsService {
                 retryAttempt: retryCount + 1
               });
 
-              const ticket = await TicketsModel.create(
-                {
-                  ticketCode,
-                  taskDescription,
-                  assignedTo: assignedToNumber,
-                  priority,
-                  category: category || null,
-                  status: "OPEN",
-                  createdBy: this.currentUserId
-                },
-                { transaction: t }
-              );
+              try {
+                const ticket = await TicketsModel.create(
+                  {
+                    ticketCode,
+                    taskDescription,
+                    assignedTo: assignedToNumber,
+                    priority,
+                    category: category || null,
+                    status: "OPEN",
+                    createdBy: this.currentUserId
+                  },
+                  { transaction: t }
+                );
 
-              return ticket;
+                return ticket;
+              } catch (createErr) {
+                // Catch duplicate errors at the source and transform them
+                if (
+                  createErr.name === "SequelizeUniqueConstraintError" ||
+                  (createErr.original &&
+                    (createErr.original.code === "ER_DUP_ENTRY" ||
+                      createErr.original.errno === 1062)) ||
+                  (createErr.message &&
+                    createErr.message.toLowerCase().includes("duplicate"))
+                ) {
+                  console.log(
+                    "Duplicate error caught at Model.create, throwing retryable error"
+                  );
+                  const collisionError = new Error(
+                    "Ticket code collision detected"
+                  );
+                  collisionError.name = "TicketCodeCollisionError";
+                  collisionError.status = 409;
+                  collisionError.isRetryable = true;
+                  throw collisionError;
+                }
+                // Re-throw other errors
+                throw createErr;
+              }
             }
           );
 
@@ -594,18 +619,20 @@ class TicketsService {
           if (isDuplicateError) {
             retryCount++;
             console.log(
-              `Duplicate ticket code error detected (attempt ${retryCount}/${maxRetries}):`,
+              `[RETRY LOGIC] Duplicate ticket code error detected (attempt ${retryCount}/${maxRetries}):`,
               {
                 name: err.name,
                 message: err.message,
                 originalCode: err.original?.code,
-                originalErrno: err.original?.errno
+                originalErrno: err.original?.errno,
+                status: err.status,
+                isRetryable: err.isRetryable
               }
             );
 
             if (retryCount >= maxRetries) {
               console.error(
-                `Failed to create ticket after ${maxRetries} attempts due to duplicate codes`
+                `[RETRY LOGIC] Failed to create ticket after ${maxRetries} attempts due to duplicate codes`
               );
               throw new createError.Conflict(
                 "Unable to generate a unique ticket code. Please try again."
@@ -617,12 +644,24 @@ class TicketsService {
             const jitter = Math.random() * 50; // Add randomness to avoid thundering herd
             const delay = Math.min(exponentialDelay + jitter, 500);
             console.log(
-              `Retrying ticket creation in ${Math.round(
+              `[RETRY LOGIC] Retrying ticket creation in ${Math.round(
                 delay
               )}ms (attempt ${retryCount}/${maxRetries})...`
             );
             await new Promise(resolve => setTimeout(resolve, delay));
             continue; // Retry with new code
+          } else {
+            console.log(
+              `[RETRY LOGIC] Error is NOT detected as duplicate, will not retry:`,
+              {
+                name: err.name,
+                message: err.message,
+                status: err.status,
+                hasOriginal: !!err.original,
+                originalCode: err.original?.code,
+                originalErrno: err.original?.errno
+              }
+            );
           }
 
           // For other errors, throw immediately (don't retry)
@@ -675,13 +714,36 @@ class TicketsService {
       console.log("Ticket created successfully:", createdTicket.id);
       return createdTicket;
     } catch (error) {
-      console.error("Error in createTicketService:", error);
+      console.error("Error in createTicketService (outer catch):", error);
       console.error("Error stack:", error.stack);
       console.error("Error name:", error.name);
       console.error("Error message:", error.message);
+      console.error("Error status:", error.status);
+      console.error("Error original:", error.original);
 
-      // Re-throw validation errors and HTTP errors as-is
-      if (error.isJoi || error.status) {
+      // Check if this is a duplicate error that escaped retry logic
+      const isDuplicateError =
+        error.name === "SequelizeUniqueConstraintError" ||
+        (error.original &&
+          (error.original.code === "ER_DUP_ENTRY" ||
+            error.original.errno === 1062)) ||
+        (error.message &&
+          (error.message.toLowerCase().includes("duplicate") ||
+            error.message.toLowerCase().includes("already exists") ||
+            error.message.toLowerCase().includes("ticket code"))) ||
+        error.status === 409;
+
+      if (isDuplicateError) {
+        console.error(
+          "CRITICAL: Duplicate error escaped retry logic! This should not happen."
+        );
+        throw new createError.Conflict(
+          "Unable to generate a unique ticket code. Please try again."
+        );
+      }
+
+      // Re-throw validation errors and HTTP errors as-is (but not duplicate errors)
+      if (error.isJoi || (error.status && !isDuplicateError)) {
         throw error;
       }
 
