@@ -155,33 +155,10 @@ class TicketsService {
     try {
       // Try multiple times to get a unique code
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        // First, try to lock the last ticket row for this year
-        // This ensures only one transaction can generate a code at a time
-        const lastTicketResult = await this.mysqlConnection.query(
-          getLastTicketCodeWithLockQuery,
-          {
-            type: Sequelize.QueryTypes.SELECT,
-            transaction: transaction
-          }
-        );
+        // Strategy: Use MAX query first, then try to lock the last row
+        // This ensures we get the most up-to-date number even with concurrent requests
 
-        let nextNumber;
-        if (!lastTicketResult || lastTicketResult.length === 0) {
-          // No tickets exist for this year, start from 1
-          if (attempt === 0) {
-            console.warn(
-              "No tickets found for current year, starting from 0001"
-            );
-          }
-          nextNumber = 1;
-        } else {
-          // Get the number from the last ticket and increment
-          const lastTicketNumber = lastTicketResult[0]?.ticket_number || 0;
-          nextNumber = lastTicketNumber + 1;
-        }
-
-        // Fallback: if locking didn't work, use the MAX query
-        // This provides redundancy
+        // Get the MAX number for this year (within transaction for consistency)
         const maxResult = await this.mysqlConnection.query(
           getNextTicketCodeQuery,
           {
@@ -190,20 +167,46 @@ class TicketsService {
           }
         );
 
-        // Use the higher of the two values to ensure we don't go backwards
-        const maxNextNumber = maxResult?.[0]?.nextNumber || 1;
-        nextNumber = Math.max(nextNumber, maxNextNumber);
+        let nextNumber = maxResult?.[0]?.nextNumber || 1;
 
-        // Add attempt number to avoid collisions if multiple transactions are racing
-        // This ensures each retry gets a different number
+        // Also try to get the last ticket with lock as a fallback
+        // This helps when there are existing tickets
+        try {
+          const lastTicketResult = await this.mysqlConnection.query(
+            getLastTicketCodeWithLockQuery,
+            {
+              type: Sequelize.QueryTypes.SELECT,
+              transaction: transaction
+            }
+          );
+
+          if (lastTicketResult && lastTicketResult.length > 0) {
+            const lastTicketNumber = lastTicketResult[0]?.ticket_number || 0;
+            // Use the higher of the two values to ensure we don't go backwards
+            nextNumber = Math.max(nextNumber, lastTicketNumber + 1);
+          }
+        } catch (lockErr) {
+          // If locking fails, continue with MAX query result
+          console.warn(
+            "Row locking query failed, using MAX query result:",
+            lockErr.message
+          );
+        }
+
+        // On retry attempts, add a larger increment to avoid collisions
+        // This is critical when multiple transactions are racing
         if (attempt > 0) {
-          nextNumber += attempt;
+          // Add attempt number plus a random offset to ensure uniqueness
+          // The random offset helps when multiple retries happen simultaneously
+          const randomOffset = Math.floor(Math.random() * 100) + 1;
+          nextNumber = nextNumber + attempt * 10 + randomOffset;
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
         const ticketCode = `TCK-${year}-${paddedNumber}`;
 
         // Verify it doesn't exist within the transaction
+        // This check is critical to prevent duplicates
         const exists = await TicketsModel.findOne({
           where: { ticketCode },
           transaction: transaction
@@ -213,19 +216,23 @@ class TicketsService {
           console.log(
             "Generated ticket code in transaction:",
             ticketCode,
-            `(attempt ${attempt + 1})`
+            `(attempt ${attempt + 1}, nextNumber: ${nextNumber})`
           );
           return ticketCode;
         }
 
-        // If code exists, wait a tiny bit and try again with incremented number
+        // If code exists, wait a bit and try again with incremented number
         console.warn(
           `Ticket code ${ticketCode} exists, trying next number (attempt ${attempt +
             1}/${maxAttempts})`
         );
         if (attempt < maxAttempts - 1) {
-          // Small delay to let other transactions complete
-          await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
+          // Exponential backoff with jitter to avoid thundering herd
+          const baseDelay = 50;
+          const exponentialDelay = baseDelay * Math.pow(2, attempt);
+          const jitter = Math.random() * 100;
+          const delay = Math.min(exponentialDelay + jitter, 1000);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
 
@@ -450,12 +457,13 @@ class TicketsService {
 
       while (retryCount < maxRetries && !createdTicket) {
         try {
-          // Use transaction with REPEATABLE READ isolation level
-          // This provides good balance between consistency and avoiding deadlocks
+          // Use transaction with SERIALIZABLE isolation level
+          // This provides the highest level of isolation to prevent race conditions
+          // when generating unique ticket codes
           createdTicket = await this.mysqlConnection.transaction(
             {
               isolationLevel:
-                Sequelize.Transaction.ISOLATION_LEVELS.REPEATABLE_READ
+                Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE
             },
             async t => {
               // Generate ticket code within transaction
