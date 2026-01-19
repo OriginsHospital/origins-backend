@@ -147,18 +147,18 @@ class TicketsService {
     }
   }
 
-  // Generate ticket code within a transaction (more atomic with row locking)
+  // Generate ticket code within a transaction (simplified and more reliable)
   async generateTicketCodeInTransaction(transaction) {
     const year = new Date().getFullYear();
-    const maxAttempts = 20; // Increased attempts for high concurrency
+    const maxAttempts = 50; // Increased attempts for high concurrency
 
     try {
       // Try multiple times to get a unique code
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        // Strategy: Use MAX query first, then try to lock the last row
-        // This ensures we get the most up-to-date number even with concurrent requests
+        // Simple strategy: Get MAX + 1, with increment on retries
+        // This is more reliable than complex locking mechanisms
 
-        // Get the MAX number for this year (within transaction for consistency)
+        // Get the MAX number for this year (within transaction)
         const maxResult = await this.mysqlConnection.query(
           getNextTicketCodeQuery,
           {
@@ -167,72 +167,44 @@ class TicketsService {
           }
         );
 
+        // Start with MAX + 1
         let nextNumber = maxResult?.[0]?.nextNumber || 1;
 
-        // Also try to get the last ticket with lock as a fallback
-        // This helps when there are existing tickets
-        try {
-          const lastTicketResult = await this.mysqlConnection.query(
-            getLastTicketCodeWithLockQuery,
-            {
-              type: Sequelize.QueryTypes.SELECT,
-              transaction: transaction
-            }
-          );
-
-          if (lastTicketResult && lastTicketResult.length > 0) {
-            const lastTicketNumber = lastTicketResult[0]?.ticket_number || 0;
-            // Use the higher of the two values to ensure we don't go backwards
-            nextNumber = Math.max(nextNumber, lastTicketNumber + 1);
-          }
-        } catch (lockErr) {
-          // If locking fails, continue with MAX query result
-          console.warn(
-            "Row locking query failed, using MAX query result:",
-            lockErr.message
-          );
-        }
-
-        // On retry attempts, add a larger increment to avoid collisions
-        // This is critical when multiple transactions are racing
+        // On retry attempts, add a significant increment to avoid collisions
+        // This ensures each retry gets a different number even if MAX hasn't updated yet
         if (attempt > 0) {
-          // Add attempt number plus a random offset to ensure uniqueness
-          // The random offset helps when multiple retries happen simultaneously
-          const randomOffset = Math.floor(Math.random() * 100) + 1;
-          nextNumber = nextNumber + attempt * 10 + randomOffset;
+          // Use a combination of attempt number and timestamp-based offset
+          // This ensures uniqueness even with simultaneous retries
+          const timestampOffset = Date.now() % 1000; // Use last 3 digits of timestamp
+          nextNumber = nextNumber + attempt * 50 + timestampOffset;
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
         const ticketCode = `TCK-${year}-${paddedNumber}`;
 
-        // Verify it doesn't exist within the transaction
-        // This check is critical to prevent duplicates
+        // Quick check if it exists (this is fast with the index)
         const exists = await TicketsModel.findOne({
           where: { ticketCode },
-          transaction: transaction
+          transaction: transaction,
+          attributes: ["id"], // Only fetch id for speed
+          raw: true
         });
 
         if (!exists) {
           console.log(
-            "Generated ticket code in transaction:",
-            ticketCode,
-            `(attempt ${attempt + 1}, nextNumber: ${nextNumber})`
+            `Generated ticket code: ${ticketCode} (attempt ${attempt +
+              1}, number: ${nextNumber})`
           );
           return ticketCode;
         }
 
-        // If code exists, wait a bit and try again with incremented number
-        console.warn(
-          `Ticket code ${ticketCode} exists, trying next number (attempt ${attempt +
-            1}/${maxAttempts})`
-        );
+        // If code exists, try next number immediately
+        // No delay needed as we're already incrementing the number
         if (attempt < maxAttempts - 1) {
-          // Exponential backoff with jitter to avoid thundering herd
-          const baseDelay = 50;
-          const exponentialDelay = baseDelay * Math.pow(2, attempt);
-          const jitter = Math.random() * 100;
-          const delay = Math.min(exponentialDelay + jitter, 1000);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          console.warn(
+            `Ticket code ${ticketCode} exists, trying next number (attempt ${attempt +
+              1}/${maxAttempts})`
+          );
         }
       }
 
@@ -451,26 +423,30 @@ class TicketsService {
       }
 
       // Use transaction with retry logic for handling race conditions
-      const maxRetries = 10;
+      const maxRetries = 30; // Increased retries for high concurrency scenarios
       let retryCount = 0;
       let createdTicket = null;
 
       while (retryCount < maxRetries && !createdTicket) {
         try {
-          // Use transaction with SERIALIZABLE isolation level
-          // This provides the highest level of isolation to prevent race conditions
-          // when generating unique ticket codes
+          // Use transaction with READ COMMITTED isolation level
+          // This provides good balance between consistency and avoiding deadlocks
+          // The retry logic will handle any race conditions
           createdTicket = await this.mysqlConnection.transaction(
             {
               isolationLevel:
-                Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE
+                Sequelize.Transaction.ISOLATION_LEVELS.READ_COMMITTED
             },
             async t => {
               // Generate ticket code within transaction
               let ticketCode;
               try {
                 ticketCode = await this.generateTicketCodeInTransaction(t);
-                console.log("Generated ticket code:", ticketCode);
+                console.log(
+                  "Generated ticket code:",
+                  ticketCode,
+                  `(retry attempt: ${retryCount + 1})`
+                );
               } catch (codeError) {
                 console.error("Failed to generate ticket code:", codeError);
                 throw new createError.InternalServerError(
@@ -478,35 +454,8 @@ class TicketsService {
                 );
               }
 
-              // Verify code doesn't exist (double-check within transaction)
-              const existing = await TicketsModel.findOne({
-                where: { ticketCode },
-                transaction: t
-              });
-
-              if (existing) {
-                // Code exists, throw error to trigger retry
-                // Use a specific error that will be caught by retry logic
-                const collisionError = new Error(
-                  "Ticket code collision detected"
-                );
-                collisionError.name = "TicketCodeCollisionError";
-                collisionError.status = 409;
-                collisionError.isRetryable = true;
-                throw collisionError;
-              }
-
-              // Create ticket within transaction
-              console.log("Attempting to create ticket with data:", {
-                ticketCode,
-                taskDescription: taskDescription.substring(0, 50) + "...",
-                assignedTo: assignedToNumber,
-                priority,
-                category: category || null,
-                createdBy: this.currentUserId,
-                retryAttempt: retryCount + 1
-              });
-
+              // Try to create ticket - let the database unique constraint handle duplicates
+              // This is more reliable than pre-checking, as the database handles it atomically
               try {
                 const ticket = await TicketsModel.create(
                   {
@@ -521,20 +470,36 @@ class TicketsService {
                   { transaction: t }
                 );
 
+                console.log(
+                  "Ticket created successfully:",
+                  ticket.id,
+                  "with code:",
+                  ticketCode
+                );
                 return ticket;
               } catch (createErr) {
-                // Catch duplicate errors at the source and transform them
-                if (
+                // Catch duplicate key errors - this is the atomic check we need
+                const isDuplicateError =
                   createErr.name === "SequelizeUniqueConstraintError" ||
                   (createErr.original &&
                     (createErr.original.code === "ER_DUP_ENTRY" ||
                       createErr.original.errno === 1062)) ||
                   (createErr.message &&
-                    createErr.message.toLowerCase().includes("duplicate"))
-                ) {
+                    createErr.message.toLowerCase().includes("duplicate")) ||
+                  (createErr.errors &&
+                    Array.isArray(createErr.errors) &&
+                    createErr.errors.some(
+                      e =>
+                        e.type === "unique violation" ||
+                        e.path === "ticket_code"
+                    ));
+
+                if (isDuplicateError) {
                   console.log(
-                    "Duplicate error caught at Model.create, throwing retryable error"
+                    `Duplicate ticket code detected: ${ticketCode} (retry attempt: ${retryCount +
+                      1})`
                   );
+                  // Throw a retryable error to trigger retry with new code
                   const collisionError = new Error(
                     "Ticket code collision detected"
                   );
@@ -647,14 +612,15 @@ class TicketsService {
               );
             }
             // Wait a bit before retrying (exponential backoff with jitter)
-            const baseDelay = 50;
-            const exponentialDelay = baseDelay * Math.pow(2, retryCount);
-            const jitter = Math.random() * 50; // Add randomness to avoid thundering herd
-            const delay = Math.min(exponentialDelay + jitter, 500);
+            // Use smaller initial delay but allow it to grow
+            const baseDelay = 10;
+            const exponentialDelay = baseDelay * Math.pow(1.5, retryCount);
+            const jitter = Math.random() * 20; // Add small randomness
+            const delay = Math.min(exponentialDelay + jitter, 200);
             console.log(
               `[RETRY LOGIC] Retrying ticket creation in ${Math.round(
                 delay
-              )}ms (attempt ${retryCount}/${maxRetries})...`
+              )}ms (attempt ${retryCount + 1}/${maxRetries})...`
             );
             await new Promise(resolve => setTimeout(resolve, delay));
             continue; // Retry with new code
