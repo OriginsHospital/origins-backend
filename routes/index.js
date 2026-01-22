@@ -38,6 +38,7 @@ const TicketsRoute = require("./tickets_route.js");
 const TasksRoute = require("./tasks_route.js");
 const InboxRoute = require("./inbox_route.js");
 const NotificationsRoute = require("./notifications_route.js");
+const PaymentsRoute = require("./payments_route.js");
 
 class IndexRoute {
   constructor(expressApplication) {
@@ -88,6 +89,7 @@ class IndexRoute {
     this._app.use("/tasks", new TasksRoute()._route);
     this._app.use("/inbox", new InboxRoute()._route);
     this._app.use("/notifications", new NotificationsRoute()._route);
+    this._app.use("/payments", new PaymentsRoute()._route);
   }
 }
 
