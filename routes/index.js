@@ -35,6 +35,7 @@ const OtherPaymentsRoute = require("./other_payments_routes.js");
 const IPRoute = require("./ip_route.js");
 const TeamsRoute = require("./teams_route.js");
 const TicketsRoute = require("./tickets_route.js");
+const TasksRoute = require("./tasks_route.js");
 const NotificationsRoute = require("./notifications_route.js");
 
 class IndexRoute {
@@ -83,6 +84,7 @@ class IndexRoute {
     this._app.use("/ip", new IPRoute()._route);
     this._app.use("/teams", new TeamsRoute()._route);
     this._app.use("/tickets", new TicketsRoute()._route);
+    this._app.use("/tasks", new TasksRoute()._route);
     this._app.use("/notifications", new NotificationsRoute()._route);
   }
 }
