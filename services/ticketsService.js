@@ -52,12 +52,16 @@ class TicketsService {
     try {
       // Try to get branch code from user's branch details
       const userBranchDetails = this._request?.userDetails?.branchDetails;
+      console.log("User branch details:", JSON.stringify(userBranchDetails));
+
       if (
         userBranchDetails &&
         Array.isArray(userBranchDetails) &&
         userBranchDetails.length > 0
       ) {
         const branchId = userBranchDetails[0]?.id;
+        console.log("Branch ID from user details:", branchId);
+
         if (branchId) {
           // Query branch_master to get branch code
           const branchResult = await this.mysqlConnection.query(
@@ -67,15 +71,21 @@ class TicketsService {
               replacements: { branchId }
             }
           );
+          console.log("Branch query result:", JSON.stringify(branchResult));
+
           if (branchResult && branchResult[0] && branchResult[0].branchCode) {
-            return branchResult[0].branchCode.toUpperCase();
+            const code = branchResult[0].branchCode.toUpperCase();
+            console.log("Using branch code:", code);
+            return code;
           }
         }
       }
       // Fallback to default if no branch found
+      console.warn("No branch found, using default: ORI");
       return "ORI";
     } catch (err) {
       console.error("Error getting branch code:", err);
+      console.error("Error stack:", err.stack);
       return "ORI"; // Default fallback
     }
   }
@@ -216,6 +226,10 @@ class TicketsService {
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
         const ticketCode = `OR-${branchCode}-${paddedNumber}`;
+        console.log(
+          `Transaction attempt ${attempt +
+            1}: Generated ticket code: ${ticketCode} (branch: ${branchCode}, number: ${nextNumber})`
+        );
 
         // Quick check if it exists (this is fast with the index)
         const exists = await TicketsModel.findOne({
@@ -227,8 +241,8 @@ class TicketsService {
 
         if (!exists) {
           console.log(
-            `Generated ticket code: ${ticketCode} (attempt ${attempt +
-              1}, number: ${nextNumber})`
+            `Successfully generated unique ticket code in transaction: ${ticketCode} (attempt ${attempt +
+              1}, branch: ${branchCode}, number: ${nextNumber})`
           );
           return ticketCode;
         }
