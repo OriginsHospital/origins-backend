@@ -20,6 +20,13 @@ const createTicketSchema = Joi.object({
     .messages({
       "any.only": "Priority must be LOW, MEDIUM, or HIGH"
     }),
+  department: Joi.string()
+    .max(100)
+    .required()
+    .messages({
+      "any.required": "Department is required",
+      "string.max": "Department must not exceed 100 characters"
+    }),
   category: Joi.string()
     .max(100)
     .allow(null, "")
@@ -43,6 +50,9 @@ const updateTicketSchema = Joi.object({
     .optional(),
   priority: Joi.string()
     .valid("LOW", "MEDIUM", "HIGH")
+    .optional(),
+  department: Joi.string()
+    .max(100)
     .optional(),
   category: Joi.string()
     .max(100)

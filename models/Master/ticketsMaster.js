@@ -36,6 +36,11 @@ const TicketsModel = MySqlConnection._instance.define(
       allowNull: false,
       defaultValue: "OPEN"
     },
+    department: {
+      type: Sequelize.DataTypes.STRING(100),
+      allowNull: true,
+      field: "department"
+    },
     category: {
       type: Sequelize.DataTypes.STRING(100),
       allowNull: true

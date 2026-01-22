@@ -47,6 +47,39 @@ class TicketsService {
     );
   }
 
+  // Get branch code from user's branch details
+  async getBranchCode() {
+    try {
+      // Try to get branch code from user's branch details
+      const userBranchDetails = this._request?.userDetails?.branchDetails;
+      if (
+        userBranchDetails &&
+        Array.isArray(userBranchDetails) &&
+        userBranchDetails.length > 0
+      ) {
+        const branchId = userBranchDetails[0]?.id;
+        if (branchId) {
+          // Query branch_master to get branch code
+          const branchResult = await this.mysqlConnection.query(
+            `SELECT branchCode FROM branch_master WHERE id = :branchId LIMIT 1`,
+            {
+              type: Sequelize.QueryTypes.SELECT,
+              replacements: { branchId }
+            }
+          );
+          if (branchResult && branchResult[0] && branchResult[0].branchCode) {
+            return branchResult[0].branchCode.toUpperCase();
+          }
+        }
+      }
+      // Fallback to default if no branch found
+      return "ORI";
+    } catch (err) {
+      console.error("Error getting branch code:", err);
+      return "ORI"; // Default fallback
+    }
+  }
+
   // Check if a ticket code already exists
   async ticketCodeExists(ticketCode) {
     try {
@@ -61,9 +94,9 @@ class TicketsService {
     }
   }
 
-  // Generate ticket code (e.g., TCK-2025-0001) - standalone version
+  // Generate ticket code (e.g., OR-HYD-0001) - standalone version
   async generateTicketCode() {
-    const year = new Date().getFullYear();
+    const branchCode = await this.getBranchCode();
     const maxAttempts = 10; // Maximum attempts to find a unique code
 
     try {
@@ -71,7 +104,8 @@ class TicketsService {
         const result = await this.mysqlConnection.query(
           getNextTicketCodeQuery,
           {
-            type: Sequelize.QueryTypes.SELECT
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: { branchCode: `OR-${branchCode}` }
           }
         );
 
@@ -90,7 +124,7 @@ class TicketsService {
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
-        const ticketCode = `TCK-${year}-${paddedNumber}`;
+        const ticketCode = `OR-${branchCode}-${paddedNumber}`;
 
         // Check if this code already exists
         const exists = await this.ticketCodeExists(ticketCode);
@@ -149,7 +183,7 @@ class TicketsService {
 
   // Generate ticket code within a transaction (simplified and more reliable)
   async generateTicketCodeInTransaction(transaction) {
-    const year = new Date().getFullYear();
+    const branchCode = await this.getBranchCode();
     const maxAttempts = 50; // Increased attempts for high concurrency
 
     try {
@@ -158,12 +192,13 @@ class TicketsService {
         // Simple strategy: Get MAX + 1, with increment on retries
         // This is more reliable than complex locking mechanisms
 
-        // Get the MAX number for this year (within transaction)
+        // Get the MAX number for this branch (within transaction)
         const maxResult = await this.mysqlConnection.query(
           getNextTicketCodeQuery,
           {
             type: Sequelize.QueryTypes.SELECT,
-            transaction: transaction
+            transaction: transaction,
+            replacements: { branchCode: `OR-${branchCode}` }
           }
         );
 
@@ -180,7 +215,7 @@ class TicketsService {
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
-        const ticketCode = `TCK-${year}-${paddedNumber}`;
+        const ticketCode = `OR-${branchCode}-${paddedNumber}`;
 
         // Quick check if it exists (this is fast with the index)
         const exists = await TicketsModel.findOne({
@@ -290,10 +325,17 @@ class TicketsService {
     } = validatedQuery;
     const offset = (page - 1) * limit;
 
-    // Role-based filtering: Staff can only see their assigned tickets
+    // User-based filtering: Non-admin users can only see tickets they created or are assigned to
+    // Admin users can see all tickets
+    let userIdFilter = null;
     let finalAssignedTo = assignedTo;
-    if (!this.isAdmin() && !assignedTo) {
-      finalAssignedTo = this.currentUserId;
+
+    if (!this.isAdmin()) {
+      // Non-admin users can only see their own tickets (created by them OR assigned to them)
+      userIdFilter = this.currentUserId;
+      // Prevent non-admins from filtering by other users' tickets
+      // They can only see tickets where they are the creator or assignee
+      finalAssignedTo = null; // Ignore assignedTo filter for non-admins
     }
 
     const tickets = await this.mysqlConnection
@@ -303,6 +345,7 @@ class TicketsService {
           status: status || null,
           priority: priority || null,
           assignedTo: finalAssignedTo || null,
+          userId: userIdFilter || null, // Add userId filter for non-admin users
           search: search || null,
           limit: parseInt(limit),
           offset: parseInt(offset)
@@ -322,6 +365,7 @@ class TicketsService {
           status: status || null,
           priority: priority || null,
           assignedTo: finalAssignedTo || null,
+          userId: userIdFilter || null, // Add userId filter for non-admin users
           search: search || null
         }
       })
@@ -410,6 +454,7 @@ class TicketsService {
         taskDescription,
         assignedTo,
         priority = "MEDIUM",
+        department,
         category,
         tags = []
       } = validatedPayload;
@@ -463,6 +508,7 @@ class TicketsService {
                     taskDescription,
                     assignedTo: assignedToNumber,
                     priority,
+                    department: department || null,
                     category: category || null,
                     status: "OPEN",
                     createdBy: this.currentUserId

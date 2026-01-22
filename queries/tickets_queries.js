@@ -7,6 +7,7 @@ SELECT
     t.assigned_to,
     t.priority,
     t.status,
+    t.department,
     t.category,
     t.created_by,
     t.created_at,
@@ -60,6 +61,7 @@ WHERE 1=1
     AND (:status IS NULL OR t.status = :status)
     AND (:priority IS NULL OR t.priority = :priority)
     AND (:assignedTo IS NULL OR t.assigned_to = :assignedTo)
+    AND (:userId IS NULL OR t.created_by = :userId OR t.assigned_to = :userId)
     AND (:search IS NULL OR t.task_description LIKE CONCAT('%', :search, '%') OR t.ticket_code LIKE CONCAT('%', :search, '%'))
 ORDER BY 
     CASE 
@@ -84,6 +86,7 @@ WHERE 1=1
     AND (:status IS NULL OR t.status = :status)
     AND (:priority IS NULL OR t.priority = :priority)
     AND (:assignedTo IS NULL OR t.assigned_to = :assignedTo)
+    AND (:userId IS NULL OR t.created_by = :userId OR t.assigned_to = :userId)
     AND (:search IS NULL OR t.task_description LIKE CONCAT('%', :search, '%') OR t.ticket_code LIKE CONCAT('%', :search, '%'));
 `;
 
@@ -96,6 +99,7 @@ SELECT
     t.assigned_to,
     t.priority,
     t.status,
+    t.department,
     t.category,
     t.created_by,
     t.created_at,
@@ -187,24 +191,25 @@ ORDER BY u.fullName ASC;
 `;
 
 // Query to generate next ticket code (fallback query)
+// Format: OR-{BRANCH}-{NUMBER} (e.g., OR-HYD-0001)
 const getNextTicketCodeQuery = `
 SELECT 
     COALESCE(
-        MAX(CAST(SUBSTRING(ticket_code, 9) AS UNSIGNED)),
+        MAX(CAST(SUBSTRING_INDEX(ticket_code, '-', -1) AS UNSIGNED)),
         0
     ) + 1 AS nextNumber
 FROM tickets
-WHERE ticket_code LIKE CONCAT('TCK-', YEAR(NOW()), '-%');
+WHERE ticket_code LIKE CONCAT(:branchCode, '-%');
 `;
 
-// Query to get and lock the last ticket for the current year (more atomic)
+// Query to get and lock the last ticket for the current branch (more atomic)
 const getLastTicketCodeWithLockQuery = `
 SELECT 
     ticket_code,
-    CAST(SUBSTRING(ticket_code, 9) AS UNSIGNED) AS ticket_number
+    CAST(SUBSTRING_INDEX(ticket_code, '-', -1) AS UNSIGNED) AS ticket_number
 FROM tickets
-WHERE ticket_code LIKE CONCAT('TCK-', YEAR(NOW()), '-%')
-ORDER BY CAST(SUBSTRING(ticket_code, 9) AS UNSIGNED) DESC
+WHERE ticket_code LIKE CONCAT(:branchCode, '-%')
+ORDER BY CAST(SUBSTRING_INDEX(ticket_code, '-', -1) AS UNSIGNED) DESC
 LIMIT 1
 FOR UPDATE;
 `;
