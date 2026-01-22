@@ -469,6 +469,7 @@ class TicketsService {
         assignedTo,
         priority = "MEDIUM",
         department,
+        summary,
         category,
         tags = []
       } = validatedPayload;
@@ -520,6 +521,7 @@ class TicketsService {
                   {
                     ticketCode,
                     taskDescription,
+                    summary: summary || null,
                     assignedTo: assignedToNumber,
                     priority,
                     department: department || null,

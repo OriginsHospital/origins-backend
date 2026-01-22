@@ -2,10 +2,9 @@ const Joi = require("@hapi/joi");
 
 const createTicketSchema = Joi.object({
   taskDescription: Joi.string()
-    .min(10)
+    .min(1)
     .required()
     .messages({
-      "string.min": "Task description must be at least 10 characters long",
       "any.required": "Task description is required"
     }),
   assignedTo: Joi.number()
@@ -27,6 +26,10 @@ const createTicketSchema = Joi.object({
       "any.required": "Department is required",
       "string.max": "Department must not exceed 100 characters"
     }),
+  summary: Joi.string()
+    .max(500)
+    .allow(null, "")
+    .optional(),
   category: Joi.string()
     .max(100)
     .allow(null, "")
@@ -43,7 +46,7 @@ const updateTicketSchema = Joi.object({
     .integer()
     .required(),
   taskDescription: Joi.string()
-    .min(10)
+    .min(1)
     .optional(),
   assignedTo: Joi.number()
     .integer()
@@ -53,6 +56,10 @@ const updateTicketSchema = Joi.object({
     .optional(),
   department: Joi.string()
     .max(100)
+    .optional(),
+  summary: Joi.string()
+    .max(500)
+    .allow(null, "")
     .optional(),
   category: Joi.string()
     .max(100)

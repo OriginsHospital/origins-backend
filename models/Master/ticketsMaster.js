@@ -21,6 +21,11 @@ const TicketsModel = MySqlConnection._instance.define(
       allowNull: false,
       field: "task_description"
     },
+    summary: {
+      type: Sequelize.DataTypes.TEXT,
+      allowNull: true,
+      field: "summary"
+    },
     assignedTo: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: false,
