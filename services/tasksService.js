@@ -14,8 +14,6 @@ const {
   getTasksQuerySchema
 } = require("../schemas/tasksSchema");
 const TasksModel = require("../models/Master/tasksMaster");
-const TaskCommentsModel = require("../models/Master/TaskCommentsModel");
-const TaskCommentsModel = require("../models/Master/TaskCommentsModel");
 
 class TasksService {
   constructor(request, response, next) {
@@ -123,43 +121,25 @@ class TasksService {
       throw new createError.BadRequest("Task ID is required");
     }
 
-    try {
-      const result = await this.mysqlConnection.query(getTaskDetailsQuery, {
+    const result = await this.mysqlConnection
+      .query(getTaskDetailsQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           taskId: parseInt(taskId)
         }
+      })
+      .catch(err => {
+        console.log("Error while getting task details", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
       });
 
-      console.log(
-        "Task details query result:",
-        JSON.stringify(result, null, 2)
-      );
-
-      if (!result || result.length === 0) {
-        console.log("No task found with ID:", taskId);
-        throw new createError.NotFound("Task not found");
-      }
-
-      const taskData = result[0];
-      console.log("Returning task data:", {
-        id: taskData.id,
-        task_name: taskData.task_name,
-        hasComments: !!taskData.comments,
-        commentsType: typeof taskData.comments,
-        commentsLength: Array.isArray(taskData.comments)
-          ? taskData.comments.length
-          : "N/A"
-      });
-
-      return taskData;
-    } catch (err) {
-      console.error("Error while getting task details:", err);
-      console.error("Error stack:", err.stack);
-      throw new createError.InternalServerError(
-        err.message || Constants.SOMETHING_ERROR_OCCURRED
-      );
+    if (!result || result.length === 0) {
+      throw new createError.NotFound("Task not found");
     }
+
+    return result[0];
   }
 
   // Create new task
@@ -350,50 +330,6 @@ class TasksService {
     });
 
     return Constants.DATA_DELETED_SUCCESS;
-  }
-
-  // Create task comment
-  async createTaskCommentService() {
-    try {
-      const { taskId } = this._request.params;
-      const { commentText } = this._request.body;
-
-      if (!taskId) {
-        throw new createError.BadRequest("Task ID is required");
-      }
-
-      if (!commentText || !commentText.trim()) {
-        throw new createError.BadRequest("Comment text is required");
-      }
-
-      // Verify task exists
-      const task = await TasksModel.findByPk(parseInt(taskId));
-      if (!task) {
-        throw new createError.NotFound("Task not found");
-      }
-
-      // Create comment
-      const comment = await TaskCommentsModel.create({
-        taskId: parseInt(taskId),
-        commentText: commentText.trim(),
-        commentedBy: this._request?.userDetails?.id || this._request?.user?.id
-      }).catch(err => {
-        console.log("Error while creating task comment", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-      return comment;
-    } catch (err) {
-      console.error("Error in createTaskCommentService:", err);
-      if (err.status) {
-        throw err;
-      }
-      throw new createError.InternalServerError(
-        err.message || Constants.SOMETHING_ERROR_OCCURRED
-      );
-    }
   }
 }
 

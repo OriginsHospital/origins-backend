@@ -100,26 +100,7 @@ SELECT
         'id', u_assigned.id,
         'fullName', u_assigned.fullName,
         'email', u_assigned.email
-    ) AS assignedToDetails,
-    COALESCE(
-        (
-            SELECT JSON_ARRAYAGG(comment_data)
-            FROM (
-                SELECT JSON_OBJECT(
-                    'commentId', tc.id,
-                    'commentedBy', tc.commentedBy,
-                    'commentedByName', COALESCE((SELECT u.fullName FROM users u WHERE u.id = tc.commentedBy), 'Unknown'),
-                    'commentedByRole', COALESCE((SELECT r.name FROM users u INNER JOIN roles r ON r.id = u.roleId WHERE u.id = tc.commentedBy), ''),
-                    'commentText', tc.commentText,
-                    'createdAt', tc.createdAt
-                ) AS comment_data
-                FROM task_comments tc
-                WHERE tc.taskId = t.id
-                ORDER BY tc.createdAt DESC
-            ) ordered_comments
-        ), 
-        JSON_ARRAY()
-    ) AS comments
+    ) AS assignedToDetails
 FROM tasks t
 INNER JOIN users u_created ON u_created.id = t.created_by
 LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to

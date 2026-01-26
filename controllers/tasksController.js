@@ -62,15 +62,6 @@ class TasksController {
       data: null
     });
   }
-
-  async createTaskCommentRouteHandler() {
-    const data = await this._service.createTaskCommentService();
-    this._response.status(201).json({
-      status: 201,
-      message: "Comment created successfully",
-      data
-    });
-  }
 }
 
 module.exports = TasksController;

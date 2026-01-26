@@ -62,14 +62,6 @@ class TasksRoute {
       tokenVerified,
       this.deleteTaskRoute
     );
-
-    // Create task comment
-    this._route.post(
-      "/:taskId/comment",
-      checkActiveSession,
-      tokenVerified,
-      this.createTaskCommentRoute
-    );
   }
 
   getTasksRoute = asyncHandler(async (req, res, next) => {
@@ -100,11 +92,6 @@ class TasksRoute {
   deleteTaskRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new TasksController(req, res, next);
     await controllerObj.deleteTaskRouteHandler();
-  });
-
-  createTaskCommentRoute = asyncHandler(async (req, res, next) => {
-    const controllerObj = new TasksController(req, res, next);
-    await controllerObj.createTaskCommentRouteHandler();
   });
 
   get route() {
