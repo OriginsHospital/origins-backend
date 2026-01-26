@@ -121,25 +121,43 @@ class TasksService {
       throw new createError.BadRequest("Task ID is required");
     }
 
-    const result = await this.mysqlConnection
-      .query(getTaskDetailsQuery, {
+    try {
+      const result = await this.mysqlConnection.query(getTaskDetailsQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           taskId: parseInt(taskId)
         }
-      })
-      .catch(err => {
-        console.log("Error while getting task details", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
       });
 
-    if (!result || result.length === 0) {
-      throw new createError.NotFound("Task not found");
-    }
+      console.log(
+        "Task details query result:",
+        JSON.stringify(result, null, 2)
+      );
 
-    return result[0];
+      if (!result || result.length === 0) {
+        console.log("No task found with ID:", taskId);
+        throw new createError.NotFound("Task not found");
+      }
+
+      const taskData = result[0];
+      console.log("Returning task data:", {
+        id: taskData.id,
+        task_name: taskData.task_name,
+        hasComments: !!taskData.comments,
+        commentsType: typeof taskData.comments,
+        commentsLength: Array.isArray(taskData.comments)
+          ? taskData.comments.length
+          : "N/A"
+      });
+
+      return taskData;
+    } catch (err) {
+      console.error("Error while getting task details:", err);
+      console.error("Error stack:", err.stack);
+      throw new createError.InternalServerError(
+        err.message || Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
   }
 
   // Create new task
