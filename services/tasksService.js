@@ -14,6 +14,8 @@ const {
   getTasksQuerySchema
 } = require("../schemas/tasksSchema");
 const TasksModel = require("../models/Master/tasksMaster");
+const TaskCommentsModel = require("../models/Master/TaskCommentsModel");
+const TaskCommentsModel = require("../models/Master/TaskCommentsModel");
 
 class TasksService {
   constructor(request, response, next) {
@@ -348,6 +350,50 @@ class TasksService {
     });
 
     return Constants.DATA_DELETED_SUCCESS;
+  }
+
+  // Create task comment
+  async createTaskCommentService() {
+    try {
+      const { taskId } = this._request.params;
+      const { commentText } = this._request.body;
+
+      if (!taskId) {
+        throw new createError.BadRequest("Task ID is required");
+      }
+
+      if (!commentText || !commentText.trim()) {
+        throw new createError.BadRequest("Comment text is required");
+      }
+
+      // Verify task exists
+      const task = await TasksModel.findByPk(parseInt(taskId));
+      if (!task) {
+        throw new createError.NotFound("Task not found");
+      }
+
+      // Create comment
+      const comment = await TaskCommentsModel.create({
+        taskId: parseInt(taskId),
+        commentText: commentText.trim(),
+        commentedBy: this._request?.userDetails?.id || this._request?.user?.id
+      }).catch(err => {
+        console.log("Error while creating task comment", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return comment;
+    } catch (err) {
+      console.error("Error in createTaskCommentService:", err);
+      if (err.status) {
+        throw err;
+      }
+      throw new createError.InternalServerError(
+        err.message || Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
   }
 }
 
