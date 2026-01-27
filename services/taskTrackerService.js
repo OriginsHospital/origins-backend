@@ -16,6 +16,7 @@ const {
 const TaskTrackerModel = require("../models/Master/taskTrackerMaster");
 const TaskCommentsModel = require("../models/Master/TaskCommentsModel");
 const TaskReferenceImageModel = require("../models/Master/TaskReferenceImageModel");
+const TasksModel = require("../models/Master/tasksMaster");
 
 class TaskTrackerService {
   constructor(request, response, next) {
@@ -67,18 +68,34 @@ class TaskTrackerService {
 
     const { taskId, commentText } = validatedCreateTaskPayload;
 
-    const isTasksExists = await TaskTrackerModel.findOne({
+    // Check if task exists in task_tracker table
+    const taskTrackerExists = await TaskTrackerModel.findOne({
       where: {
         id: taskId
       }
     }).catch(err => {
-      console.log("Error while finding task details", err);
+      console.log("Error while finding task in task_tracker", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
 
-    if (lodash.isEmpty(isTasksExists)) {
+    // If not found in task_tracker, check tasks table
+    let taskExists = taskTrackerExists;
+    if (lodash.isEmpty(taskTrackerExists)) {
+      taskExists = await TasksModel.findOne({
+        where: {
+          id: taskId
+        }
+      }).catch(err => {
+        console.log("Error while finding task in tasks table", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+
+    if (lodash.isEmpty(taskExists)) {
       throw new createError.NotFound(Constants.TASK_DOES_NOT_EXIST);
     }
 
