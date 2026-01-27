@@ -32,6 +32,17 @@ class PaymentsRoute {
       tokenVerified,
       this.getAllPaymentsRoute
     );
+
+    this._route.put(
+      "/updateFiles/:paymentId",
+      checkActiveSession,
+      tokenVerified,
+      upload.fields([
+        { name: "invoiceFile", maxCount: 1 },
+        { name: "receiptFile", maxCount: 1 }
+      ]),
+      this.updatePaymentFilesRoute
+    );
   }
 
   createPaymentRoute = asyncHandler(async (req, res, next) => {
@@ -42,6 +53,11 @@ class PaymentsRoute {
   getAllPaymentsRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new PaymentsController(req, res, next);
     await controllerObj.getAllPaymentsHandler();
+  });
+
+  updatePaymentFilesRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PaymentsController(req, res, next);
+    await controllerObj.updatePaymentFilesHandler();
   });
 }
 

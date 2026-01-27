@@ -31,6 +31,15 @@ class PaymentsController {
       data: data
     });
   }
+
+  async updatePaymentFilesHandler() {
+    const data = await this._service.updatePaymentFilesService();
+    this._response.status(200).json({
+      status: 200,
+      message: "Payment files updated successfully",
+      data: data
+    });
+  }
 }
 
 module.exports = PaymentsController;

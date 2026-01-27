@@ -150,6 +150,81 @@ class PaymentsService {
       );
     }
   }
+
+  async updatePaymentFilesService() {
+    const { paymentId } = this._request.params;
+
+    if (!paymentId) {
+      throw new createError.BadRequest("Payment ID is required");
+    }
+
+    // Check if payment exists
+    const payment = await PaymentsMasterModel.findByPk(paymentId);
+    if (!payment) {
+      throw new createError.NotFound("Payment not found");
+    }
+
+    return await this.mysqlConnection.transaction(async t => {
+      let invoiceUrl = payment.invoiceUrl;
+      let receiptUrl = payment.receiptUrl;
+
+      // Upload invoice file if provided
+      if (this._request?.files && this._request?.files?.invoiceFile) {
+        const invoiceFile = Array.isArray(this._request.files.invoiceFile)
+          ? this._request.files.invoiceFile[0]
+          : this._request.files.invoiceFile;
+        invoiceUrl = await this.uploadFileToS3(
+          invoiceFile,
+          parseInt(paymentId),
+          "invoice"
+        );
+      }
+
+      // Upload receipt file if provided
+      if (this._request?.files && this._request?.files?.receiptFile) {
+        const receiptFile = Array.isArray(this._request.files.receiptFile)
+          ? this._request.files.receiptFile[0]
+          : this._request.files.receiptFile;
+        receiptUrl = await this.uploadFileToS3(
+          receiptFile,
+          parseInt(paymentId),
+          "receipt"
+        );
+      }
+
+      // Update payment with file URLs
+      await PaymentsMasterModel.update(
+        {
+          ...(invoiceUrl && { invoiceUrl }),
+          ...(receiptUrl && { receiptUrl })
+        },
+        {
+          where: { id: parseInt(paymentId) },
+          transaction: t
+        }
+      ).catch(err => {
+        console.log("Error while updating payment files", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      // Fetch the updated payment with all details
+      const getPaymentByIdQuery = getAllPaymentsQuery.replace(
+        "ORDER BY p.createdAt DESC",
+        `WHERE p.id = :paymentId ORDER BY p.createdAt DESC`
+      );
+      const updatedPayment = await this.mysqlConnection.query(
+        getPaymentByIdQuery,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { paymentId: parseInt(paymentId) }
+        }
+      );
+
+      return updatedPayment[0] || payment;
+    });
+  }
 }
 
 module.exports = PaymentsService;
