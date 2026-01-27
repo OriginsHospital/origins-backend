@@ -42,6 +42,7 @@ class PaymentsService {
     const {
       branchId,
       paymentDate,
+      invoiceDate,
       departmentId,
       vendorId,
       amount
@@ -57,6 +58,7 @@ class PaymentsService {
         {
           branchId: parseInt(branchId),
           paymentDate,
+          invoiceDate: invoiceDate || null,
           departmentId: parseInt(departmentId),
           vendorId: parseInt(vendorId),
           amount: parseFloat(amount),

@@ -4,6 +4,7 @@ SELECT
   p.branchId,
   bm.branchCode AS branch,
   p.paymentDate,
+  p.invoiceDate,
   p.departmentId,
   dm.name AS department,
   p.vendorId,

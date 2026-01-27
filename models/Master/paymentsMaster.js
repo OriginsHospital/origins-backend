@@ -18,6 +18,10 @@ const PaymentsMasterModel = MySqlConnection._instance.define(
       type: Sequelize.DataTypes.DATEONLY,
       allowNull: false
     },
+    invoiceDate: {
+      type: Sequelize.DataTypes.DATEONLY,
+      allowNull: true
+    },
     departmentId: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: false
