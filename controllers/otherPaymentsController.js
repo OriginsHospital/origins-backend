@@ -59,6 +59,24 @@ class OtherPaymentsController {
       data: data
     });
   }
+
+  async updatePaymentHistoryHandler() {
+    const data = await this._service.updatePaymentHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: "Payment history entry updated successfully",
+      data: data
+    });
+  }
+
+  async deletePaymentHistoryHandler() {
+    const data = await this._service.deletePaymentHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: data.message || "Payment history entry deleted successfully",
+      data: data
+    });
+  }
 }
 
 module.exports = OtherPaymentsController;

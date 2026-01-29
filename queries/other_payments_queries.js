@@ -16,6 +16,7 @@ SELECT
 	(
 		SELECT JSON_ARRAYAGG(
 			JSON_OBJECT(
+				'id', opom.id,
 				'paymentMode', opom.paymentMode, 
 				'discountAmount', opom.discountAmount,
 				'paidOrderAmount', opom.paidOrderAmountBeforeDiscount,

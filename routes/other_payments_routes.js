@@ -47,6 +47,22 @@ class OtherPaymentModuleRoutes {
       tokenVerified,
       this.downloadInvoiceRoute
     );
+
+    // Update payment history entry
+    this._route.put(
+      "/updatePaymentHistory/:paymentHistoryId",
+      checkActiveSession,
+      tokenVerified,
+      this.updatePaymentHistoryRoute
+    );
+
+    // Delete payment history entry
+    this._route.delete(
+      "/deletePaymentHistory/:paymentHistoryId",
+      checkActiveSession,
+      tokenVerified,
+      this.deletePaymentHistoryRoute
+    );
   }
 
   addNewPaymentRoute = asyncHandler(async (req, res, next) => {
@@ -72,6 +88,16 @@ class OtherPaymentModuleRoutes {
   downloadInvoiceRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new OtherPaymentsController(req, res, next);
     await controllerObj.downloadInvoiceController();
+  });
+
+  updatePaymentHistoryRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new OtherPaymentsController(req, res, next);
+    await controllerObj.updatePaymentHistoryHandler();
+  });
+
+  deletePaymentHistoryRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new OtherPaymentsController(req, res, next);
+    await controllerObj.deletePaymentHistoryHandler();
   });
 }
 

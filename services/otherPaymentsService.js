@@ -414,6 +414,79 @@ class OtherPaymentsService extends BaseService {
 
     return finalTemplate;
   }
+
+  // Update payment history entry
+  async updatePaymentHistoryService() {
+    const { paymentHistoryId } = this._request.params;
+    const {
+      paidOrderAmount,
+      discountAmount,
+      paymentMode,
+      orderDate,
+      couponCode
+    } = this._request.body;
+
+    if (!paymentHistoryId) {
+      throw new createError.BadRequest("Payment history ID is required");
+    }
+
+    // Find the payment history entry
+    const paymentHistory = await OtherPaymentsOrderMaster.findByPk(
+      paymentHistoryId
+    );
+
+    if (!paymentHistory) {
+      throw new createError.NotFound("Payment history entry not found");
+    }
+
+    // Update fields
+    const updateData = {};
+    if (paidOrderAmount !== undefined)
+      updateData.paidOrderAmount = paidOrderAmount.toString();
+    if (discountAmount !== undefined)
+      updateData.discountAmount = discountAmount.toString();
+    if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
+    if (orderDate !== undefined) updateData.orderDate = orderDate;
+    if (couponCode !== undefined) updateData.couponCode = couponCode;
+    updateData.updatedBy = this._request.userDetails?.id;
+
+    await paymentHistory.update(updateData).catch(err => {
+      console.log("Error while updating payment history", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return paymentHistory;
+  }
+
+  // Delete payment history entry
+  async deletePaymentHistoryService() {
+    const { paymentHistoryId } = this._request.params;
+
+    if (!paymentHistoryId) {
+      throw new createError.BadRequest("Payment history ID is required");
+    }
+
+    // Find the payment history entry
+    const paymentHistory = await OtherPaymentsOrderMaster.findByPk(
+      paymentHistoryId
+    );
+
+    if (!paymentHistory) {
+      throw new createError.NotFound("Payment history entry not found");
+    }
+
+    // Delete the entry
+    await paymentHistory.destroy().catch(err => {
+      console.log("Error while deleting payment history", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return { message: "Payment history entry deleted successfully" };
+  }
 }
 
 module.exports = OtherPaymentsService;
