@@ -102,7 +102,7 @@ class TasksService {
           {
             type: Sequelize.QueryTypes.SELECT,
             transaction: transaction,
-            replacements: { branchCode: `OR-${branchCode}` }
+            replacements: { branchCode: `OR-T-${branchCode}` }
           }
         );
 
@@ -117,7 +117,7 @@ class TasksService {
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
-        const taskCode = `OR-${branchCode}-${paddedNumber}`;
+        const taskCode = `OR-T-${branchCode}-${paddedNumber}`;
         console.log(
           `Transaction attempt ${attempt +
             1}: Generated task code: ${taskCode} (branch: ${branchCode}, number: ${nextNumber})`

@@ -142,7 +142,7 @@ WHERE t.id = :taskId;
 `;
 
 // Query to generate next task code (fallback query)
-// Format: OR-{BRANCH}-{NUMBER} (e.g., OR-HYD-0001)
+// Format: OR-T-{BRANCH}-{NUMBER} (e.g., OR-T-HYD-0001)
 const getNextTaskCodeQuery = `
 SELECT 
     COALESCE(

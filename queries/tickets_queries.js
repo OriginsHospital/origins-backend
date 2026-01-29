@@ -193,7 +193,7 @@ ORDER BY u.fullName ASC;
 `;
 
 // Query to generate next ticket code (fallback query)
-// Format: OR-{BRANCH}-{NUMBER} (e.g., OR-HYD-0001)
+// Format: OR-I-{BRANCH}-{NUMBER} (e.g., OR-I-HYD-0005)
 const getNextTicketCodeQuery = `
 SELECT 
     COALESCE(

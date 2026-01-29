@@ -106,7 +106,7 @@ class TicketsService {
     }
   }
 
-  // Generate ticket code (e.g., OR-HYD-0001) - standalone version
+  // Generate ticket code (e.g., OR-I-HYD-0005) - standalone version
   async generateTicketCode() {
     const branchCode = await this.getBranchCode();
     const maxAttempts = 10; // Maximum attempts to find a unique code
@@ -117,7 +117,7 @@ class TicketsService {
           getNextTicketCodeQuery,
           {
             type: Sequelize.QueryTypes.SELECT,
-            replacements: { branchCode: `OR-${branchCode}` }
+            replacements: { branchCode: `OR-I-${branchCode}` }
           }
         );
 
@@ -136,7 +136,7 @@ class TicketsService {
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
-        const ticketCode = `OR-${branchCode}-${paddedNumber}`;
+        const ticketCode = `OR-I-${branchCode}-${paddedNumber}`;
 
         // Check if this code already exists
         const exists = await this.ticketCodeExists(ticketCode);
@@ -210,7 +210,7 @@ class TicketsService {
           {
             type: Sequelize.QueryTypes.SELECT,
             transaction: transaction,
-            replacements: { branchCode: `OR-${branchCode}` }
+            replacements: { branchCode: `OR-I-${branchCode}` }
           }
         );
 
@@ -227,7 +227,7 @@ class TicketsService {
         }
 
         const paddedNumber = String(nextNumber).padStart(4, "0");
-        const ticketCode = `OR-${branchCode}-${paddedNumber}`;
+        const ticketCode = `OR-I-${branchCode}-${paddedNumber}`;
         console.log(
           `Transaction attempt ${attempt +
             1}: Generated ticket code: ${ticketCode} (branch: ${branchCode}, number: ${nextNumber})`
