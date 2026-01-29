@@ -19,6 +19,8 @@ const {
   formFTemplatesByScanAppointmentSchema
 } = require("../schemas/scanSchema");
 const patientScanFormFAssociations = require("../models/Associations/patientScanFormFAssociation");
+const OrderDetailsMasterModel = require("../models/Master/OrderDetailsMasterModel");
+const TreatmentOrdersMaster = require("../models/Order/treatmentOrdersMaster");
 
 class PatientHistoryService {
   constructor(request, response, next) {
@@ -357,6 +359,132 @@ class PatientHistoryService {
       return [];
     }
     return data;
+  }
+
+  // Update payment record
+  async updatePaymentHistoryService() {
+    const { paymentId } = this._request.params;
+    const {
+      totalOrderAmount,
+      discountAmount,
+      paidOrderAmount,
+      paymentMode,
+      productType,
+      orderDate
+    } = this._request.body;
+
+    if (!paymentId) {
+      throw new createError.BadRequest("Payment ID is required");
+    }
+
+    // First, determine which table this payment belongs to
+    // Check if it exists in order_details_master
+    const orderDetail = await OrderDetailsMasterModel.findByPk(paymentId);
+
+    if (orderDetail) {
+      // Update in order_details_master
+      const updateData = {};
+      if (totalOrderAmount !== undefined)
+        updateData.totalOrderAmount = totalOrderAmount;
+      if (discountAmount !== undefined)
+        updateData.discountAmount = discountAmount;
+      if (paidOrderAmount !== undefined)
+        updateData.paidOrderAmount = paidOrderAmount;
+      if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
+      if (productType !== undefined) updateData.productType = productType;
+      if (orderDate !== undefined) updateData.orderDate = orderDate;
+
+      await orderDetail.update(updateData).catch(err => {
+        console.log(
+          "Error while updating payment in order_details_master",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return orderDetail;
+    }
+
+    // Check if it exists in treatment_orders_master
+    const treatmentOrder = await TreatmentOrdersMaster.findByPk(paymentId);
+
+    if (treatmentOrder) {
+      // Update in treatment_orders_master
+      const updateData = {};
+      if (totalOrderAmount !== undefined)
+        updateData.totalOrderAmount = totalOrderAmount;
+      if (discountAmount !== undefined)
+        updateData.discountAmount = discountAmount;
+      if (paidOrderAmount !== undefined)
+        updateData.paidOrderAmount = paidOrderAmount;
+      if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
+      if (productType !== undefined) updateData.productType = productType;
+      if (orderDate !== undefined) updateData.orderDate = orderDate;
+
+      await treatmentOrder.update(updateData).catch(err => {
+        console.log(
+          "Error while updating payment in treatment_orders_master",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return treatmentOrder;
+    }
+
+    throw new createError.NotFound("Payment record not found");
+  }
+
+  // Delete payment record
+  async deletePaymentHistoryService() {
+    const { paymentId } = this._request.params;
+
+    if (!paymentId) {
+      throw new createError.BadRequest("Payment ID is required");
+    }
+
+    // First, determine which table this payment belongs to
+    // Check if it exists in order_details_master
+    const orderDetail = await OrderDetailsMasterModel.findByPk(paymentId);
+
+    if (orderDetail) {
+      // Delete from order_details_master
+      await orderDetail.destroy().catch(err => {
+        console.log(
+          "Error while deleting payment from order_details_master",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return { message: "Payment record deleted successfully" };
+    }
+
+    // Check if it exists in treatment_orders_master
+    const treatmentOrder = await TreatmentOrdersMaster.findByPk(paymentId);
+
+    if (treatmentOrder) {
+      // Delete from treatment_orders_master
+      await treatmentOrder.destroy().catch(err => {
+        console.log(
+          "Error while deleting payment from treatment_orders_master",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return { message: "Payment record deleted successfully" };
+    }
+
+    throw new createError.NotFound("Payment record not found");
   }
 }
 

@@ -90,6 +90,22 @@ class PatientHistoryRoute {
       tokenVerified,
       this.getNotesHistoryByVisitId
     );
+
+    // Update payment record
+    this._route.put(
+      "/updatePayment/:paymentId",
+      checkActiveSession,
+      tokenVerified,
+      this.updatePaymentHistory
+    );
+
+    // Delete payment record
+    this._route.delete(
+      "/deletePayment/:paymentId",
+      checkActiveSession,
+      tokenVerified,
+      this.deletePaymentHistory
+    );
   }
 
   getPatientVisitHistoryRoute = asyncHandler(async (req, res, next) => {
@@ -147,6 +163,16 @@ class PatientHistoryRoute {
   getNotesHistoryByVisitId  = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientHistoryController(req, res, next);
     await controllerObj.getNotesHistoryByVisitIdHandler();
+  });
+
+  updatePaymentHistory = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientHistoryController(req, res, next);
+    await controllerObj.updatePaymentHistoryHandler();
+  });
+
+  deletePaymentHistory = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientHistoryController(req, res, next);
+    await controllerObj.deletePaymentHistoryHandler();
   });
 }
 

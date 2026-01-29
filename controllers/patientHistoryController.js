@@ -133,6 +133,24 @@ class PatientHistoryController {
       data: data
     });
   }
+
+  async updatePaymentHistoryHandler() {
+    const data = await this._service.updatePaymentHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: "Payment record updated successfully",
+      data: data
+    });
+  }
+
+  async deletePaymentHistoryHandler() {
+    const data = await this._service.deletePaymentHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: data.message || "Payment record deleted successfully",
+      data: data
+    });
+  }
 }
 
 module.exports = PatientHistoryController;
