@@ -47,6 +47,15 @@ class TasksService {
       const hasStatusFilter = statusValue !== null;
       const hasSearchFilter = searchValue !== null;
 
+      // User-based filtering: Non-admin users can only see tasks they created or are assigned to
+      // Admin users can see all tasks
+      let userIdFilter = null;
+      if (!this.isAdmin()) {
+        // Non-admin users can only see their own tasks (created by them OR assigned to them)
+        userIdFilter = this.currentUserId;
+      }
+      const hasUserIdFilter = userIdFilter !== null;
+
       console.log("Task query params:", {
         status: statusValue,
         search: searchValue,
@@ -54,18 +63,33 @@ class TasksService {
         limit,
         offset,
         hasStatusFilter,
-        hasSearchFilter
+        hasSearchFilter,
+        hasUserIdFilter,
+        userIdFilter,
+        isAdmin: this.isAdmin()
       });
 
       // Build query dynamically based on filters
-      const query = getTasksQuery(hasStatusFilter, hasSearchFilter);
-      const countQuery = getTasksCountQuery(hasStatusFilter, hasSearchFilter);
+      const query = getTasksQuery(
+        hasStatusFilter,
+        hasSearchFilter,
+        hasUserIdFilter
+      );
+      const countQuery = getTasksCountQuery(
+        hasStatusFilter,
+        hasSearchFilter,
+        hasUserIdFilter
+      );
 
       // Prepare replacements object
       const replacements = {
         limit,
         offset
       };
+
+      if (hasUserIdFilter) {
+        replacements.userId = userIdFilter;
+      }
 
       if (hasStatusFilter) {
         replacements.status = statusValue;
@@ -87,7 +111,10 @@ class TasksService {
       // Get total count
       const countResult = await this.mysqlConnection.query(countQuery, {
         type: Sequelize.QueryTypes.SELECT,
-        replacements: hasStatusFilter || hasSearchFilter ? replacements : {}
+        replacements:
+          hasStatusFilter || hasSearchFilter || hasUserIdFilter
+            ? replacements
+            : {}
       });
 
       const total = countResult[0]?.total || 0;

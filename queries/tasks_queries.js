@@ -1,6 +1,6 @@
 // Query to get all tasks with filters, search, and pagination
 // Note: This query will be dynamically built in the service to handle NULL values correctly
-const getTasksQuery = (hasStatusFilter, hasSearchFilter) => {
+const getTasksQuery = (hasStatusFilter, hasSearchFilter, hasUserIdFilter) => {
   let query = `
 SELECT 
     t.id,
@@ -32,6 +32,10 @@ INNER JOIN users u_created ON u_created.id = t.created_by
 LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to
 WHERE 1=1`;
 
+  if (hasUserIdFilter) {
+    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId)`;
+  }
+
   if (hasStatusFilter) {
     query += ` AND t.status = :status`;
   }
@@ -56,11 +60,19 @@ LIMIT :limit OFFSET :offset;
 };
 
 // Query to get total count for pagination
-const getTasksCountQuery = (hasStatusFilter, hasSearchFilter) => {
+const getTasksCountQuery = (
+  hasStatusFilter,
+  hasSearchFilter,
+  hasUserIdFilter
+) => {
   let query = `
 SELECT COUNT(*) as total
 FROM tasks t
 WHERE 1=1`;
+
+  if (hasUserIdFilter) {
+    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId)`;
+  }
 
   if (hasStatusFilter) {
     query += ` AND t.status = :status`;
