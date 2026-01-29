@@ -38,10 +38,12 @@ class TicketsService {
     return this.currentUserRole?.toLowerCase() === "admin";
   }
 
-  // Check if user can access ticket (admin or assigned staff)
+  // Check if user can access ticket (user-level security: only creator or assignee)
   canAccessTicket(ticket) {
-    if (this.isAdmin()) return true;
+    // All users (including admins) can only access tickets they created or are assigned to
     return (
+      ticket.assigned_to === this.currentUserId ||
+      ticket.created_by === this.currentUserId ||
       ticket.assignedTo === this.currentUserId ||
       ticket.createdBy === this.currentUserId
     );
@@ -339,18 +341,10 @@ class TicketsService {
     } = validatedQuery;
     const offset = (page - 1) * limit;
 
-    // User-based filtering: Non-admin users can only see tickets they created or are assigned to
-    // Admin users can see all tickets
-    let userIdFilter = null;
-    let finalAssignedTo = assignedTo;
-
-    if (!this.isAdmin()) {
-      // Non-admin users can only see their own tickets (created by them OR assigned to them)
-      userIdFilter = this.currentUserId;
-      // Prevent non-admins from filtering by other users' tickets
-      // They can only see tickets where they are the creator or assignee
-      finalAssignedTo = null; // Ignore assignedTo filter for non-admins
-    }
+    // User-based filtering: ALL users can only see tickets they created or are assigned to
+    // This ensures user-level security - users only see tickets relevant to them
+    let userIdFilter = this.currentUserId;
+    let finalAssignedTo = null; // Ignore assignedTo filter to enforce user-level security
 
     const tickets = await this.mysqlConnection
       .query(getTicketsQuery, {
@@ -431,8 +425,12 @@ class TicketsService {
 
     const ticket = result[0];
 
-    // Check access permission
-    if (!this.canAccessTicket(ticket)) {
+    // User-level security: Users can only view tickets they created or are assigned to
+    // Handle both snake_case (from raw query) and camelCase (from model) field names
+    const createdBy = ticket.created_by || ticket.createdBy;
+    const assignedTo = ticket.assigned_to || ticket.assignedTo;
+
+    if (createdBy !== this.currentUserId && assignedTo !== this.currentUserId) {
       throw new createError.Forbidden(
         "You don't have permission to access this ticket"
       );
@@ -838,8 +836,11 @@ class TicketsService {
       throw new createError.NotFound("Ticket not found");
     }
 
-    // Check permission: Admin or creator can update
-    if (!this.isAdmin() && existingTicket.createdBy !== this.currentUserId) {
+    // User-level security: Users can only update tickets they created or are assigned to
+    if (
+      existingTicket.createdBy !== this.currentUserId &&
+      existingTicket.assignedTo !== this.currentUserId
+    ) {
       throw new createError.Forbidden(
         "You don't have permission to update this ticket"
       );
@@ -940,8 +941,11 @@ class TicketsService {
       throw new createError.NotFound("Ticket not found");
     }
 
-    // Check permission: Admin or assigned staff can update status
-    if (!this.isAdmin() && existingTicket.assignedTo !== this.currentUserId) {
+    // User-level security: Users can only update status of tickets they created or are assigned to
+    if (
+      existingTicket.createdBy !== this.currentUserId &&
+      existingTicket.assignedTo !== this.currentUserId
+    ) {
       throw new createError.Forbidden(
         "You don't have permission to update this ticket status"
       );
