@@ -80,6 +80,16 @@ SELECT
         WHEN vpa.day1Date IS NULL THEN 'Pending'
         ELSE DATE_FORMAT(vpa.day1Date, '%d-%m-%Y')
     END AS day1Date,
+    
+    CASE 
+        WHEN vtca.treatmentTypeId IN (4, 5) THEN
+            CASE 
+                WHEN vpa.day1Amount = 0 THEN '-'
+                WHEN vpa.day1Date IS NULL THEN 'Pending'
+                ELSE DATE_FORMAT(vpa.day1Date, '%d-%m-%Y')
+            END
+        ELSE '-'
+    END AS icsiD1,
 
     CASE 
         WHEN vpa.pickUpAmount = 0 THEN '-'
