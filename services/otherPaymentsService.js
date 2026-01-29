@@ -440,15 +440,43 @@ class OtherPaymentsService extends BaseService {
     }
 
     // Update fields
+    // Note: The query returns paidOrderAmountBeforeDiscount as 'paidOrderAmount' in JSON
+    // Relationship: paidOrderAmountBeforeDiscount = paidOrderAmount (after discount) + discountAmount
     const updateData = {};
-    if (paidOrderAmount !== undefined)
-      updateData.paidOrderAmount = paidOrderAmount.toString();
-    if (discountAmount !== undefined)
-      updateData.discountAmount = discountAmount.toString();
+
+    // Get current values or use provided values
+    const currentPaidAmount = paymentHistory.paidOrderAmount
+      ? parseFloat(paymentHistory.paidOrderAmount)
+      : 0;
+    const currentDiscount = paymentHistory.discountAmount
+      ? parseFloat(paymentHistory.discountAmount)
+      : 0;
+
+    // Calculate final values
+    const finalPaidAmount =
+      paidOrderAmount !== undefined
+        ? parseFloat(paidOrderAmount)
+        : currentPaidAmount;
+
+    const finalDiscountAmount =
+      discountAmount !== undefined
+        ? parseFloat(discountAmount)
+        : currentDiscount;
+
+    // Calculate paidOrderAmountBeforeDiscount = paidOrderAmount + discountAmount
+    const finalPaidBeforeDiscount = finalPaidAmount + finalDiscountAmount;
+
+    // Always update both fields to maintain consistency
+    updateData.paidOrderAmount = finalPaidAmount.toString();
+    updateData.paidOrderAmountBeforeDiscount = finalPaidBeforeDiscount.toString();
+    updateData.discountAmount = finalDiscountAmount.toString();
+
     if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
     if (orderDate !== undefined) updateData.orderDate = orderDate;
     if (couponCode !== undefined) updateData.couponCode = couponCode;
     updateData.updatedBy = this._request.userDetails?.id;
+
+    console.log("Updating payment history with data:", updateData);
 
     await paymentHistory.update(updateData).catch(err => {
       console.log("Error while updating payment history", err);
@@ -457,7 +485,12 @@ class OtherPaymentsService extends BaseService {
       );
     });
 
-    return paymentHistory;
+    // Return the updated record
+    const updatedRecord = await OtherPaymentsOrderMaster.findByPk(
+      paymentHistoryId
+    );
+    console.log("Updated payment history record:", updatedRecord?.dataValues);
+    return updatedRecord;
   }
 
   // Delete payment history entry
