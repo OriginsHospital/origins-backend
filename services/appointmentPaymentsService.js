@@ -851,6 +851,53 @@ class AppointmentsPaymentService extends BaseService {
     }
   }
 
+  // Check if patient has pending amount
+  async checkPatientPendingAmount(visitId, isPackageExists) {
+    try {
+      if (!visitId) {
+        console.log("VisitId not provided for pending amount check");
+        return false;
+      }
+
+      let pendingAmountData = [];
+
+      // Handle both boolean and numeric (0/1) values for isPackageExists
+      const hasPackage =
+        isPackageExists === true ||
+        isPackageExists === 1 ||
+        isPackageExists === "1";
+
+      if (hasPackage) {
+        // Get pending amount for patients with package
+        pendingAmountData = await this.getPendingPaymentAmountForPackageService(
+          visitId
+        );
+      } else {
+        // Get pending amount for patients without package
+        pendingAmountData = await this.getPendingPaymentWithoutPackageService(
+          visitId
+        );
+      }
+
+      if (lodash.isEmpty(pendingAmountData)) {
+        return false; // No pending amount
+      }
+
+      // Calculate total pending amount
+      const totalPendingAmount = pendingAmountData.reduce((sum, item) => {
+        const pendingAmount = parseFloat(item.pending_amount || 0);
+        return sum + (isNaN(pendingAmount) ? 0 : pendingAmount);
+      }, 0);
+
+      // Return true if there's any pending amount
+      return totalPendingAmount > 0;
+    } catch (error) {
+      console.log("Error while checking patient pending amount:", error);
+      // If there's an error, allow the operation (fail open)
+      return false;
+    }
+  }
+
   async checkForVitals(appointmentId, type, patientTypeId, visitId) {
     const data = await this.mysqlConnection
       .query(checkAntentalPatientVital, {
@@ -1146,6 +1193,41 @@ class AppointmentsPaymentService extends BaseService {
         )) === 0
       ) {
         throw new createError.BadRequest(Constants.UNAUTHORIZED_WITHOUT_VITALS);
+      }
+
+      // Check pending amount and role-based restrictions
+      // If patient has pending amount, only Admin can move to Doctor
+      // If patient has no pending amount, Admin, Receptionist, and Frontdesk can move
+      const hasPendingAmount = await this.checkPatientPendingAmount(
+        payload?.visitId,
+        payload?.isPackageExists
+      );
+
+      const userRoleId = this._request.userDetails?.roleDetails?.id;
+      const userRoleName = this._request.userDetails?.roleDetails?.name?.toLowerCase();
+
+      // Check if user is Admin (ID: 1)
+      const isAdmin = userRoleId === 1;
+
+      // Check if user is Receptionist (ID: 6) or Frontdesk (by name)
+      const isReceptionist = userRoleId === 6;
+      const isFrontdesk =
+        userRoleName === "frontdesk" || userRoleName === "front desk";
+
+      if (hasPendingAmount) {
+        // Patient has pending amount - only Admin can move
+        if (!isAdmin) {
+          throw new createError.BadRequest(
+            "Only Admin can move patients with pending amounts to Doctor stage"
+          );
+        }
+      } else {
+        // Patient has no pending amount - Admin, Receptionist, and Frontdesk can move
+        if (!isAdmin && !isReceptionist && !isFrontdesk) {
+          throw new createError.BadRequest(
+            "Only Admin, Receptionist, and Frontdesk users can move patients without pending amounts to Doctor stage"
+          );
+        }
       }
     }
 
