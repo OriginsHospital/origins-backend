@@ -4,6 +4,7 @@ const getTasksQuery = (hasStatusFilter, hasSearchFilter, hasUserIdFilter) => {
   let query = `
 SELECT 
     t.id,
+    t.task_code,
     t.task_name,
     t.description,
     t.pending_on,
@@ -41,7 +42,7 @@ WHERE 1=1`;
   }
 
   if (hasSearchFilter) {
-    query += ` AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%'))`;
+    query += ` AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%') OR t.task_code LIKE CONCAT('%', :search, '%'))`;
   }
 
   query += `
@@ -79,7 +80,7 @@ WHERE 1=1`;
   }
 
   if (hasSearchFilter) {
-    query += ` AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%'))`;
+    query += ` AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%') OR t.task_code LIKE CONCAT('%', :search, '%'))`;
   }
 
   query += `;`;
@@ -90,6 +91,7 @@ WHERE 1=1`;
 const getTaskDetailsQuery = `
 SELECT 
     t.id,
+    t.task_code,
     t.task_name,
     t.description,
     t.pending_on,
@@ -139,8 +141,21 @@ LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to
 WHERE t.id = :taskId;
 `;
 
+// Query to generate next task code (fallback query)
+// Format: OR-{BRANCH}-{NUMBER} (e.g., OR-HYD-0001)
+const getNextTaskCodeQuery = `
+SELECT 
+    COALESCE(
+        MAX(CAST(SUBSTRING_INDEX(task_code, '-', -1) AS UNSIGNED)),
+        0
+    ) + 1 AS nextNumber
+FROM tasks
+WHERE task_code LIKE CONCAT(:branchCode, '-%');
+`;
+
 module.exports = {
   getTasksQuery,
   getTasksCountQuery,
-  getTaskDetailsQuery
+  getTaskDetailsQuery,
+  getNextTaskCodeQuery
 };

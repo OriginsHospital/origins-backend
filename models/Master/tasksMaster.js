@@ -10,6 +10,12 @@ const TasksModel = MySqlConnection._instance.define(
       allowNull: false,
       autoIncrement: true
     },
+    taskCode: {
+      type: Sequelize.DataTypes.STRING(50),
+      allowNull: true,
+      unique: true,
+      field: "task_code"
+    },
     taskName: {
       type: Sequelize.DataTypes.STRING(255),
       allowNull: false,
