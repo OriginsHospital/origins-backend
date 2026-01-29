@@ -47,13 +47,9 @@ class TasksService {
       const hasStatusFilter = statusValue !== null;
       const hasSearchFilter = searchValue !== null;
 
-      // User-based filtering: Non-admin users can only see tasks they created or are assigned to
-      // Admin users can see all tasks
-      let userIdFilter = null;
-      if (!this.isAdmin()) {
-        // Non-admin users can only see their own tasks (created by them OR assigned to them)
-        userIdFilter = this.currentUserId;
-      }
+      // User-based filtering: ALL users can only see tasks they created or are assigned to
+      // This ensures user-level security - users only see tasks relevant to them
+      let userIdFilter = this.currentUserId;
       const hasUserIdFilter = userIdFilter !== null;
 
       console.log("Task query params:", {
@@ -166,7 +162,19 @@ class TasksService {
       throw new createError.NotFound("Task not found");
     }
 
-    return result[0];
+    const task = result[0];
+
+    // User-level security: Users can only view tasks they created or are assigned to
+    if (
+      task.created_by !== this.currentUserId &&
+      task.assigned_to !== this.currentUserId
+    ) {
+      throw new createError.Forbidden(
+        "You do not have permission to view this task"
+      );
+    }
+
+    return task;
   }
 
   // Create new task
@@ -246,6 +254,16 @@ class TasksService {
         throw new createError.NotFound("Task not found");
       }
 
+      // User-level security: Users can only update tasks they created or are assigned to
+      if (
+        task.createdBy !== this.currentUserId &&
+        task.assignedTo !== this.currentUserId
+      ) {
+        throw new createError.Forbidden(
+          "You do not have permission to update this task"
+        );
+      }
+
       // Prepare update data, converting camelCase to snake_case for database
       const dbUpdateData = {};
       if (updateData.taskName !== undefined)
@@ -306,6 +324,16 @@ class TasksService {
 
       if (!task) {
         throw new createError.NotFound("Task not found");
+      }
+
+      // User-level security: Users can only update tasks they created or are assigned to
+      if (
+        task.createdBy !== this.currentUserId &&
+        task.assignedTo !== this.currentUserId
+      ) {
+        throw new createError.Forbidden(
+          "You do not have permission to update this task"
+        );
       }
 
       await task.update({ status }).catch(err => {
