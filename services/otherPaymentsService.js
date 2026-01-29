@@ -475,8 +475,11 @@ class OtherPaymentsService extends BaseService {
     if (orderDate !== undefined) updateData.orderDate = orderDate;
     if (couponCode !== undefined) updateData.couponCode = couponCode;
     updateData.updatedBy = this._request.userDetails?.id;
+    updateData.updatedAt = new Date();
 
     console.log("Updating payment history with data:", updateData);
+    console.log("Payment History ID:", paymentHistoryId);
+    console.log("RefId (for recalculation):", paymentHistory.refId);
 
     await paymentHistory.update(updateData).catch(err => {
       console.log("Error while updating payment history", err);
@@ -490,6 +493,30 @@ class OtherPaymentsService extends BaseService {
       paymentHistoryId
     );
     console.log("Updated payment history record:", updatedRecord?.dataValues);
+
+    // Verify the paidAmount recalculation by querying the parent payment
+    if (updatedRecord && updatedRecord.refId) {
+      const verificationQuery = `
+        SELECT 
+          COALESCE((
+            SELECT SUM(opom.paidOrderAmountBeforeDiscount)
+            FROM other_payment_orders_master opom
+            WHERE opom.refId = :refId AND opom.paymentStatus = 'PAID'
+          ), 0) as recalculatedPaidAmount
+      `;
+      const verificationResult = await this.mysqlConnection.query(
+        verificationQuery,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { refId: updatedRecord.refId }
+        }
+      );
+      console.log(
+        "Recalculated paidAmount after update:",
+        verificationResult[0]?.recalculatedPaidAmount
+      );
+    }
+
     return updatedRecord;
   }
 
@@ -510,6 +537,10 @@ class OtherPaymentsService extends BaseService {
       throw new createError.NotFound("Payment history entry not found");
     }
 
+    const refId = paymentHistory.refId;
+    console.log("Deleting payment history entry:", paymentHistoryId);
+    console.log("RefId (for recalculation):", refId);
+
     // Delete the entry
     await paymentHistory.destroy().catch(err => {
       console.log("Error while deleting payment history", err);
@@ -517,6 +548,29 @@ class OtherPaymentsService extends BaseService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
+
+    // Verify the paidAmount recalculation by querying the parent payment
+    if (refId) {
+      const verificationQuery = `
+        SELECT 
+          COALESCE((
+            SELECT SUM(opom.paidOrderAmountBeforeDiscount)
+            FROM other_payment_orders_master opom
+            WHERE opom.refId = :refId AND opom.paymentStatus = 'PAID'
+          ), 0) as recalculatedPaidAmount
+      `;
+      const verificationResult = await this.mysqlConnection.query(
+        verificationQuery,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { refId: refId }
+        }
+      );
+      console.log(
+        "Recalculated paidAmount after delete:",
+        verificationResult[0]?.recalculatedPaidAmount
+      );
+    }
 
     return { message: "Payment history entry deleted successfully" };
   }
