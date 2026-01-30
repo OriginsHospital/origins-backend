@@ -495,7 +495,7 @@ SELECT JSON_OBJECT(
 FROM visit_treatment_cycles_associations vtca 
 INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId 
 LEFT JOIN visit_packages_associations vpa ON vpa.visitId = vtca.visitId 
-LEFT JOIN treatment_timestamps tt ON tt.visitId = vtca.visitId 
+LEFT JOIN treatment_timestamps tt ON tt.visitId = vtca.visitId AND tt.treatmentType = :treatmentType
 WHERE vtca.visitId = :visitId;
 `;
 
