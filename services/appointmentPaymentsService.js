@@ -1999,21 +1999,17 @@ class AppointmentsPaymentService extends BaseService {
       );
       const procedureDate = futureTimestamp.toISOString().split("T")[0]; // 'YYYY-MM-DD'
       const procedureTime = futureTimestamp.toTimeString().slice(0, 5); // 'HH:mm'
-      await TriggerTimeStampsMaster.update(
-        {
-          triggerStartDate: adjustedTimestamp,
-          triggerStartedBy: parseInt(this._request.userDetails?.id, 10)
+
+      // Check if treatment_timestamps record exists, if not create it, then update
+      const existingRecord = await TriggerTimeStampsMaster.findOne({
+        where: {
+          visitId: visitId,
+          treatmentType: treatmentType
         },
-        {
-          where: {
-            visitId: visitId,
-            treatmentType
-          },
-          transaction: transaction
-        }
-      ).catch(err => {
+        transaction: transaction
+      }).catch(err => {
         console.log(
-          "Error while updating trigger timestamps in Icsi",
+          "Error while finding trigger timestamps record",
           err.message
         );
         throw new createError.InternalServerError(
@@ -2021,9 +2017,90 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
+      if (existingRecord) {
+        // Update existing record
+        const [updatedRows] = await TriggerTimeStampsMaster.update(
+          {
+            triggerStartDate: adjustedTimestamp,
+            triggerStartedBy: parseInt(this._request.userDetails?.id, 10)
+          },
+          {
+            where: {
+              visitId: visitId,
+              treatmentType: treatmentType
+            },
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while updating trigger timestamps", err.message);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+        if (updatedRows === 0) {
+          console.log("Warning: Trigger timestamp update affected 0 rows");
+          throw new createError.InternalServerError(
+            "Failed to update trigger timestamp. No rows were affected."
+          );
+        }
+        console.log(
+          `Successfully updated trigger timestamp for visitId: ${visitId}, treatmentType: ${treatmentType}`
+        );
+      } else {
+        // Create new record if it doesn't exist
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId: visitId,
+            treatmentType: treatmentType,
+            triggerStartDate: adjustedTimestamp,
+            triggerStartedBy: parseInt(this._request.userDetails?.id, 10)
+          },
+          {
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log(
+            "Error while creating trigger timestamps record",
+            err.message
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+        console.log(
+          `Successfully created trigger timestamp for visitId: ${visitId}, treatmentType: ${treatmentType}`
+        );
+      }
+
       if (!patientData.length || !treatmentCycleInfo.length) {
         throw new createError.NotFound(
           "Patient or Treatment Cycle data not found."
+        );
+      }
+
+      // Verify the trigger timestamp was saved correctly
+      const verifyRecord = await TriggerTimeStampsMaster.findOne({
+        where: {
+          visitId: visitId,
+          treatmentType: treatmentType
+        },
+        transaction: transaction
+      }).catch(err => {
+        console.log("Error while verifying trigger timestamp", err.message);
+        // Don't throw here, just log - the update/create should have worked
+      });
+
+      if (verifyRecord && verifyRecord.triggerStartDate) {
+        console.log(
+          `Trigger timestamp verified successfully for visitId: ${visitId}, treatmentType: ${treatmentType}, triggerStartDate: ${verifyRecord.triggerStartDate}`
+        );
+      } else {
+        console.error(
+          `Warning: Trigger timestamp verification failed for visitId: ${visitId}, treatmentType: ${treatmentType}`
+        );
+        throw new createError.InternalServerError(
+          "Trigger timestamp was not saved correctly. Please try again."
         );
       }
 
