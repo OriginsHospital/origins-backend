@@ -107,17 +107,24 @@ class PatientsService extends BaseService {
           key = `patients/${patientId}`;
           break;
         case "aadhaarCard":
-          key = `patients/aadhaarCard/${patientId}`;
+          // Add timestamp to ensure unique file and prevent caching issues
+          const fileExtension = file.originalname.split(".").pop() || "pdf";
+          key = `patients/aadhaarCard/${patientId}_${Date.now()}.${fileExtension}`;
           break;
         case "marriageCertificate":
-          key = `patients/marriageCertificate/${patientId}`;
+          const marriageExtension = file.originalname.split(".").pop() || "pdf";
+          key = `patients/marriageCertificate/${patientId}_${Date.now()}.${marriageExtension}`;
           break;
         case "affidavit":
-          key = `patients/affidavit/${patientId}`;
+          const affidavitExtension =
+            file.originalname.split(".").pop() || "pdf";
+          key = `patients/affidavit/${patientId}_${Date.now()}.${affidavitExtension}`;
           break;
         default:
           throw new createError.BadRequest("Invalid file type");
       }
+      console.log(`Uploading ${type} to S3 with key:`, key);
+
       const uploadParams = {
         Bucket: this.bucketName,
         Key: key,
@@ -125,6 +132,10 @@ class PatientsService extends BaseService {
         ContentType: file.mimetype
       };
       const uploadResult = await this.s3.upload(uploadParams).promise();
+      console.log(
+        `Successfully uploaded ${type} to S3. URL:`,
+        uploadResult.Location
+      );
       return uploadResult.Location;
     } catch (error) {
       console.error(`Error uploading patient ${type} image to S3:`, error);
@@ -616,10 +627,23 @@ class PatientsService extends BaseService {
 
     //aadhaarCard
     if (this._request.files && this._request.files.aadhaarCard) {
+      console.log(
+        "Uploading new Aadhaar card file for patient ID:",
+        isExistedPatient.dataValues.id
+      );
+      console.log("File details:", {
+        originalname: this._request.files.aadhaarCard[0].originalname,
+        mimetype: this._request.files.aadhaarCard[0].mimetype,
+        size: this._request.files.aadhaarCard[0].size
+      });
       const uploadedAadhaar = await this.uploadPatientImage(
         isExistedPatient.dataValues.id,
         this._request.files.aadhaarCard[0],
         "aadhaarCard"
+      );
+      console.log(
+        "Aadhaar card uploaded successfully. New URL:",
+        uploadedAadhaar
       );
       updateData.aadhaarCard = uploadedAadhaar;
     }
@@ -656,6 +680,10 @@ class PatientsService extends BaseService {
 
     console.log("Update Data:", JSON.stringify(updateData, null, 2));
     console.log("Updating patient with ID:", isExistedPatient.dataValues.id);
+    console.log(
+      "Current aadhaarCard before update:",
+      isExistedPatient.dataValues.aadhaarCard
+    );
 
     const updateResult = await PatientMasterModel.update(updateData, {
       where: { id: isExistedPatient.dataValues.id }
@@ -677,8 +705,10 @@ class PatientsService extends BaseService {
     }
 
     // Fetch and return the updated patient data
+    // Use raw: true and force a fresh query to avoid Sequelize caching
     const updatedPatient = await PatientMasterModel.findOne({
-      where: { id: isExistedPatient.dataValues.id }
+      where: { id: isExistedPatient.dataValues.id },
+      raw: false // Keep as false to get full model instance
     }).catch(err => {
       console.log("Error while fetching updated patient Details", err.message);
       // Even if fetch fails, return the existing patient data we had before update
@@ -686,13 +716,35 @@ class PatientsService extends BaseService {
       return isExistedPatient;
     });
 
-    // Always return patient data (either updated or existing)
-    // This allows frontend to immediately update UI without refetching
+    // Log the fetched data to verify the update
     if (updatedPatient) {
+      console.log(
+        "Fetched updated patient aadhaarCard:",
+        updatedPatient.dataValues.aadhaarCard
+      );
+      console.log(
+        "Fetched updated patient data:",
+        JSON.stringify(
+          {
+            id: updatedPatient.dataValues.id,
+            aadhaarCard: updatedPatient.dataValues.aadhaarCard,
+            marriageCertificate: updatedPatient.dataValues.marriageCertificate,
+            affidavit: updatedPatient.dataValues.affidavit
+          },
+          null,
+          2
+        )
+      );
+
+      // Always return patient data (either updated or existing)
+      // This allows frontend to immediately update UI without refetching
       return updatedPatient.dataValues;
     }
 
     // Fallback: return existing patient data if fetch somehow failed
+    console.log(
+      "WARNING: Could not fetch updated patient, returning existing data"
+    );
     return isExistedPatient.dataValues;
   }
 
