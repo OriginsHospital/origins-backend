@@ -3,68 +3,79 @@ FROM patient_master
 WHERE DATE_FORMAT(updatedAt, '%d/%m/%Y') BETWEEN :fromDate AND :toDate`;
 
 const getPatientsQuery = `
-select pm.id, patientId,
-pm.photoPath ,
-pm.branchId,
-(SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
-CAST(pm.createdAt as DATE) as registeredDate,
-JSON_OBJECT('id', patientTypeId, 'name', ptm.patientType) AS patientType,
-aadhaarNo,mobileNo,CONCAT(lastName,' ',firstName) as Name, 
-dateOfBirth,
-JSON_OBJECT('id', cityId, 'name', cm.name) AS city,
-JSON_OBJECT('id', referralId, 'referralSource', rtm.name) AS referralSource,
-referralName,
-(select pva.id from patient_visits_association pva where pva.patientId = pm.id and pva.isActive = 1 LIMIT 1) as activeVisitId,
-COALESCE(
-    (
-        SELECT cdm.name 
-        FROM consultation_appointments_associations caa
-        INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
-        INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
-        INNER JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
-        WHERE pva.patientId = pm.id
-        ORDER BY caa.appointmentDate DESC, caa.createdAt DESC
-        LIMIT 1
-    ),
-    (
-        SELECT cdm.name 
-        FROM treatment_appointments_associations taa
-        INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
-        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
-        INNER JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
-        WHERE pva.patientId = pm.id
-        ORDER BY taa.appointmentDate DESC, taa.createdAt DESC
-        LIMIT 1
-    )
-) AS assignedDoctor,
-COALESCE(
-    (
-        -- First priority: Get treatment from active visit
-        SELECT ttm.name
-        FROM visit_treatment_cycles_associations vtca
-        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
-        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
-        WHERE pva.patientId = pm.id 
-          AND pva.isActive = 1
-        ORDER BY vtca.createdAt DESC
-        LIMIT 1
-    ),
-    (
-        -- Second priority: Get most recent completed treatment from any visit
-        SELECT ttm.name
-        FROM visit_treatment_cycles_associations vtca
-        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
-        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
-        WHERE pva.patientId = pm.id
-        ORDER BY vtca.createdAt DESC
-        LIMIT 1
-    ),
-    '-'
-) AS plan
-from patient_master pm 
-INNER JOIN patient_type_master ptm ON ptm.id = patientTypeId 
-INNER JOIN city_master cm ON cm.id = cityId
-INNER JOIN referral_type_master rtm ON  rtm.id  = referralId
+SELECT 
+    base.*,
+    CASE
+        WHEN base.plan = '-' OR base.plan IS NULL OR TRIM(base.plan) = '' THEN '-'
+        WHEN UPPER(TRIM(base.plan)) LIKE '%OI%TI%' OR UPPER(TRIM(base.plan)) LIKE '%TI%OI%' THEN 'OI + TI'
+        WHEN UPPER(TRIM(base.plan)) LIKE '%IUI%' THEN 'IUI'
+        WHEN UPPER(TRIM(base.plan)) LIKE '%ICSI%' THEN 'IVF'
+        ELSE '-'
+    END AS treatmentType
+FROM (
+    select pm.id, patientId,
+    pm.photoPath ,
+    pm.branchId,
+    (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
+    CAST(pm.createdAt as DATE) as registeredDate,
+    JSON_OBJECT('id', patientTypeId, 'name', ptm.patientType) AS patientType,
+    aadhaarNo,mobileNo,CONCAT(lastName,' ',firstName) as Name, 
+    dateOfBirth,
+    JSON_OBJECT('id', cityId, 'name', cm.name) AS city,
+    JSON_OBJECT('id', referralId, 'referralSource', rtm.name) AS referralSource,
+    referralName,
+    (select pva.id from patient_visits_association pva where pva.patientId = pm.id and pva.isActive = 1 LIMIT 1) as activeVisitId,
+    COALESCE(
+        (
+            SELECT cdm.name 
+            FROM consultation_appointments_associations caa
+            INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+            INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+            INNER JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
+            WHERE pva.patientId = pm.id
+            ORDER BY caa.appointmentDate DESC, caa.createdAt DESC
+            LIMIT 1
+        ),
+        (
+            SELECT cdm.name 
+            FROM treatment_appointments_associations taa
+            INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+            INNER JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
+            WHERE pva.patientId = pm.id
+            ORDER BY taa.appointmentDate DESC, taa.createdAt DESC
+            LIMIT 1
+        )
+    ) AS assignedDoctor,
+    COALESCE(
+        (
+            -- First priority: Get treatment from active visit
+            SELECT ttm.name
+            FROM visit_treatment_cycles_associations vtca
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+            INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+            WHERE pva.patientId = pm.id 
+              AND pva.isActive = 1
+            ORDER BY vtca.createdAt DESC
+            LIMIT 1
+        ),
+        (
+            -- Second priority: Get most recent completed treatment from any visit
+            SELECT ttm.name
+            FROM visit_treatment_cycles_associations vtca
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+            INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+            WHERE pva.patientId = pm.id
+            ORDER BY vtca.createdAt DESC
+            LIMIT 1
+        ),
+        '-'
+    ) AS plan
+    from patient_master pm 
+    INNER JOIN patient_type_master ptm ON ptm.id = patientTypeId 
+    INNER JOIN city_master cm ON cm.id = cityId
+    INNER JOIN referral_type_master rtm ON  rtm.id  = referralId
+) base
 `;
 
 const getPatientInfoForDischargeSheet = `
