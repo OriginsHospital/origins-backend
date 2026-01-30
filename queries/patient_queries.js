@@ -71,7 +71,31 @@ FROM (
             LIMIT 1
         ),
         '-'
-    ) AS plan
+    ) AS plan,
+    COALESCE(
+        (
+            -- First priority: Get latest future appointment date from FollowUp Consultation in active visit
+            SELECT DATE_FORMAT(MAX(caa.appointmentDate), '%d-%m-%Y')
+            FROM consultation_appointments_associations caa
+            INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+            INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+            WHERE pva.patientId = pm.id 
+              AND pva.isActive = 1
+              AND vca.type = 'FollowUp Consultation'
+              AND CAST(caa.appointmentDate AS DATE) >= CAST(CURRENT_DATE AS DATE)
+        ),
+        (
+            -- Second priority: Get latest future appointment date from FollowUp Consultation in any visit
+            SELECT DATE_FORMAT(MAX(caa.appointmentDate), '%d-%m-%Y')
+            FROM consultation_appointments_associations caa
+            INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+            INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+            WHERE pva.patientId = pm.id
+              AND vca.type = 'FollowUp Consultation'
+              AND CAST(caa.appointmentDate AS DATE) >= CAST(CURRENT_DATE AS DATE)
+        ),
+        '-'
+    ) AS stageOfCycle
     from patient_master pm 
     LEFT JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId 
     LEFT JOIN city_master cm ON cm.id = pm.cityId
