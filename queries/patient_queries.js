@@ -36,7 +36,31 @@ COALESCE(
         ORDER BY taa.appointmentDate DESC, taa.createdAt DESC
         LIMIT 1
     )
-) AS assignedDoctor
+) AS assignedDoctor,
+COALESCE(
+    (
+        -- First priority: Get treatment from active visit
+        SELECT ttm.name
+        FROM visit_treatment_cycles_associations vtca
+        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+        WHERE pva.patientId = pm.id 
+          AND pva.isActive = 1
+        ORDER BY vtca.createdAt DESC
+        LIMIT 1
+    ),
+    (
+        -- Second priority: Get most recent completed treatment from any visit
+        SELECT ttm.name
+        FROM visit_treatment_cycles_associations vtca
+        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+        WHERE pva.patientId = pm.id
+        ORDER BY vtca.createdAt DESC
+        LIMIT 1
+    ),
+    '-'
+) AS plan
 from patient_master pm 
 INNER JOIN patient_type_master ptm ON ptm.id = patientTypeId 
 INNER JOIN city_master cm ON cm.id = cityId
