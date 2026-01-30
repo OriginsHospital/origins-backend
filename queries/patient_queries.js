@@ -18,11 +18,12 @@ FROM (
     pm.branchId,
     (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
     CAST(pm.createdAt as DATE) as registeredDate,
-    JSON_OBJECT('id', patientTypeId, 'name', ptm.patientType) AS patientType,
+    pm.createdAt,
+    JSON_OBJECT('id', patientTypeId, 'name', COALESCE(ptm.patientType, '')) AS patientType,
     aadhaarNo,mobileNo,CONCAT(lastName,' ',firstName) as Name, 
     dateOfBirth,
-    JSON_OBJECT('id', cityId, 'name', cm.name) AS city,
-    JSON_OBJECT('id', referralId, 'referralSource', rtm.name) AS referralSource,
+    JSON_OBJECT('id', cityId, 'name', COALESCE(cm.name, '')) AS city,
+    JSON_OBJECT('id', referralId, 'referralSource', COALESCE(rtm.name, '')) AS referralSource,
     referralName,
     (select pva.id from patient_visits_association pva where pva.patientId = pm.id and pva.isActive = 1 LIMIT 1) as activeVisitId,
     COALESCE(
@@ -72,9 +73,9 @@ FROM (
         '-'
     ) AS plan
     from patient_master pm 
-    INNER JOIN patient_type_master ptm ON ptm.id = patientTypeId 
-    INNER JOIN city_master cm ON cm.id = cityId
-    INNER JOIN referral_type_master rtm ON  rtm.id  = referralId
+    LEFT JOIN patient_type_master ptm ON ptm.id = pm.patientTypeId 
+    LEFT JOIN city_master cm ON cm.id = pm.cityId
+    LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
 ) base
 `;
 

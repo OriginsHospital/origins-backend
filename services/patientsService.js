@@ -395,18 +395,13 @@ class PatientsService extends BaseService {
     if (trimmedSearchQuery) {
       query += `
         WHERE 
-          pm.mobileNo LIKE :searchQuery OR 
-          pm.patientId LIKE :searchQuery OR
-          pm.firstName LIKE :searchQuery OR 
-          pm.lastName LIKE :searchQuery OR 
-          CONCAT(pm.lastName, ' ', pm.firstName) LIKE :searchQuery OR 
-          pm.aadhaarNo LIKE :searchQuery
-        
-        ORDER BY pm.createdAt DESC
+          base.mobileNo LIKE :searchQuery OR 
+          base.patientId LIKE :searchQuery OR
+          base.Name LIKE :searchQuery OR 
+          base.aadhaarNo LIKE :searchQuery
       `;
-    } else {
-      query += ` ORDER BY pm.createdAt DESC `;
     }
+    query += ` ORDER BY base.createdAt DESC `;
 
     const patientsData = await this.mysqlConnection
       .query(query, {
