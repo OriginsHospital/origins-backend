@@ -13,11 +13,15 @@ SELECT
     t.created_by,
     t.created_at,
     t.updated_at,
-    JSON_OBJECT(
-        'id', u_assigned.id,
-        'fullName', u_assigned.fullName,
-        'email', u_assigned.email
-    ) AS assignedToDetails,
+    CASE 
+        WHEN u_assigned.id IS NOT NULL THEN
+            JSON_OBJECT(
+                'id', u_assigned.id,
+                'fullName', u_assigned.fullName,
+                'email', u_assigned.email
+            )
+        ELSE NULL
+    END AS assignedToDetails,
     JSON_OBJECT(
         'id', u_created.id,
         'fullName', u_created.fullName,
@@ -56,7 +60,7 @@ SELECT
         JSON_ARRAY()
     ) AS tags
 FROM tickets t
-INNER JOIN users u_assigned ON u_assigned.id = t.assigned_to
+LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to
 INNER JOIN users u_created ON u_created.id = t.created_by
 WHERE 1=1
     AND (:status IS NULL OR t.status = :status)

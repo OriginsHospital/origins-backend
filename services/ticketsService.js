@@ -476,15 +476,29 @@ class TicketsService {
       let assignedToNumber;
       if (Array.isArray(assignedTo) && assignedTo.length > 0) {
         assignedToNumber = parseInt(assignedTo[0], 10);
+        console.log(
+          "Multiple assignees provided, using first:",
+          assignedToNumber,
+          "from array:",
+          assignedTo
+        );
       } else {
         assignedToNumber = parseInt(assignedTo, 10);
+        console.log("Single assignee provided:", assignedToNumber);
       }
 
-      if (isNaN(assignedToNumber)) {
+      if (isNaN(assignedToNumber) || assignedToNumber <= 0) {
         throw new createError.BadRequest(
           "Invalid assignedTo value. Must be a valid user ID."
         );
       }
+
+      console.log(
+        "Creating ticket with assignedTo:",
+        assignedToNumber,
+        "createdBy:",
+        this.currentUserId
+      );
 
       // Use transaction with retry logic for handling race conditions
       const maxRetries = 30; // Increased retries for high concurrency scenarios
