@@ -39,9 +39,15 @@ const createTaskSchema = Joi.object({
   alertDate: Joi.date()
     .allow(null, "")
     .optional(),
-  assignedTo: Joi.number()
-    .integer()
-    .allow(null)
+  assignedTo: Joi.alternatives()
+    .try(
+      Joi.number()
+        .integer()
+        .allow(null),
+      Joi.array()
+        .items(Joi.number().integer())
+        .min(1)
+    )
     .optional()
 });
 
@@ -78,9 +84,15 @@ const updateTaskSchema = Joi.object({
   alertDate: Joi.date()
     .allow(null, "")
     .optional(),
-  assignedTo: Joi.number()
-    .integer()
-    .allow(null)
+  assignedTo: Joi.alternatives()
+    .try(
+      Joi.number()
+        .integer()
+        .allow(null),
+      Joi.array()
+        .items(Joi.number().integer())
+        .min(1)
+    )
     .optional()
 });
 

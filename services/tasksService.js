@@ -397,6 +397,12 @@ class TasksService {
 
               // Try to create task - let the database unique constraint handle duplicates
               try {
+                // Handle multiple assignees: if array, use first for backward compatibility, otherwise use as-is
+                const assignedToValue =
+                  Array.isArray(assignedTo) && assignedTo.length > 0
+                    ? assignedTo[0] // Use first assignee for backward compatibility with existing field
+                    : assignedTo || null;
+
                 const task = await TasksModel.create(
                   {
                     taskCode,
@@ -409,11 +415,41 @@ class TasksService {
                     endDate: endDate || null,
                     alertEnabled: alertEnabled || false,
                     alertDate: alertDate || null,
-                    assignedTo: assignedTo || null,
+                    assignedTo: assignedToValue,
                     createdBy: this.currentUserId
                   },
                   { transaction: t }
                 );
+
+                // If multiple assignees provided, insert into task_assignees table
+                if (Array.isArray(assignedTo) && assignedTo.length > 0) {
+                  const assigneeInserts = assignedTo.map(userId => ({
+                    task_id: task.id,
+                    user_id: userId
+                  }));
+
+                  await this.mysqlConnection.query(
+                    `INSERT INTO task_assignees (task_id, user_id) VALUES ${assigneeInserts
+                      .map(() => "(?, ?)")
+                      .join(", ")}`,
+                    {
+                      replacements: assigneeInserts.flatMap(a => [
+                        a.task_id,
+                        a.user_id
+                      ]),
+                      transaction: t
+                    }
+                  );
+                } else if (assignedToValue) {
+                  // Single assignee - also add to task_assignees for consistency
+                  await this.mysqlConnection.query(
+                    `INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)`,
+                    {
+                      replacements: [task.id, assignedToValue],
+                      transaction: t
+                    }
+                  );
+                }
 
                 console.log(
                   "Task created successfully:",
@@ -510,10 +546,18 @@ class TasksService {
       }
 
       // User-level security: Users can only update tasks they created or are assigned to
-      if (
-        task.createdBy !== this.currentUserId &&
-        task.assignedTo !== this.currentUserId
-      ) {
+      // Check if user is in task_assignees table
+      const [assigneeCheck] = await this.mysqlConnection.query(
+        `SELECT COUNT(*) as count FROM task_assignees WHERE task_id = ? AND user_id = ?`,
+        {
+          replacements: [taskId, this.currentUserId]
+        }
+      );
+
+      const isAssigned =
+        assigneeCheck[0]?.count > 0 || task.assignedTo === this.currentUserId;
+
+      if (task.createdBy !== this.currentUserId && !isAssigned) {
         throw new createError.Forbidden(
           "You do not have permission to update this task"
         );
@@ -539,8 +583,16 @@ class TasksService {
         dbUpdateData.alertEnabled = updateData.alertEnabled;
       if (updateData.alertDate !== undefined)
         dbUpdateData.alertDate = updateData.alertDate;
-      if (updateData.assignedTo !== undefined)
-        dbUpdateData.assignedTo = updateData.assignedTo;
+      // Handle assignedTo separately for multiple assignees support
+      let assignedToValue = undefined;
+      if (updateData.assignedTo !== undefined) {
+        assignedToValue =
+          Array.isArray(updateData.assignedTo) &&
+          updateData.assignedTo.length > 0
+            ? updateData.assignedTo[0] // Use first for backward compatibility
+            : updateData.assignedTo || null;
+        dbUpdateData.assignedTo = assignedToValue;
+      }
 
       // Update task
       await task.update(dbUpdateData).catch(err => {
@@ -549,6 +601,50 @@ class TasksService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+      // Update task_assignees if assignedTo was provided
+      if (updateData.assignedTo !== undefined) {
+        // Delete existing assignees
+        await this.mysqlConnection.query(
+          `DELETE FROM task_assignees WHERE task_id = ?`,
+          {
+            replacements: [taskId]
+          }
+        );
+
+        // Insert new assignees
+        if (
+          Array.isArray(updateData.assignedTo) &&
+          updateData.assignedTo.length > 0
+        ) {
+          const assigneeInserts = updateData.assignedTo.map(userId => ({
+            task_id: taskId,
+            user_id: userId
+          }));
+
+          if (assigneeInserts.length > 0) {
+            await this.mysqlConnection.query(
+              `INSERT INTO task_assignees (task_id, user_id) VALUES ${assigneeInserts
+                .map(() => "(?, ?)")
+                .join(", ")}`,
+              {
+                replacements: assigneeInserts.flatMap(a => [
+                  a.task_id,
+                  a.user_id
+                ])
+              }
+            );
+          }
+        } else if (assignedToValue) {
+          // Single assignee
+          await this.mysqlConnection.query(
+            `INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)`,
+            {
+              replacements: [taskId, assignedToValue]
+            }
+          );
+        }
+      }
 
       return task;
     } catch (err) {

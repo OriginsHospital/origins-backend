@@ -23,10 +23,26 @@ SELECT
         'fullName', u_created.fullName,
         'email', u_created.email
     ) AS createdByDetails,
-    JSON_OBJECT(
-        'id', u_assigned.id,
-        'fullName', u_assigned.fullName,
-        'email', u_assigned.email
+    COALESCE(
+        (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                'id', u_assignee.id,
+                'fullName', u_assignee.fullName,
+                'email', u_assignee.email
+            ))
+            FROM task_assignees ta
+            INNER JOIN users u_assignee ON u_assignee.id = ta.user_id
+            WHERE ta.task_id = t.id
+        ),
+        CASE 
+            WHEN t.assigned_to IS NOT NULL THEN
+                JSON_ARRAY(JSON_OBJECT(
+                    'id', u_assigned.id,
+                    'fullName', u_assigned.fullName,
+                    'email', u_assigned.email
+                ))
+            ELSE JSON_ARRAY()
+        END
     ) AS assignedToDetails
 FROM tasks t
 INNER JOIN users u_created ON u_created.id = t.created_by
@@ -72,7 +88,7 @@ FROM tasks t
 WHERE 1=1`;
 
   if (hasUserIdFilter) {
-    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId)`;
+    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = :userId))`;
   }
 
   if (hasStatusFilter) {
@@ -110,10 +126,26 @@ SELECT
         'fullName', u_created.fullName,
         'email', u_created.email
     ) AS createdByDetails,
-    JSON_OBJECT(
-        'id', u_assigned.id,
-        'fullName', u_assigned.fullName,
-        'email', u_assigned.email
+    COALESCE(
+        (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                'id', u_assignee.id,
+                'fullName', u_assignee.fullName,
+                'email', u_assignee.email
+            ))
+            FROM task_assignees ta
+            INNER JOIN users u_assignee ON u_assignee.id = ta.user_id
+            WHERE ta.task_id = t.id
+        ),
+        CASE 
+            WHEN t.assigned_to IS NOT NULL THEN
+                JSON_ARRAY(JSON_OBJECT(
+                    'id', u_assigned.id,
+                    'fullName', u_assigned.fullName,
+                    'email', u_assigned.email
+                ))
+            ELSE JSON_ARRAY()
+        END
     ) AS assignedToDetails,
     COALESCE(
         (
