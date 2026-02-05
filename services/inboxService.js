@@ -4,7 +4,9 @@ const MySqlConnection = require("../connections/mysql_connection");
 const { Sequelize } = require("sequelize");
 const {
   getTicketCommentsForInboxQuery,
-  getTicketCommentsCountQuery
+  getTicketCommentsCountQuery,
+  getTicketAssignmentNotificationsQuery,
+  getTicketAssignmentNotificationsCountQuery
 } = require("../queries/inbox_queries");
 const { getAllAlerts } = require("./alertsService");
 
@@ -26,6 +28,7 @@ class InboxService {
       const results = {
         alerts: [],
         ticketComments: [],
+        ticketAssignments: [],
         pagination: {
           total: 0,
           page: parseInt(page),
@@ -82,6 +85,42 @@ class InboxService {
           limit: parseInt(limit),
           totalPages
         };
+      }
+
+      // Get ticket assignment notifications if type is 'all' or 'assignments'
+      if (type === "all" || type === "assignments") {
+        try {
+          // Get ticket assignment notifications
+          const assignments = await this.mysqlConnection.query(
+            getTicketAssignmentNotificationsQuery,
+            {
+              type: Sequelize.QueryTypes.SELECT,
+              replacements: {
+                userId: this.currentUserId,
+                limit: parseInt(limit),
+                offset: parseInt(offset)
+              }
+            }
+          );
+
+          // Get total count
+          const countResult = await this.mysqlConnection.query(
+            getTicketAssignmentNotificationsCountQuery,
+            {
+              type: Sequelize.QueryTypes.SELECT,
+              replacements: {
+                userId: this.currentUserId
+              }
+            }
+          );
+
+          results.ticketAssignments = assignments || [];
+        } catch (assignmentError) {
+          console.error("Error fetching ticket assignments:", assignmentError);
+          // Don't fail the entire request if notifications table doesn't exist yet
+          // This allows graceful degradation if migration hasn't been run
+          results.ticketAssignments = [];
+        }
       }
 
       return results;

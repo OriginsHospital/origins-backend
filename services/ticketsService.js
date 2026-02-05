@@ -805,6 +805,67 @@ class TicketsService {
         // Don't throw - activity logging failure shouldn't prevent ticket creation
       }
 
+      // Create notifications for all assignees (non-blocking)
+      try {
+        // Get creator name for notification message
+        const [creatorResult] = await this.mysqlConnection.query(
+          `SELECT fullName FROM users WHERE id = ?`,
+          {
+            replacements: [this.currentUserId],
+            type: Sequelize.QueryTypes.SELECT
+          }
+        );
+        const creatorName = creatorResult?.[0]?.fullName || "Someone";
+
+        // Determine all assignees (handle both single and multiple)
+        const assigneeIds = Array.isArray(assignedTo)
+          ? assignedTo
+          : [assignedToNumber];
+
+        // Create notification for each assignee
+        const notificationRecords = assigneeIds
+          .filter(id => id && id > 0) // Filter out invalid IDs
+          .map(assigneeId => ({
+            user_id: assigneeId,
+            type: "ticket_assigned",
+            title: "New Ticket Assigned",
+            message: `${creatorName} assigned you a new ticket: ${createdTicket.ticketCode ||
+              createdTicket.ticket_code}`,
+            related_entity_type: "ticket",
+            related_entity_id: createdTicket.id,
+            is_read: false
+          }));
+
+        if (notificationRecords.length > 0) {
+          await this.mysqlConnection.query(
+            `INSERT INTO notifications (user_id, type, title, message, related_entity_type, related_entity_id, is_read) 
+             VALUES ${notificationRecords
+               .map(() => "(?, ?, ?, ?, ?, ?, ?)")
+               .join(", ")}`,
+            {
+              replacements: notificationRecords.flatMap(record => [
+                record.user_id,
+                record.type,
+                record.title,
+                record.message,
+                record.related_entity_type,
+                record.related_entity_id,
+                record.is_read
+              ])
+            }
+          );
+          console.log(
+            `Created ${notificationRecords.length} notification(s) for ticket ${createdTicket.id}`
+          );
+        }
+      } catch (notificationError) {
+        console.error(
+          "Error while creating notifications (non-critical):",
+          notificationError
+        );
+        // Don't throw - notification failure shouldn't prevent ticket creation
+      }
+
       console.log("Ticket created successfully:", createdTicket.id);
       return createdTicket;
     } catch (error) {
