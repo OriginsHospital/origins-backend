@@ -56,7 +56,13 @@ const createTaskSchema = Joi.object({
   category: Joi.string()
     .max(100)
     .allow(null, "")
-    .optional()
+    .optional(),
+  priority: Joi.string()
+    .valid("LOW", "MEDIUM", "HIGH")
+    .default("MEDIUM")
+    .messages({
+      "any.only": "Priority must be LOW, MEDIUM, or HIGH"
+    })
 });
 
 const updateTaskSchema = Joi.object({
@@ -109,6 +115,9 @@ const updateTaskSchema = Joi.object({
   category: Joi.string()
     .max(100)
     .allow(null, "")
+    .optional(),
+  priority: Joi.string()
+    .valid("LOW", "MEDIUM", "HIGH")
     .optional()
 });
 

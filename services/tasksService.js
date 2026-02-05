@@ -544,6 +544,7 @@ class TasksService {
         pendingOn,
         remarks,
         status = "Pending",
+        priority = "MEDIUM",
         startDate,
         endDate,
         alertEnabled = false,
@@ -606,12 +607,15 @@ class TasksService {
                   createdBy: this.currentUserId
                 };
 
-                // Add department and category if provided
+                // Add department, category, and priority if provided
                 if (department !== undefined) {
                   taskData.department = department || null;
                 }
                 if (category !== undefined) {
                   taskData.category = category || null;
+                }
+                if (priority !== undefined) {
+                  taskData.priority = priority || null;
                 }
 
                 const task = await TasksModel.create(taskData, {
@@ -795,6 +799,12 @@ class TasksService {
         dbUpdateData.alertEnabled = updateData.alertEnabled;
       if (updateData.alertDate !== undefined)
         dbUpdateData.alertDate = updateData.alertDate;
+      if (updateData.department !== undefined)
+        dbUpdateData.department = updateData.department || null;
+      if (updateData.category !== undefined)
+        dbUpdateData.category = updateData.category || null;
+      if (updateData.priority !== undefined)
+        dbUpdateData.priority = updateData.priority || null;
       // Handle assignedTo separately for multiple assignees support
       let assignedToValue = undefined;
       if (updateData.assignedTo !== undefined) {

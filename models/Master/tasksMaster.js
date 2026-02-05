@@ -83,6 +83,11 @@ const TasksModel = MySqlConnection._instance.define(
       type: Sequelize.DataTypes.STRING(100),
       allowNull: true
     },
+    priority: {
+      type: Sequelize.DataTypes.ENUM("LOW", "MEDIUM", "HIGH"),
+      allowNull: true,
+      defaultValue: "MEDIUM"
+    },
     createdAt: {
       type: Sequelize.DataTypes.DATE,
       allowNull: false,
