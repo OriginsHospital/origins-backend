@@ -422,33 +422,48 @@ class TasksService {
                 );
 
                 // If multiple assignees provided, insert into task_assignees table
-                if (Array.isArray(assignedTo) && assignedTo.length > 0) {
-                  const assigneeInserts = assignedTo.map(userId => ({
-                    task_id: task.id,
-                    user_id: userId
-                  }));
+                try {
+                  if (Array.isArray(assignedTo) && assignedTo.length > 0) {
+                    const assigneeInserts = assignedTo.map(userId => ({
+                      task_id: task.id,
+                      user_id: userId
+                    }));
 
-                  await this.mysqlConnection.query(
-                    `INSERT INTO task_assignees (task_id, user_id) VALUES ${assigneeInserts
-                      .map(() => "(?, ?)")
-                      .join(", ")}`,
-                    {
-                      replacements: assigneeInserts.flatMap(a => [
-                        a.task_id,
-                        a.user_id
-                      ]),
-                      transaction: t
-                    }
-                  );
-                } else if (assignedToValue) {
-                  // Single assignee - also add to task_assignees for consistency
-                  await this.mysqlConnection.query(
-                    `INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)`,
-                    {
-                      replacements: [task.id, assignedToValue],
-                      transaction: t
-                    }
-                  );
+                    await this.mysqlConnection.query(
+                      `INSERT INTO task_assignees (task_id, user_id) VALUES ${assigneeInserts
+                        .map(() => "(?, ?)")
+                        .join(", ")}`,
+                      {
+                        replacements: assigneeInserts.flatMap(a => [
+                          a.task_id,
+                          a.user_id
+                        ]),
+                        transaction: t
+                      }
+                    );
+                  } else if (assignedToValue) {
+                    // Single assignee - also add to task_assignees for consistency
+                    await this.mysqlConnection.query(
+                      `INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)`,
+                      {
+                        replacements: [task.id, assignedToValue],
+                        transaction: t
+                      }
+                    );
+                  }
+                } catch (assigneeErr) {
+                  // If task_assignees table doesn't exist, log warning but don't fail task creation
+                  if (
+                    assigneeErr.original?.code === "ER_NO_SUCH_TABLE" ||
+                    assigneeErr.message?.includes("task_assignees")
+                  ) {
+                    console.warn(
+                      "Warning: task_assignees table not found. Please run migration 030_create_task_assignees_table.sql. Task created without assignee tracking."
+                    );
+                  } else {
+                    // Re-throw other errors
+                    throw assigneeErr;
+                  }
                 }
 
                 console.log(
