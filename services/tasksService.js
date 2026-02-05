@@ -256,23 +256,135 @@ class TasksService {
         replacements.search = searchValue;
       }
 
-      // Get tasks
-      const tasks = await this.mysqlConnection.query(query, {
-        type: Sequelize.QueryTypes.SELECT,
-        replacements
-      });
+      // Get tasks - wrap in try-catch to handle potential table errors
+      let tasks = [];
+      try {
+        tasks = await this.mysqlConnection.query(query, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements
+        });
+        console.log("Tasks query result:", tasks);
+        console.log("Tasks count:", tasks?.length || 0);
+      } catch (queryErr) {
+        console.error("Error executing tasks query:", queryErr);
+        // If error is due to missing table, try simpler query
+        if (
+          queryErr.original?.code === "ER_NO_SUCH_TABLE" ||
+          queryErr.message?.includes("task_assignees")
+        ) {
+          console.warn("task_assignees table not found, using fallback query");
+          // Use simpler query without task_assignees
+          const fallbackQuery = `
+            SELECT 
+                t.id,
+                t.task_code,
+                t.task_name,
+                t.description,
+                t.pending_on,
+                t.remarks,
+                t.status,
+                t.start_date,
+                t.end_date,
+                t.alert_enabled,
+                t.alert_date,
+                t.created_by,
+                t.assigned_to,
+                t.created_at,
+                t.updated_at,
+                JSON_OBJECT(
+                    'id', u_created.id,
+                    'fullName', u_created.fullName,
+                    'email', u_created.email
+                ) AS createdByDetails,
+                CASE 
+                    WHEN t.assigned_to IS NOT NULL THEN
+                        JSON_ARRAY(JSON_OBJECT(
+                            'id', u_assigned.id,
+                            'fullName', u_assigned.fullName,
+                            'email', u_assigned.email
+                        ))
+                    ELSE JSON_ARRAY()
+                END AS assignedToDetails
+            FROM tasks t
+            INNER JOIN users u_created ON u_created.id = t.created_by
+            LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to
+            WHERE 1=1
+            ${
+              hasUserIdFilter
+                ? " AND (t.created_by = :userId OR t.assigned_to = :userId)"
+                : ""
+            }
+            ${hasStatusFilter ? " AND t.status = :status" : ""}
+            ${
+              hasSearchFilter
+                ? " AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%') OR t.task_code LIKE CONCAT('%', :search, '%'))"
+                : ""
+            }
+            ORDER BY 
+                CASE 
+                    WHEN t.status = 'Pending' THEN 1
+                    WHEN t.status = 'In Progress' THEN 2
+                    WHEN t.status = 'Completed' THEN 3
+                    WHEN t.status = 'Cancelled' THEN 4
+                END,
+                t.created_at DESC
+            LIMIT :limit OFFSET :offset;
+          `;
+          tasks = await this.mysqlConnection.query(fallbackQuery, {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements
+          });
+          console.log("Fallback query result:", tasks);
+        } else {
+          throw queryErr;
+        }
+      }
 
-      console.log("Tasks query result:", tasks);
-      console.log("Tasks count:", tasks?.length || 0);
-
-      // Get total count
-      const countResult = await this.mysqlConnection.query(countQuery, {
-        type: Sequelize.QueryTypes.SELECT,
-        replacements:
-          hasStatusFilter || hasSearchFilter || hasUserIdFilter
-            ? replacements
-            : {}
-      });
+      // Get total count - wrap in try-catch to handle potential table errors
+      let countResult = [];
+      try {
+        countResult = await this.mysqlConnection.query(countQuery, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements:
+            hasStatusFilter || hasSearchFilter || hasUserIdFilter
+              ? replacements
+              : {}
+        });
+      } catch (countErr) {
+        console.error("Error executing count query:", countErr);
+        // If error is due to missing table, use simpler count query
+        if (
+          countErr.original?.code === "ER_NO_SUCH_TABLE" ||
+          countErr.message?.includes("task_assignees")
+        ) {
+          console.warn("Using fallback count query");
+          const fallbackCountQuery = `
+            SELECT COUNT(*) as total
+            FROM tasks t
+            WHERE 1=1
+            ${
+              hasUserIdFilter
+                ? " AND (t.created_by = :userId OR t.assigned_to = :userId)"
+                : ""
+            }
+            ${hasStatusFilter ? " AND t.status = :status" : ""}
+            ${
+              hasSearchFilter
+                ? " AND (t.task_name LIKE CONCAT('%', :search, '%') OR t.description LIKE CONCAT('%', :search, '%') OR t.pending_on LIKE CONCAT('%', :search, '%') OR t.task_code LIKE CONCAT('%', :search, '%'))"
+                : ""
+            };
+          `;
+          countResult = await this.mysqlConnection.query(fallbackCountQuery, {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements:
+              hasStatusFilter || hasSearchFilter || hasUserIdFilter
+                ? replacements
+                : {}
+          });
+        } else {
+          throw countErr;
+        }
+      }
 
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);

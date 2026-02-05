@@ -76,7 +76,7 @@ FROM tasks t
 WHERE 1=1`;
 
   if (hasUserIdFilter) {
-    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = :userId))`;
+    query += ` AND (t.created_by = :userId OR t.assigned_to = :userId)`;
   }
 
   if (hasStatusFilter) {
