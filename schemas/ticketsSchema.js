@@ -7,11 +7,19 @@ const createTicketSchema = Joi.object({
     .messages({
       "any.required": "Task description is required"
     }),
-  assignedTo: Joi.number()
-    .integer()
-    .required()
+  assignedTo: Joi.alternatives()
+    .try(
+      Joi.number()
+        .integer()
+        .required(),
+      Joi.array()
+        .items(Joi.number().integer())
+        .min(1)
+        .required()
+    )
     .messages({
-      "any.required": "Please assign the ticket to a staff member"
+      "any.required": "Please assign the ticket to a staff member",
+      "alternatives.match": "assignedTo must be a number or an array of numbers"
     }),
   priority: Joi.string()
     .valid("LOW", "MEDIUM", "HIGH")
@@ -48,8 +56,13 @@ const updateTicketSchema = Joi.object({
   taskDescription: Joi.string()
     .min(1)
     .optional(),
-  assignedTo: Joi.number()
-    .integer()
+  assignedTo: Joi.alternatives()
+    .try(
+      Joi.number().integer(),
+      Joi.array()
+        .items(Joi.number().integer())
+        .min(1)
+    )
     .optional(),
   priority: Joi.string()
     .valid("LOW", "MEDIUM", "HIGH")

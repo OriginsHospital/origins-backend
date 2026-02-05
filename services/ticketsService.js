@@ -472,8 +472,14 @@ class TicketsService {
         tags = []
       } = validatedPayload;
 
-      // Ensure assignedTo is a number
-      const assignedToNumber = parseInt(assignedTo, 10);
+      // Handle multiple assignees: if array, use first for backward compatibility, otherwise use as-is
+      let assignedToNumber;
+      if (Array.isArray(assignedTo) && assignedTo.length > 0) {
+        assignedToNumber = parseInt(assignedTo[0], 10);
+      } else {
+        assignedToNumber = parseInt(assignedTo, 10);
+      }
+
       if (isNaN(assignedToNumber)) {
         throw new createError.BadRequest(
           "Invalid assignedTo value. Must be a valid user ID."
