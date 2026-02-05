@@ -346,6 +346,17 @@ class TicketsService {
     let userIdFilter = this.currentUserId;
     let finalAssignedTo = null; // Ignore assignedTo filter to enforce user-level security
 
+    console.log("Getting tickets with filters:", {
+      status: status || null,
+      priority: priority || null,
+      assignedTo: finalAssignedTo || null,
+      userId: userIdFilter,
+      search: search || null,
+      page,
+      limit,
+      offset: (page - 1) * limit
+    });
+
     const tickets = await this.mysqlConnection
       .query(getTicketsQuery, {
         type: Sequelize.QueryTypes.SELECT,
@@ -365,6 +376,21 @@ class TicketsService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+    console.log("Tickets query returned:", tickets?.length || 0, "tickets");
+    if (tickets && tickets.length > 0) {
+      console.log(
+        "Sample ticket IDs:",
+        tickets
+          .slice(0, 3)
+          .map(t => ({
+            id: t.id,
+            code: t.ticket_code,
+            createdBy: t.created_by,
+            assignedTo: t.assigned_to
+          }))
+      );
+    }
 
     const countResult = await this.mysqlConnection
       .query(getTicketsCountQuery, {
@@ -554,7 +580,11 @@ class TicketsService {
                   "Ticket created successfully:",
                   ticket.id,
                   "with code:",
-                  ticketCode
+                  ticketCode,
+                  "assignedTo:",
+                  assignedToNumber,
+                  "createdBy:",
+                  this.currentUserId
                 );
                 return ticket;
               } catch (createErr) {
