@@ -16,6 +16,9 @@ SELECT
     t.alert_date,
     t.created_by,
     t.assigned_to,
+    t.department,
+    t.category,
+    t.priority,
     t.created_at,
     t.updated_at,
     JSON_OBJECT(
@@ -109,6 +112,7 @@ SELECT
     t.assigned_to,
     t.department,
     t.category,
+    t.priority,
     t.created_at,
     t.updated_at,
     JSON_OBJECT(
