@@ -107,6 +107,8 @@ SELECT
     t.alert_date,
     t.created_by,
     t.assigned_to,
+    t.department,
+    t.category,
     t.created_at,
     t.updated_at,
     JSON_OBJECT(
@@ -114,27 +116,15 @@ SELECT
         'fullName', u_created.fullName,
         'email', u_created.email
     ) AS createdByDetails,
-    COALESCE(
-        (
-            SELECT JSON_ARRAYAGG(JSON_OBJECT(
-                'id', u_assignee.id,
-                'fullName', u_assignee.fullName,
-                'email', u_assignee.email
+    CASE 
+        WHEN t.assigned_to IS NOT NULL THEN
+            JSON_ARRAY(JSON_OBJECT(
+                'id', u_assigned.id,
+                'fullName', u_assigned.fullName,
+                'email', u_assigned.email
             ))
-            FROM task_assignees ta
-            INNER JOIN users u_assignee ON u_assignee.id = ta.user_id
-            WHERE ta.task_id = t.id
-        ),
-        CASE 
-            WHEN t.assigned_to IS NOT NULL THEN
-                JSON_ARRAY(JSON_OBJECT(
-                    'id', u_assigned.id,
-                    'fullName', u_assigned.fullName,
-                    'email', u_assigned.email
-                ))
-            ELSE JSON_ARRAY()
-        END
-    ) AS assignedToDetails,
+        ELSE JSON_ARRAY()
+    END AS assignedToDetails,
     COALESCE(
         (
             SELECT JSON_ARRAYAGG(comment_data)

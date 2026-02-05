@@ -417,19 +417,93 @@ class TasksService {
       throw new createError.BadRequest("Task ID is required");
     }
 
-    const result = await this.mysqlConnection
-      .query(getTaskDetailsQuery, {
+    let result = [];
+    try {
+      result = await this.mysqlConnection.query(getTaskDetailsQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           taskId: parseInt(taskId)
         }
-      })
-      .catch(err => {
-        console.log("Error while getting task details", err);
+      });
+    } catch (err) {
+      console.log("Error while getting task details", err);
+      // If error is due to missing columns, try simpler query
+      if (
+        err.original?.code === "ER_BAD_FIELD_ERROR" ||
+        err.message?.includes("department") ||
+        err.message?.includes("category")
+      ) {
+        console.warn(
+          "department/category columns not found, using fallback query"
+        );
+        const fallbackQuery = `
+          SELECT 
+              t.id,
+              t.task_code,
+              t.task_name,
+              t.description,
+              t.pending_on,
+              t.remarks,
+              t.status,
+              t.start_date,
+              t.end_date,
+              t.alert_enabled,
+              t.alert_date,
+              t.created_by,
+              t.assigned_to,
+              t.created_at,
+              t.updated_at,
+              JSON_OBJECT(
+                  'id', u_created.id,
+                  'fullName', u_created.fullName,
+                  'email', u_created.email
+              ) AS createdByDetails,
+              CASE 
+                  WHEN t.assigned_to IS NOT NULL THEN
+                      JSON_ARRAY(JSON_OBJECT(
+                          'id', u_assigned.id,
+                          'fullName', u_assigned.fullName,
+                          'email', u_assigned.email
+                      ))
+                  ELSE JSON_ARRAY()
+              END AS assignedToDetails,
+              COALESCE(
+                  (
+                      SELECT JSON_ARRAYAGG(comment_data)
+                      FROM (
+                          SELECT JSON_OBJECT(
+                              'commentId', tc.id,
+                              'id', tc.id,
+                              'commentedBy', tc.commentedBy,
+                              'commentedByName', (SELECT u.fullName FROM users u WHERE u.id = tc.commentedBy),
+                              'commentedByRole', COALESCE((SELECT rm.name FROM users u INNER JOIN role_master rm ON rm.id = u.roleId WHERE u.id = tc.commentedBy), NULL),
+                              'commentText', tc.commentText,
+                              'createdAt', tc.createdAt
+                          ) AS comment_data
+                          FROM task_comments tc
+                          WHERE tc.taskId = t.id
+                          ORDER BY tc.createdAt DESC  
+                      ) ordered_comments
+                  ), 
+                  JSON_ARRAY()
+              ) AS comments
+          FROM tasks t
+          INNER JOIN users u_created ON u_created.id = t.created_by
+          LEFT JOIN users u_assigned ON u_assigned.id = t.assigned_to
+          WHERE t.id = :taskId;
+        `;
+        result = await this.mysqlConnection.query(fallbackQuery, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            taskId: parseInt(taskId)
+          }
+        });
+      } else {
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
-      });
+      }
+    }
 
     if (!result || result.length === 0) {
       throw new createError.NotFound("Task not found");
