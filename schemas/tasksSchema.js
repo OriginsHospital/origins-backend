@@ -48,6 +48,14 @@ const createTaskSchema = Joi.object({
         .items(Joi.number().integer())
         .min(1)
     )
+    .optional(),
+  department: Joi.string()
+    .max(100)
+    .allow(null, "")
+    .optional(),
+  category: Joi.string()
+    .max(100)
+    .allow(null, "")
     .optional()
 });
 
@@ -93,6 +101,14 @@ const updateTaskSchema = Joi.object({
         .items(Joi.number().integer())
         .min(1)
     )
+    .optional(),
+  department: Joi.string()
+    .max(100)
+    .allow(null, "")
+    .optional(),
+  category: Joi.string()
+    .max(100)
+    .allow(null, "")
     .optional()
 });
 

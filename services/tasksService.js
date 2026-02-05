@@ -474,7 +474,9 @@ class TasksService {
         endDate,
         alertEnabled = false,
         alertDate,
-        assignedTo
+        assignedTo,
+        department,
+        category
       } = validatedPayload;
 
       // Generate task code within a transaction (same format as tickets)
@@ -515,23 +517,32 @@ class TasksService {
                     ? assignedTo[0] // Use first assignee for backward compatibility with existing field
                     : assignedTo || null;
 
-                const task = await TasksModel.create(
-                  {
-                    taskCode,
-                    taskName,
-                    description: description || null,
-                    pendingOn: pendingOn || null,
-                    remarks: remarks || null,
-                    status,
-                    startDate: startDate || null,
-                    endDate: endDate || null,
-                    alertEnabled: alertEnabled || false,
-                    alertDate: alertDate || null,
-                    assignedTo: assignedToValue,
-                    createdBy: this.currentUserId
-                  },
-                  { transaction: t }
-                );
+                const taskData = {
+                  taskCode,
+                  taskName,
+                  description: description || null,
+                  pendingOn: pendingOn || null,
+                  remarks: remarks || null,
+                  status,
+                  startDate: startDate || null,
+                  endDate: endDate || null,
+                  alertEnabled: alertEnabled || false,
+                  alertDate: alertDate || null,
+                  assignedTo: assignedToValue,
+                  createdBy: this.currentUserId
+                };
+
+                // Add department and category if provided
+                if (department !== undefined) {
+                  taskData.department = department || null;
+                }
+                if (category !== undefined) {
+                  taskData.category = category || null;
+                }
+
+                const task = await TasksModel.create(taskData, {
+                  transaction: t
+                });
 
                 // If multiple assignees provided, insert into task_assignees table
                 try {

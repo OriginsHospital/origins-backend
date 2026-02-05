@@ -75,6 +75,14 @@ const TasksModel = MySqlConnection._instance.define(
       allowNull: true,
       field: "assigned_to"
     },
+    department: {
+      type: Sequelize.DataTypes.STRING(100),
+      allowNull: true
+    },
+    category: {
+      type: Sequelize.DataTypes.STRING(100),
+      allowNull: true
+    },
     createdAt: {
       type: Sequelize.DataTypes.DATE,
       allowNull: false,
