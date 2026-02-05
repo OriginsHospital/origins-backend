@@ -381,15 +381,25 @@ class TicketsService {
     if (tickets && tickets.length > 0) {
       console.log(
         "Sample ticket IDs:",
-        tickets
-          .slice(0, 3)
-          .map(t => ({
-            id: t.id,
-            code: t.ticket_code,
-            createdBy: t.created_by,
-            assignedTo: t.assigned_to
-          }))
+        tickets.slice(0, 3).map(t => ({
+          id: t.id,
+          code: t.ticket_code,
+          createdBy: t.created_by,
+          assignedTo: t.assigned_to,
+          status: t.status,
+          priority: t.priority
+        }))
       );
+    } else {
+      console.log("No tickets returned. Query filters:", {
+        status: status || null,
+        priority: priority || null,
+        userId: userIdFilter,
+        search: search || null,
+        page,
+        limit,
+        offset
+      });
     }
 
     const countResult = await this.mysqlConnection
