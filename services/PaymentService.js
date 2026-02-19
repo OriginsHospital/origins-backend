@@ -1235,7 +1235,256 @@ class PaymentService extends BaseService {
   }
 
   async returnPharmacyItemService() {
-    return Constants.DATA_UPDATED_SUCCESS;
+    let returnInformation = await returnPharmacyItemSchema.validateAsync(
+      this._request.body
+    );
+
+    const {
+      patientId,
+      orderId,
+      totalAmount,
+      type,
+      returnDetails,
+      refundMethod
+    } = returnInformation;
+
+    // Validate order exists and is paid
+    const orderDetails = await OrderDetailsMasterModel.findOne({
+      where: {
+        orderId: orderId,
+        paymentStatus: "PAID",
+        productType: "PHARMACY"
+      }
+    }).catch(err => {
+      console.log("error while fetching order details", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(orderDetails)) {
+      throw new createError.BadRequest(Constants.ORDER_DETAILS_DOES_NOT_EXIST);
+    }
+
+    // Start transaction
+    const defaultDbTransaction = await this.mySqlConnection.transaction();
+    const stockTransaction = await this.stockMySqlConnection.transaction();
+
+    try {
+      // Process each return detail
+      await Promise.all(
+        returnDetails.map(async returnDetail => {
+          const { refId, itemId, returnInfo } = returnDetail;
+
+          // Calculate total return quantity for this refId
+          const totalReturnQty = returnInfo.reduce(
+            (sum, info) => sum + (info.returnQuantity || 0),
+            0
+          );
+
+          if (totalReturnQty <= 0) {
+            return; // Skip if no quantity to return
+          }
+
+          // Update returnQuantity in line bills associations
+          let lineBillModel;
+          if (type === "Consultation") {
+            lineBillModel = consultationAppointmentLineBillsAssociations;
+          } else if (type === "Treatment") {
+            lineBillModel = treatmentAppointmentLineBillsAssociations;
+          } else {
+            throw new createError.BadRequest(Constants.INVALID_OPERATION);
+          }
+
+          // Get current return quantity and add to it
+          const currentLineBill = await lineBillModel
+            .findOne({
+              where: { id: refId },
+              transaction: defaultDbTransaction
+            })
+            .catch(err => {
+              console.log("Error while fetching line bill", err);
+              throw new createError.InternalServerError(
+                Constants.SOMETHING_ERROR_OCCURRED
+              );
+            });
+
+          if (lodash.isEmpty(currentLineBill)) {
+            throw new createError.BadRequest(
+              "Line bill not found for refId: " + refId
+            );
+          }
+
+          const currentReturnQty = currentLineBill.returnQuantity || 0;
+          const newReturnQty = currentReturnQty + totalReturnQty;
+          const purchaseQty = currentLineBill.purchaseQuantity || 0;
+
+          // Validate return quantity doesn't exceed purchase quantity
+          if (newReturnQty > purchaseQty) {
+            throw new createError.BadRequest(
+              `Return quantity (${newReturnQty}) cannot exceed purchase quantity (${purchaseQty}) for item ${refId}`
+            );
+          }
+
+          // Update return quantity in line bills
+          await lineBillModel
+            .update(
+              {
+                returnQuantity: newReturnQty
+              },
+              {
+                where: { id: refId },
+                transaction: defaultDbTransaction
+              }
+            )
+            .catch(err => {
+              console.log("Error while updating return quantity", err);
+              throw new createError.InternalServerError(
+                Constants.SOMETHING_ERROR_OCCURRED
+              );
+            });
+
+          // Update stock - add back quantities to GRN
+          await Promise.all(
+            returnInfo.map(async info => {
+              const { grnId, returnQuantity } = info;
+
+              if (!grnId || returnQuantity <= 0) {
+                return;
+              }
+
+              // Add quantity back to GRN stock
+              await GrnItemsAssociationsModel.update(
+                {
+                  totalQuantity: Sequelize.literal(
+                    `totalQuantity + ${returnQuantity}`
+                  )
+                },
+                {
+                  where: {
+                    grnId: grnId,
+                    itemId: itemId
+                  },
+                  transaction: stockTransaction
+                }
+              ).catch(err => {
+                console.log("Error while updating GRN stock", err);
+                throw new createError.InternalServerError(
+                  Constants.SOMETHING_ERROR_OCCURRED
+                );
+              });
+            })
+          );
+        })
+      );
+
+      // Update orderDetails JSON to reflect returned quantities
+      let orderDetailsJson = orderDetails.orderDetails;
+      if (typeof orderDetailsJson === "string") {
+        orderDetailsJson = JSON.parse(orderDetailsJson);
+      }
+
+      // Update return quantities in orderDetails JSON
+      returnDetails.forEach(returnDetail => {
+        const { refId, returnInfo } = returnDetail;
+        const totalReturnQty = returnInfo.reduce(
+          (sum, info) => sum + (info.returnQuantity || 0),
+          0
+        );
+
+        const orderItem = orderDetailsJson.find(item => item.refId === refId);
+        if (orderItem) {
+          // Update returnedQuantity in purchaseDetails
+          if (
+            orderItem.purchaseDetails &&
+            Array.isArray(orderItem.purchaseDetails)
+          ) {
+            orderItem.purchaseDetails.forEach((purchaseDetail, index) => {
+              const returnInfoForGrn = returnInfo.find(
+                info => info.grnId === purchaseDetail.grnId
+              );
+              if (returnInfoForGrn) {
+                const currentReturnedQty = purchaseDetail.returnedQuantity || 0;
+                purchaseDetail.returnedQuantity =
+                  currentReturnedQty + returnInfoForGrn.returnQuantity;
+                // Update usedQuantity (reduce it by returned quantity)
+                const currentUsedQty =
+                  purchaseDetail.usedQuantity ||
+                  purchaseDetail.initialUsedQuantity ||
+                  0;
+                purchaseDetail.usedQuantity = Math.max(
+                  0,
+                  currentUsedQty - returnInfoForGrn.returnQuantity
+                );
+              }
+            });
+          }
+        }
+      });
+
+      // Save updated orderDetails
+      await OrderDetailsMasterModel.update(
+        {
+          orderDetails: JSON.stringify(orderDetailsJson)
+        },
+        {
+          where: { orderId: orderId },
+          transaction: defaultDbTransaction
+        }
+      ).catch(err => {
+        console.log("Error while updating orderDetails", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      // Create return record
+      await PatientPharmacyPurchaseReturnsModel.create(
+        {
+          patientId,
+          orderId,
+          returnedDate: moment()
+            .tz("Asia/Kolkata")
+            .format("YYYY-MM-DD HH:mm:ss"),
+          type: type,
+          returnDetails: JSON.stringify(returnDetails),
+          totalAmount,
+          refundMethod: refundMethod || "Cash"
+        },
+        {
+          transaction: defaultDbTransaction
+        }
+      ).catch(err => {
+        console.log("Error while inserting return record", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      // Commit transactions
+      await defaultDbTransaction.commit();
+      await stockTransaction.commit();
+
+      return Constants.DATA_UPDATED_SUCCESS;
+    } catch (err) {
+      // Rollback transactions on error
+      await defaultDbTransaction.rollback().catch(rollbackErr => {
+        console.log("Error during rollback", rollbackErr);
+      });
+      await stockTransaction.rollback().catch(rollbackErr => {
+        console.log("Error during stock rollback", rollbackErr);
+      });
+
+      if (err.isJoi) {
+        throw new createError.BadRequest(err.message);
+      }
+      if (err.statusCode) {
+        throw err;
+      }
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
   }
 
   async consultationFeeOrderIdService(orderData, orderDetailsResponse) {
