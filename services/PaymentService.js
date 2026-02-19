@@ -1361,13 +1361,24 @@ class PaymentService extends BaseService {
       // Process each return detail
       await Promise.all(
         returnDetails.map(async returnDetail => {
-          const { refId, itemId, returnInfo } = returnDetail;
+          const { refId, itemId, returnInfo, returnQuantity } = returnDetail;
 
-          // Calculate total return quantity for this refId
-          const totalReturnQty = returnInfo.reduce(
-            (sum, info) => sum + (info.returnQuantity || 0),
-            0
-          );
+          // Calculate total return quantity - use returnQuantity directly if returnInfo is not provided
+          let totalReturnQty = 0;
+          if (
+            returnInfo &&
+            Array.isArray(returnInfo) &&
+            returnInfo.length > 0
+          ) {
+            // If returnInfo is provided, use it (legacy support)
+            totalReturnQty = returnInfo.reduce(
+              (sum, info) => sum + (info.returnQuantity || 0),
+              0
+            );
+          } else if (returnQuantity) {
+            // Use returnQuantity directly (new approach - no GRN required)
+            totalReturnQty = returnQuantity;
+          }
 
           if (totalReturnQty <= 0) {
             return; // Skip if no quantity to return
@@ -1431,37 +1442,125 @@ class PaymentService extends BaseService {
               );
             });
 
-          // Update stock - add back quantities to GRN
-          await Promise.all(
-            returnInfo.map(async info => {
-              const { grnId, returnQuantity } = info;
+          // Update stock - add back quantities to pharmacy stock
+          // If returnInfo with GRN is provided, use it; otherwise, find available GRNs by itemId and branchId
+          if (
+            returnInfo &&
+            Array.isArray(returnInfo) &&
+            returnInfo.length > 0
+          ) {
+            // Legacy approach: Update specific GRNs if provided
+            await Promise.all(
+              returnInfo.map(async info => {
+                const { grnId, returnQuantity } = info;
 
-              if (!grnId || returnQuantity <= 0) {
-                return;
-              }
-
-              // Add quantity back to GRN stock
-              await GrnItemsAssociationsModel.update(
-                {
-                  totalQuantity: Sequelize.literal(
-                    `totalQuantity + ${returnQuantity}`
-                  )
-                },
-                {
-                  where: {
-                    grnId: grnId,
-                    itemId: itemId
-                  },
-                  transaction: stockTransaction
+                if (!grnId || returnQuantity <= 0) {
+                  return;
                 }
-              ).catch(err => {
-                console.log("Error while updating GRN stock", err);
-                throw new createError.InternalServerError(
-                  Constants.SOMETHING_ERROR_OCCURRED
+
+                // Add quantity back to specific GRN stock
+                await GrnItemsAssociationsModel.update(
+                  {
+                    totalQuantity: Sequelize.literal(
+                      `totalQuantity + ${returnQuantity}`
+                    )
+                  },
+                  {
+                    where: {
+                      grnId: grnId,
+                      itemId: itemId
+                    },
+                    transaction: stockTransaction
+                  }
+                ).catch(err => {
+                  console.log("Error while updating GRN stock", err);
+                  throw new createError.InternalServerError(
+                    Constants.SOMETHING_ERROR_OCCURRED
+                  );
+                });
+              })
+            );
+          } else {
+            // New approach: Update stock by itemId and branchId (no GRN required)
+            // Get branchId from appointment
+            const { branchId } = await this.getBranchIdByRefIdAndType(
+              refId,
+              type
+            );
+
+            if (!branchId) {
+              console.warn(
+                `Could not find branchId for refId ${refId}, type ${type}`
+              );
+              // Continue without stock update - refund will still be processed
+            } else {
+              // Find available GRN items for this itemId and branchId (not expired, not returned)
+              const availableGrnItems = await this.stockMySqlConnection
+                .query(
+                  `SELECT gia.id, gia.grnId, gia.totalQuantity, gia.expiryDate
+                   FROM stockmanagement.grn_items_associations gia
+                   INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+                   WHERE gia.itemId = :itemId 
+                     AND gm.branchId = :branchId
+                     AND CAST(NOW() AS DATE) < gia.expiryDate
+                     AND gia.isReturned = 0
+                   ORDER BY gia.expiryDate ASC
+                   LIMIT 10`,
+                  {
+                    type: Sequelize.QueryTypes.SELECT,
+                    replacements: {
+                      itemId: itemId,
+                      branchId: branchId
+                    },
+                    transaction: stockTransaction
+                  }
+                )
+                .catch(err => {
+                  console.log("Error while fetching available GRN items", err);
+                  // Don't throw - continue without stock update
+                  return [];
+                });
+
+              if (availableGrnItems && availableGrnItems.length > 0) {
+                // Distribute return quantity across available GRNs (FIFO - earliest expiry first)
+                // Add all return quantity to the first available GRN (simplest approach)
+                // Alternatively, could distribute proportionally, but for returns, adding to first GRN is standard
+                const firstGrnItem = availableGrnItems[0];
+
+                await GrnItemsAssociationsModel.update(
+                  {
+                    totalQuantity: Sequelize.literal(
+                      `totalQuantity + ${totalReturnQty}`
+                    )
+                  },
+                  {
+                    where: {
+                      id: firstGrnItem.id
+                    },
+                    transaction: stockTransaction
+                  }
+                ).catch(err => {
+                  console.log(
+                    `Error while updating GRN stock for grnId ${firstGrnItem.grnId}`,
+                    err
+                  );
+                  throw new createError.InternalServerError(
+                    Constants.SOMETHING_ERROR_OCCURRED
+                  );
+                });
+
+                console.log(
+                  `Added ${totalReturnQty} to stock for itemId ${itemId}, grnId ${firstGrnItem.grnId}, branchId ${branchId}`
                 );
-              });
-            })
-          );
+              } else {
+                console.warn(
+                  `No available GRN items found for itemId ${itemId}, branchId ${branchId} to return stock`
+                );
+                // Continue - refund will be processed even if stock can't be updated
+                // This allows refunds to proceed even if stock structure is incomplete
+              }
+            }
+          }
         })
       );
 
@@ -1473,38 +1572,72 @@ class PaymentService extends BaseService {
 
       // Update return quantities in orderDetails JSON
       returnDetails.forEach(returnDetail => {
-        const { refId, returnInfo } = returnDetail;
-        const totalReturnQty = returnInfo.reduce(
-          (sum, info) => sum + (info.returnQuantity || 0),
-          0
-        );
+        const { refId, returnInfo, returnQuantity } = returnDetail;
+        // Calculate total return quantity
+        let totalReturnQty = 0;
+        if (returnInfo && Array.isArray(returnInfo) && returnInfo.length > 0) {
+          totalReturnQty = returnInfo.reduce(
+            (sum, info) => sum + (info.returnQuantity || 0),
+            0
+          );
+        } else if (returnQuantity) {
+          totalReturnQty = returnQuantity;
+        }
 
         const orderItem = orderDetailsJson.find(item => item.refId === refId);
         if (orderItem) {
           // Update returnedQuantity in purchaseDetails
           if (
             orderItem.purchaseDetails &&
-            Array.isArray(orderItem.purchaseDetails)
+            Array.isArray(orderItem.purchaseDetails) &&
+            orderItem.purchaseDetails.length > 0
           ) {
-            orderItem.purchaseDetails.forEach((purchaseDetail, index) => {
-              const returnInfoForGrn = returnInfo.find(
-                info => info.grnId === purchaseDetail.grnId
-              );
-              if (returnInfoForGrn) {
-                const currentReturnedQty = purchaseDetail.returnedQuantity || 0;
-                purchaseDetail.returnedQuantity =
-                  currentReturnedQty + returnInfoForGrn.returnQuantity;
+            if (
+              returnInfo &&
+              Array.isArray(returnInfo) &&
+              returnInfo.length > 0
+            ) {
+              // If returnInfo is provided, update specific GRNs
+              orderItem.purchaseDetails.forEach((purchaseDetail, index) => {
+                const returnInfoForGrn = returnInfo.find(
+                  info => info.grnId === purchaseDetail.grnId
+                );
+                if (returnInfoForGrn) {
+                  const currentReturnedQty =
+                    purchaseDetail.returnedQuantity || 0;
+                  purchaseDetail.returnedQuantity =
+                    currentReturnedQty + returnInfoForGrn.returnQuantity;
+                  // Update usedQuantity (reduce it by returned quantity)
+                  const currentUsedQty =
+                    purchaseDetail.usedQuantity ||
+                    purchaseDetail.initialUsedQuantity ||
+                    0;
+                  purchaseDetail.usedQuantity = Math.max(
+                    0,
+                    currentUsedQty - returnInfoForGrn.returnQuantity
+                  );
+                }
+              });
+            } else {
+              // If returnInfo is empty, distribute returnQuantity across purchaseDetails
+              // Add to first purchaseDetail (or distribute proportionally if needed)
+              const firstPurchaseDetail = orderItem.purchaseDetails[0];
+              if (firstPurchaseDetail) {
+                const currentReturnedQty =
+                  firstPurchaseDetail.returnedQuantity || 0;
+                firstPurchaseDetail.returnedQuantity =
+                  currentReturnedQty + totalReturnQty;
                 // Update usedQuantity (reduce it by returned quantity)
                 const currentUsedQty =
-                  purchaseDetail.usedQuantity ||
-                  purchaseDetail.initialUsedQuantity ||
+                  firstPurchaseDetail.usedQuantity ||
+                  firstPurchaseDetail.initialUsedQuantity ||
                   0;
-                purchaseDetail.usedQuantity = Math.max(
+                firstPurchaseDetail.usedQuantity = Math.max(
                   0,
-                  currentUsedQty - returnInfoForGrn.returnQuantity
+                  currentUsedQty - totalReturnQty
                 );
               }
-            });
+            }
           }
         }
       });

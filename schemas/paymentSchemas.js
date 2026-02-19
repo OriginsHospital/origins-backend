@@ -53,20 +53,25 @@ const returnPharmacyItemSchema = Joi.object({
         itemId: Joi.number()
           .integer()
           .required(),
+        returnQuantity: Joi.number()
+          .integer()
+          .min(1)
+          .required(),
+        // returnInfo is now optional - if provided, use it; otherwise, update stock by itemId and branchId
         returnInfo: Joi.array()
           .items(
             Joi.object({
               grnId: Joi.number()
                 .integer()
-                .required(),
+                .optional(),
               returnQuantity: Joi.number()
                 .integer()
                 .min(1)
-                .required()
+                .optional()
             })
           )
-          .min(1)
-          .required()
+          .optional()
+          .allow(null, [])
       })
     )
     .min(1)
