@@ -1172,6 +1172,60 @@ class PaymentService extends BaseService {
       orderInformation = orderInformation[0];
     }
 
+    // If purchasedItems is null or empty, try to parse orderDetails directly as fallback
+    if (
+      orderInformation &&
+      (!orderInformation.purchasedItems ||
+        (Array.isArray(orderInformation.purchasedItems) &&
+          orderInformation.purchasedItems.length === 0))
+    ) {
+      console.log(
+        "purchasedItems is empty, attempting to parse orderDetails directly"
+      );
+
+      try {
+        // Parse orderDetails JSON if it exists
+        if (orderDetails && orderDetails.orderDetails) {
+          const parsedOrderDetails =
+            typeof orderDetails.orderDetails === "string"
+              ? JSON.parse(orderDetails.orderDetails)
+              : orderDetails.orderDetails;
+
+          if (
+            Array.isArray(parsedOrderDetails) &&
+            parsedOrderDetails.length > 0
+          ) {
+            console.log("Found orderDetails, creating fallback purchasedItems");
+
+            // Create purchasedItems from orderDetails
+            const fallbackPurchasedItems = parsedOrderDetails.map(item => ({
+              refId: item.refId,
+              itemId: item.id || item.itemId || item.refId,
+              itemName: item.itemName || "N/A",
+              purchaseQuantity: item.prescribed || item.purchaseQuantity || 0,
+              returnQuantity: 0, // No returns yet
+              totalCost: item.totalCost || 0,
+              purchaseDetails: item.purchaseDetails || [] // May be empty but structure is correct
+            }));
+
+            // Add to orderInformation
+            if (!orderInformation.purchasedItems) {
+              orderInformation.purchasedItems = fallbackPurchasedItems;
+            } else {
+              orderInformation.purchasedItems = fallbackPurchasedItems;
+            }
+
+            console.log(
+              "Created fallback purchasedItems:",
+              fallbackPurchasedItems
+            );
+          }
+        }
+      } catch (parseError) {
+        console.error("Error parsing orderDetails as fallback:", parseError);
+      }
+    }
+
     let itemReturnHistory = [];
 
     return {
