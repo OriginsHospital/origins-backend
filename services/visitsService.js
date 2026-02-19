@@ -530,7 +530,11 @@ class VisitsService {
         );
       });
 
-    return visitPackageData[0];
+    // Return the first package data if exists, otherwise return null
+    // This ensures we don't return undefined which can cause issues in frontend
+    return visitPackageData && visitPackageData.length > 0
+      ? visitPackageData[0]
+      : null;
   }
 
   async applyDiscountForPackageService() {
