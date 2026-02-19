@@ -1172,6 +1172,78 @@ class PaymentService extends BaseService {
       orderInformation = orderInformation[0];
     }
 
+    // Enhance purchasedItems with GRN info from pharmacy_purchase_details_temp if missing
+    if (
+      orderInformation &&
+      orderInformation.purchasedItems &&
+      Array.isArray(orderInformation.purchasedItems) &&
+      orderInformation.purchasedItems.length > 0
+    ) {
+      // Check if any item is missing GRN info in purchaseDetails
+      const itemsNeedingGrn = orderInformation.purchasedItems.filter(
+        item =>
+          !item.purchaseDetails ||
+          !Array.isArray(item.purchaseDetails) ||
+          item.purchaseDetails.length === 0 ||
+          !item.purchaseDetails.some(pd => pd.grnId)
+      );
+
+      if (itemsNeedingGrn.length > 0) {
+        console.log(
+          `Found ${itemsNeedingGrn.length} items missing GRN info, fetching from pharmacy_purchase_details_temp`
+        );
+
+        // Fetch GRN info from pharmacy_purchase_details_temp for items missing it
+        await Promise.all(
+          itemsNeedingGrn.map(async item => {
+            try {
+              const tempData = await PharmacyPurchaseDetailsTemp.findOne({
+                where: {
+                  refId: item.refId,
+                  type: orderDetails.type
+                }
+              });
+
+              if (tempData && tempData.purchaseDetails) {
+                const purchaseDetails =
+                  typeof tempData.purchaseDetails === "string"
+                    ? JSON.parse(tempData.purchaseDetails)
+                    : tempData.purchaseDetails;
+
+                if (
+                  Array.isArray(purchaseDetails) &&
+                  purchaseDetails.length > 0
+                ) {
+                  // Merge GRN info from temp table
+                  item.purchaseDetails = purchaseDetails.map(pd => ({
+                    grnId: pd.grnId,
+                    expiryDate: pd.expiryDate,
+                    mrpPerTablet: pd.mrpPerTablet,
+                    usedQuantity:
+                      pd.usedQuantity || pd.initialUsedQuantity || 0,
+                    initialUsedQuantity:
+                      pd.initialUsedQuantity || pd.usedQuantity || 0,
+                    batchNo: pd.batchNo,
+                    returnedQuantity: pd.returnedQuantity || 0
+                  }));
+
+                  console.log(
+                    `Added GRN info from temp table for refId ${item.refId}:`,
+                    item.purchaseDetails
+                  );
+                }
+              }
+            } catch (err) {
+              console.error(
+                `Error fetching GRN from temp table for refId ${item.refId}:`,
+                err
+              );
+            }
+          })
+        );
+      }
+    }
+
     // If purchasedItems is null or empty, try to parse orderDetails directly as fallback
     if (
       orderInformation &&
