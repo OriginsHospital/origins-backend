@@ -41,44 +41,8 @@ const returnPharmacyItemSchema = Joi.object({
   patientId: Joi.string().required(),
   orderId: Joi.string().required(),
   totalAmount: Joi.number().required(),
-  type: Joi.string()
-    .valid("Consultation", "Treatment")
-    .required(),
-  returnDetails: Joi.array()
-    .items(
-      Joi.object({
-        refId: Joi.number()
-          .integer()
-          .required(),
-        itemId: Joi.number()
-          .integer()
-          .required(),
-        returnQuantity: Joi.number()
-          .integer()
-          .min(1)
-          .required(),
-        // returnInfo is now optional - if provided, use it; otherwise, update stock by itemId and branchId
-        returnInfo: Joi.array()
-          .items(
-            Joi.object({
-              grnId: Joi.number()
-                .integer()
-                .optional(),
-              returnQuantity: Joi.number()
-                .integer()
-                .min(1)
-                .optional()
-            })
-          )
-          .optional()
-          .allow(null, [])
-      })
-    )
-    .min(1)
-    .required(),
-  refundMethod: Joi.string()
-    .optional()
-    .allow("", null)
+  type: Joi.string().required(),
+  returnDetails: Joi.array().items()
 });
 
 const returnSchema = Joi.object({
