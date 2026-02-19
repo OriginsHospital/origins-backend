@@ -1228,6 +1228,21 @@ class PaymentService extends BaseService {
 
     let itemReturnHistory = [];
 
+    // Include orderDetails JSON in response for frontend fallback GRN extraction
+    const response = {
+      orderInformation,
+      itemReturnHistory
+    };
+
+    // Add orderDetails to orderInformation if available
+    if (orderDetails && orderDetails.orderDetails) {
+      if (!orderInformation) {
+        orderInformation = {};
+      }
+      // Include raw orderDetails for frontend to parse if needed
+      orderInformation.rawOrderDetails = orderDetails.orderDetails;
+    }
+
     return {
       orderInformation,
       itemReturnHistory
