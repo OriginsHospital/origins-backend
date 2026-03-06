@@ -86,6 +86,12 @@ class UsersRoute {
       tokenVerified,
       this.getValidUsResListRoute
     );
+    this._route.delete(
+      "/deleteUser/:id",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteUserRoute
+    );
   }
 
   getUserDetailsRoute = asyncHandler(async (req, res, next) => {
@@ -146,6 +152,11 @@ class UsersRoute {
   getValidUsResListRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new UsersController(req, res, next);
     await controllerObj.getValidUsersListHandler();
+  });
+
+  deleteUserRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new UsersController(req, res, next);
+    await controllerObj.deleteUserHandler();
   });
 }
 

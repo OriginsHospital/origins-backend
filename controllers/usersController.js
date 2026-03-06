@@ -120,6 +120,15 @@ class UsersController {
       data: data
     });
   }
+
+  async deleteUserHandler() {
+    const data = await this._service.deleteUserService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = UsersController;

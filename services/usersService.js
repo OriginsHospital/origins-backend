@@ -428,6 +428,68 @@ class UsersService {
     return data;
   }
 
+  async deleteUserService() {
+    const userId = this._request.params.id;
+    if (lodash.isEmpty(userId)) {
+      throw new createError.BadRequest(
+        Constants.PROVIDE_USERID || "User ID is required"
+      );
+    }
+
+    const isExists = await UserModel.findOne({
+      where: {
+        id: userId
+      }
+    }).catch(err => {
+      console.log("Error while finding user details", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(isExists)) {
+      throw new createError.NotFound(
+        Constants.DATA_NOT_FOUND || "User not found"
+      );
+    }
+
+    return await this.mysqlConnection.transaction(async t => {
+      // Delete user branch associations
+      await UserBranchAssociationModel.destroy({
+        where: {
+          userId: userId
+        },
+        transaction: t
+      });
+
+      // Delete user module associations
+      await UserModuleAssociationModel.destroy({
+        where: {
+          userId: userId
+        },
+        transaction: t
+      });
+
+      // Delete user profile
+      await UserProfileModel.destroy({
+        where: {
+          userId: userId
+        },
+        transaction: t
+      });
+
+      // Delete user
+      await UserModel.destroy({
+        where: {
+          id: userId
+        },
+        transaction: t
+      });
+
+      return Constants.DATA_DELETED_SUCCESS || "User deleted successfully";
+    });
+  }
+
   async getValidUsersListService() {
     const data = await this.mysqlConnection
       .query(getValidUsersQuery, {
