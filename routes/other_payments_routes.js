@@ -63,6 +63,14 @@ class OtherPaymentModuleRoutes {
       tokenVerified,
       this.deletePaymentHistoryRoute
     );
+
+    // Delete advance payment entry (whole line + its payment history)
+    this._route.delete(
+      "/deleteAdvancePayment/:refId",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteAdvancePaymentEntryRoute
+    );
   }
 
   addNewPaymentRoute = asyncHandler(async (req, res, next) => {
@@ -98,6 +106,11 @@ class OtherPaymentModuleRoutes {
   deletePaymentHistoryRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new OtherPaymentsController(req, res, next);
     await controllerObj.deletePaymentHistoryHandler();
+  });
+
+  deleteAdvancePaymentEntryRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new OtherPaymentsController(req, res, next);
+    await controllerObj.deleteAdvancePaymentEntryHandler();
   });
 }
 

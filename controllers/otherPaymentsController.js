@@ -77,6 +77,15 @@ class OtherPaymentsController {
       data: data
     });
   }
+
+  async deleteAdvancePaymentEntryHandler() {
+    const data = await this._service.deleteAdvancePaymentEntryService();
+    this._response.status(200).send({
+      status: 200,
+      message: data.message || "Advance payment entry deleted successfully",
+      data: data
+    });
+  }
 }
 
 module.exports = OtherPaymentsController;

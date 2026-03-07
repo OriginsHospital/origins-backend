@@ -530,11 +530,75 @@ class VisitsService {
         );
       });
 
-    // Return the first package data if exists, otherwise return null
-    // This ensures we don't return undefined which can cause issues in frontend
-    return visitPackageData && visitPackageData.length > 0
-      ? visitPackageData[0]
-      : null;
+    if (!visitPackageData || visitPackageData.length === 0) {
+      return null;
+    }
+
+    const raw = visitPackageData[0];
+    // Normalize keys to camelCase (DB may return camelCase or snake_case)
+    const camelKeys = {
+      doctor_suggested_package: "doctorSuggestedPackage",
+      marketing_package: "marketingPackage",
+      registration_amount: "registrationAmount",
+      registration_date: "registrationDate",
+      donor_booking_date: "donorBookingDate",
+      donor_booking_amount: "donorBookingAmount",
+      day1_date: "day1Date",
+      day1_amount: "day1Amount",
+      pick_up_date: "pickUpDate",
+      pick_up_amount: "pickUpAmount",
+      day5_freezing_date: "day5FreezingDate",
+      day5_freezing_amount: "day5FreezingAmount",
+      hysteroscopy_date: "hysteroscopyDate",
+      hysteroscopy_amount: "hysteroscopyAmount",
+      fet_date: "fetDate",
+      fet_amount: "fetAmount",
+      era_date: "eraDate",
+      era_amount: "eraAmount",
+      pgta_date: "pgtaDate",
+      pgta_amount: "pgtaAmount",
+      upt_positive_date: "uptPositiveDate",
+      upt_positive_amount: "uptPositiveAmount",
+      visit_id: "visitId"
+    };
+    const packageData = {};
+    for (const [key, value] of Object.entries(raw)) {
+      const camelKey = camelKeys[key] || key;
+      packageData[camelKey] = value;
+    }
+
+    // Attach paid and pending amounts for PatientTracker / reports
+    let paidAmount = 0;
+    let pendingAmount = 0;
+    try {
+      const appointmentPaymentServiceObj = new AppointmentsPaymentService(
+        this._request,
+        this._response,
+        this._next
+      );
+      const pendingDetails = await appointmentPaymentServiceObj.getPendingPaymentAmountForPackageService(
+        paramVisitId
+      );
+      if (Array.isArray(pendingDetails) && pendingDetails.length > 0) {
+        paidAmount = pendingDetails.reduce(
+          (sum, row) => sum + parseFloat(row.totalPaid || 0),
+          0
+        );
+        pendingAmount = pendingDetails.reduce(
+          (sum, row) => sum + parseFloat(row.pending_amount || 0),
+          0
+        );
+      }
+    } catch (err) {
+      console.log(
+        "Error while getting paid/pending for package (non-fatal):",
+        err.message
+      );
+    }
+    packageData.paidAmount = paidAmount;
+    packageData.pendingAmount = pendingAmount;
+
+    return packageData;
   }
 
   async applyDiscountForPackageService() {

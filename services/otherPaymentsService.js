@@ -574,6 +574,51 @@ class OtherPaymentsService extends BaseService {
 
     return { message: "Payment history entry deleted successfully" };
   }
+
+  /**
+   * Delete an advance payment entry (the line item) and all its payment order records.
+   * Used for pending payments or when removing an entire advance payment.
+   */
+  async deleteAdvancePaymentEntryService() {
+    const { refId } = this._request.params;
+
+    if (!refId) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "Advance payment ref Id")
+      );
+    }
+
+    const association = await PatientOtherPaymentsAssociationModel.findByPk(
+      refId
+    );
+
+    if (!association) {
+      throw new createError.NotFound("Advance payment entry not found");
+    }
+
+    // Delete all related payment orders (history) for this refId first
+    const deletedOrders = await OtherPaymentsOrderMaster.destroy({
+      where: { refId: refId }
+    }).catch(err => {
+      console.log("Error while deleting payment orders for refId", refId, err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    // Delete the advance payment association (the line item)
+    await association.destroy().catch(err => {
+      console.log("Error while deleting advance payment entry", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return {
+      message: "Advance payment entry and related details deleted successfully",
+      deletedOrdersCount: deletedOrders
+    };
+  }
 }
 
 module.exports = OtherPaymentsService;
