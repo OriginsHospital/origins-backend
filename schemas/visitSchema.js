@@ -31,11 +31,16 @@ const createConsultationOrTreatmentSchema = Joi.object({
 
 const createPackageSchema = Joi.object({
   visitId: Joi.number().required(),
+  doctorSuggestedPackage: Joi.number().required(),
   marketingPackage: Joi.number().required(),
   registrationDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .required(),
   registrationAmount: Joi.number().required(),
+  donorBookingDate: Joi.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .allow(null),
+  donorBookingAmount: Joi.number().required(),
   day1Date: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .allow(null),
@@ -60,20 +65,33 @@ const createPackageSchema = Joi.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .allow(null),
   eraAmount: Joi.number().required(),
+  pgtaDate: Joi.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .allow(null),
+  pgtaAmount: Joi.number().required(),
   uptPositiveDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .allow(null),
-  uptPositiveAmount: Joi.number().required()
+  uptPositiveAmount: Joi.number().required(),
+  discount: Joi.number()
+    .optional()
+    .allow(null)
 });
 
 const editPackageSchema = Joi.object({
   id: Joi.number().required(), // Primary key, required for editing the package
   visitId: Joi.number().required(),
+  doctorSuggestedPackage: Joi.number().optional(),
   marketingPackage: Joi.number().required(),
   registrationDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   registrationAmount: Joi.number().required(),
+  donorBookingDate: Joi.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .allow(null)
+    .optional(),
+  donorBookingAmount: Joi.number().required(),
   day1Date: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .allow(null)
@@ -104,11 +122,19 @@ const editPackageSchema = Joi.object({
     .allow(null)
     .optional(),
   eraAmount: Joi.number().required(),
+  pgtaDate: Joi.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .allow(null)
+    .optional(),
+  pgtaAmount: Joi.number().required(),
   uptPositiveDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .allow(null)
     .optional(),
-  uptPositiveAmount: Joi.number().required()
+  uptPositiveAmount: Joi.number().required(),
+  discount: Joi.number()
+    .optional()
+    .allow(null)
 });
 
 const applyDiscountForPackageSchema = Joi.object({
