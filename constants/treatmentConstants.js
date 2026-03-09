@@ -129,6 +129,12 @@ module.exports = {
       displayName: "ERA"
     },
     {
+      columnName: "pgtaAmount",
+      dateColumn: "pgtaDate",
+      productEnum: "PGTA_AMOUNT",
+      displayName: "PGT-A"
+    },
+    {
       columnName: "uptPositiveAmount",
       dateColumn: "uptPositiveDate",
       productEnum: "UPTPOSITIVE_AMOUNT",
