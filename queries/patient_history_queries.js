@@ -520,7 +520,7 @@ from
 		odm.discountAmount,
 		odm.couponCode,
 		odm.orderId ,
-		CAST(odm.orderDate as DATE) as orderDate
+		odm.orderDate as orderDate
 	from
 		order_details_master odm
 	INNER JOIN consultation_appointments_associations caa on
@@ -546,7 +546,7 @@ UNION ALL
 		odm.discountAmount,
 		odm.couponCode,
 		odm.orderId,
-		CAST(odm.orderDate as DATE) as orderDate
+		odm.orderDate as orderDate
 	from
 		order_details_master odm
 	INNER JOIN treatment_appointments_associations taa on
@@ -572,7 +572,7 @@ UNION ALL
 		tom.discountAmount,
 		tom.couponCode,
 		tom.orderId,
-		CAST(tom.orderDate as DATE) as orderDate
+		tom.orderDate as orderDate
 	from
 		treatment_orders_master tom
 	WHERE
