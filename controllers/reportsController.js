@@ -1,4 +1,5 @@
 const ReportsService = require("../services/reportsService");
+const RevenueNewEntryService = require("../services/revenueNewEntryService");
 const Constants = require("../constants/constants");
 
 class ReportsController {
@@ -140,6 +141,26 @@ class ReportsController {
     this._response.status(200).send({
       status: 200,
       message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateRevenueNewEntryHandler() {
+    const entryService = new RevenueNewEntryService(this._request);
+    const data = await entryService.updateEntry();
+    this._response.status(200).send({
+      status: 200,
+      message: "Payment record updated successfully",
+      data: data
+    });
+  }
+
+  async deleteRevenueNewEntryHandler() {
+    const entryService = new RevenueNewEntryService(this._request);
+    const data = await entryService.deleteEntry();
+    this._response.status(200).send({
+      status: 200,
+      message: data.message || "Payment record deleted successfully",
       data: data
     });
   }

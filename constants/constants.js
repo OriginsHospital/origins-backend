@@ -186,5 +186,7 @@ module.exports = {
   HYSTEROSCOPY_NOT_FOUND: "Hysteroscopy with given ID Not Found",
   ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL: "nikhilsuvva77@gmail.com",
   ADVANCE_PAYMENT_EDIT_FORBIDDEN:
-    "You are not authorized to modify advance payment records"
+    "You are not authorized to modify advance payment records",
+  REVENUE_NEW_ENTRY_EDIT_FORBIDDEN:
+    "You are not authorized to modify revenue report entries"
 };

@@ -95,6 +95,20 @@ class ReportsRoute {
       tokenVerified,
       this.vendorManufacturerDepartmentReport
     );
+
+    this._route.put(
+      "/revenueNew/entry/:source/:paymentMasterId",
+      checkActiveSession,
+      tokenVerified,
+      this.updateRevenueNewEntry
+    );
+
+    this._route.delete(
+      "/revenueNew/entry/:source/:paymentMasterId",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteRevenueNewEntry
+    );
   }
 
   getStageDurationReportRoute = asyncHandler(async (req, res, next) => {
@@ -160,6 +174,16 @@ class ReportsRoute {
   vendorManufacturerDepartmentReport = asyncHandler(async (req, res, next) => {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.vendorManufacturerDepartmentReportHandler();
+  });
+
+  updateRevenueNewEntry = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.updateRevenueNewEntryHandler();
+  });
+
+  deleteRevenueNewEntry = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.deleteRevenueNewEntryHandler();
   });
 }
 

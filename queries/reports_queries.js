@@ -446,7 +446,9 @@ const salesDataQuery = `
         'totalOrderAmount', odm.totalOrderAmount ,
         'discountAmount', odm.discountAmount,
         'amount', odm.paidOrderAmount ,
-        'productType', odm.productType ) as orderDetails
+        'productType', odm.productType,
+        'paymentMasterId', odm.id,
+        'revenueSource', 'ORDER_DETAILS' ) as orderDetails
     from
         order_details_master odm
     INNER JOIN consultation_appointments_associations caa on
@@ -479,7 +481,9 @@ const salesDataQuery = `
             'totalOrderAmount', odm.totalOrderAmount ,
             'discountAmount', odm.discountAmount,
             'amount', odm.paidOrderAmount ,
-            'productType', odm.productType 
+            'productType', odm.productType,
+            'paymentMasterId', odm.id,
+            'revenueSource', 'ORDER_DETAILS'
         ) as orderDetails
     from
         order_details_master odm
@@ -514,7 +518,9 @@ const salesDataQuery = `
             'totalOrderAmount', opom.totalOrderAmount ,
             'discountAmount', opom.discountAmount,
             'amount', opom.paidOrderAmount ,
-            'productType', popa.appointmentReason 
+            'productType', popa.appointmentReason,
+            'paymentMasterId', opom.id,
+            'revenueSource', 'OTHER_PAYMENT'
         ) as orderDetails
         FROM 
             other_payment_orders_master opom 
@@ -553,7 +559,9 @@ const salesDataQuery = `
             		)
             		ELSE tom.productType 
             	END
-            )
+            ),
+            'paymentMasterId', tom.id,
+            'revenueSource', 'TREATMENT_ORDER'
         ) as orderDetails 
     from treatment_orders_master tom 
     INNER JOIN patient_visits_association pva on pva.id = tom.visitId 
