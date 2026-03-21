@@ -938,6 +938,44 @@ INNER JOIN visit_treatment_cycles_associations vtca on vtca.visitId  = pva.id
 INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
 `;
 
+const vendorManufacturerDepartmentReportQuery = `
+SELECT
+  dm.id AS departmentId,
+  dm.name AS departmentName,
+  sm.id AS vendorId,
+  sm.supplier AS vendorName,
+  mm.id AS manufacturerId,
+  mm.manufacturer AS manufacturerName,
+  COUNT(DISTINCT gm.id) AS grnCount,
+  COUNT(gia.id) AS lineItems,
+  COALESCE(SUM(gia.totalQuantity), 0) AS totalQuantity,
+  ROUND(COALESCE(SUM(gia.amount), 0), 2) AS totalAmount
+FROM stockmanagement.grn_master gm
+INNER JOIN stockmanagement.supplier_master sm ON sm.id = gm.supplierId
+INNER JOIN stockmanagement.grn_items_associations gia ON gia.grnId = gm.id
+INNER JOIN stockmanagement.item_master im ON im.id = gia.itemId
+LEFT JOIN stockmanagement.manufacturer_master mm ON mm.id = im.manufacturerName
+LEFT JOIN defaultdb.department_master dm ON dm.id = im.departmentId
+WHERE 1 = 1
+  AND (:fromDate IS NULL OR CAST(gm.date AS DATE) >= :fromDate)
+  AND (:toDate IS NULL OR CAST(gm.date AS DATE) <= :toDate)
+  AND (:departmentId IS NULL OR im.departmentId = :departmentId)
+  AND (:vendorId IS NULL OR gm.supplierId = :vendorId)
+  AND (:manufacturerId IS NULL OR im.manufacturerName = :manufacturerId)
+  AND (:includeReturned = 1 OR gia.isReturned = 0)
+  AND (
+    :searchQuery IS NULL
+    OR dm.name LIKE :searchQuery
+    OR sm.supplier LIKE :searchQuery
+    OR mm.manufacturer LIKE :searchQuery
+  )
+GROUP BY
+  dm.id, dm.name,
+  sm.id, sm.supplier,
+  mm.id, mm.manufacturer
+ORDER BY totalAmount DESC, totalQuantity DESC;
+`;
+
 module.exports = {
   appointmentStageDurationReportQuery,
   grnVendorPaymentReportsQuery,
@@ -951,5 +989,6 @@ module.exports = {
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
-  treatmentCycleHistoryQuery
+  treatmentCycleHistoryQuery,
+  vendorManufacturerDepartmentReportQuery
 };

@@ -25,6 +25,13 @@ let { patientHeaderForInvoice } = require("../templates/headerTemplates");
 var converter = require("number-to-words");
 let { invoiceTemplate } = require("../templates/invoiceTemplate");
 
+function assertAdvancePaymentHistoryEditorAllowed(request) {
+  const email = (request.userDetails?.email || "").trim().toLowerCase();
+  if (email !== Constants.ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL.toLowerCase()) {
+    throw new createError.Forbidden(Constants.ADVANCE_PAYMENT_EDIT_FORBIDDEN);
+  }
+}
+
 class OtherPaymentsService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -417,13 +424,15 @@ class OtherPaymentsService extends BaseService {
 
   // Update payment history entry
   async updatePaymentHistoryService() {
+    assertAdvancePaymentHistoryEditorAllowed(this._request);
     const { paymentHistoryId } = this._request.params;
     const {
       paidOrderAmount,
       discountAmount,
       paymentMode,
       orderDate,
-      couponCode
+      couponCode,
+      appointmentReason
     } = this._request.body;
 
     if (!paymentHistoryId) {
@@ -517,11 +526,66 @@ class OtherPaymentsService extends BaseService {
       );
     }
 
+    if (appointmentReason !== undefined && appointmentReason !== null) {
+      const trimmed = String(appointmentReason).trim();
+      if (!trimmed) {
+        throw new createError.BadRequest("Payment title cannot be empty");
+      }
+      if (trimmed.length > 100) {
+        throw new createError.BadRequest(
+          "Payment title must be at most 100 characters"
+        );
+      }
+      const refIdRaw =
+        updatedRecord?.get?.("refId") ??
+        updatedRecord?.refId ??
+        paymentHistory?.get?.("refId") ??
+        paymentHistory?.refId;
+      const refId =
+        refIdRaw !== undefined && refIdRaw !== null
+          ? parseInt(String(refIdRaw), 10)
+          : NaN;
+      if (!Number.isFinite(refId) || refId <= 0) {
+        throw new createError.InternalServerError(
+          "Could not resolve advance payment entry for title update"
+        );
+      }
+      const userId = this._request.userDetails?.id ?? null;
+      const [updateResult] = await this.mysqlConnection
+        .query(
+          `UPDATE patient_other_payment_associations
+           SET appointmentReason = :title,
+               updatedBy = :userId,
+               updatedAt = NOW()
+           WHERE id = :refId`,
+          {
+            replacements: {
+              title: trimmed,
+              userId,
+              refId
+            }
+          }
+        )
+        .catch(err => {
+          console.log("Error while updating advance payment title (raw)", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      const affectedRows =
+        updateResult?.affectedRows ??
+        (typeof updateResult === "number" ? updateResult : 0);
+      if (!affectedRows) {
+        throw new createError.NotFound("Advance payment entry not found");
+      }
+    }
+
     return updatedRecord;
   }
 
   // Delete payment history entry
   async deletePaymentHistoryService() {
+    assertAdvancePaymentHistoryEditorAllowed(this._request);
     const { paymentHistoryId } = this._request.params;
 
     if (!paymentHistoryId) {
@@ -580,6 +644,7 @@ class OtherPaymentsService extends BaseService {
    * Used for pending payments or when removing an entire advance payment.
    */
   async deleteAdvancePaymentEntryService() {
+    assertAdvancePaymentHistoryEditorAllowed(this._request);
     const { refId } = this._request.params;
 
     if (!refId) {

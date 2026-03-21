@@ -16,7 +16,8 @@ const {
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
-  treatmentCycleHistoryQuery
+  treatmentCycleHistoryQuery,
+  vendorManufacturerDepartmentReportQuery
 } = require("../queries/reports_queries");
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
@@ -529,6 +530,47 @@ class ReportsService {
       })
     );
     return data;
+  }
+
+  async vendorManufacturerDepartmentReportService() {
+    const {
+      fromDate,
+      toDate,
+      departmentId,
+      vendorId,
+      manufacturerId,
+      searchQuery,
+      includeReturned
+    } = this._request.query;
+
+    const data = await this.mySqlConnection
+      .query(vendorManufacturerDepartmentReportQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          fromDate: fromDate?.trim() ? fromDate.trim() : null,
+          toDate: toDate?.trim() ? toDate.trim() : null,
+          departmentId: departmentId?.trim() ? departmentId.trim() : null,
+          vendorId: vendorId?.trim() ? vendorId.trim() : null,
+          manufacturerId: manufacturerId?.trim() ? manufacturerId.trim() : null,
+          includeReturned:
+            String(includeReturned).toLowerCase() === "true" ||
+            String(includeReturned) === "1"
+              ? 1
+              : 0,
+          searchQuery: searchQuery?.trim() ? `%${searchQuery.trim()}%` : null
+        }
+      })
+      .catch(err => {
+        console.log(
+          "Error while fetching Vendor/Manufacturer/Department report",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return lodash.isEmpty(data) ? [] : data;
   }
 }
 

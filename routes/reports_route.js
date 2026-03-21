@@ -88,6 +88,13 @@ class ReportsRoute {
       tokenVerified,
       this.treatmentCyclesPaymentsReport
     );
+
+    this._route.get(
+      "/vendorManufacturerDepartmentReport",
+      checkActiveSession,
+      tokenVerified,
+      this.vendorManufacturerDepartmentReport
+    );
   }
 
   getStageDurationReportRoute = asyncHandler(async (req, res, next) => {
@@ -149,6 +156,11 @@ class ReportsRoute {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.treatmentCyclesReportHandler();
   })
+
+  vendorManufacturerDepartmentReport = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.vendorManufacturerDepartmentReportHandler();
+  });
 }
 
 module.exports = ReportsRoute;

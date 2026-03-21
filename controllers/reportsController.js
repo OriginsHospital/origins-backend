@@ -9,7 +9,7 @@ class ReportsController {
     this._service = new ReportsService(
       this._request,
       this._response,
-      this._service
+      this._next
     );
   }
 
@@ -124,6 +124,17 @@ class ReportsController {
 
   async treatmentCyclesReportHandler() {
     const data = await this._service.treatmentCyclesReportService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async vendorManufacturerDepartmentReportHandler() {
+    const data = await this._service.vendorManufacturerDepartmentReportService(
       this._request
     );
     this._response.status(200).send({

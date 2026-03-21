@@ -183,5 +183,8 @@ module.exports = {
   PATIENT_NOT_FOUND: "Patient Not Found",
   VISIT_WITH_PATIENT_NOT_FOUND: "Visit with Patient Not Found",
   PROVIDE_HYSTEROSCOPY_ID: "Please provide Hysteroscopy ID",
-  HYSTEROSCOPY_NOT_FOUND: "Hysteroscopy with given ID Not Found"
+  HYSTEROSCOPY_NOT_FOUND: "Hysteroscopy with given ID Not Found",
+  ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL: "nikhilsuvva77@gmail.com",
+  ADVANCE_PAYMENT_EDIT_FORBIDDEN:
+    "You are not authorized to modify advance payment records"
 };
