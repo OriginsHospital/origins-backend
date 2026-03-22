@@ -229,6 +229,33 @@ class PharmacyController {
       data: data
     });
   }
+
+  async updateGrnStockReportLineHandler() {
+    const data = await this._service.updateGrnStockReportLineService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteGrnStockReportLineHandler() {
+    const data = await this._service.deleteGrnStockReportLineService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteGrnStockReportItemHandler() {
+    const data = await this._service.deleteGrnStockReportItemService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = PharmacyController;

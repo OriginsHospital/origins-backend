@@ -5,6 +5,9 @@ const {
   checkActiveSession,
   tokenVerified
 } = require("../middlewares/authMiddlewares.js");
+const {
+  requireGrnStockReportAdmin
+} = require("../middlewares/grnStockReportAdminMiddleware");
 
 class PharmacyRoute {
   _route = express.Router();
@@ -166,6 +169,28 @@ class PharmacyRoute {
       tokenVerified,
       this.showGrnAvailabilityByItemIdHandler
     );
+
+    this._route.put(
+      "/grnStockReport/line/:grnItemAssociationId",
+      checkActiveSession,
+      tokenVerified,
+      requireGrnStockReportAdmin,
+      this.updateGrnStockReportLineHandler
+    );
+    this._route.delete(
+      "/grnStockReport/line/:grnItemAssociationId",
+      checkActiveSession,
+      tokenVerified,
+      requireGrnStockReportAdmin,
+      this.deleteGrnStockReportLineHandler
+    );
+    this._route.delete(
+      "/grnStockReport/item/:itemId",
+      checkActiveSession,
+      tokenVerified,
+      requireGrnStockReportAdmin,
+      this.deleteGrnStockReportItemHandler
+    );
   }
 
   getTaxCategory = asyncHandler(async (req, res, next) => {
@@ -286,6 +311,21 @@ class PharmacyRoute {
   showGrnAvailabilityByItemIdHandler = asyncHandler(async (req, res, next) => {
     const controllerObj = new PharmacyController(req, res, next);
     await controllerObj.showGrnAvailabilityByItemIdController();
+  });
+
+  updateGrnStockReportLineHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.updateGrnStockReportLineHandler();
+  });
+
+  deleteGrnStockReportLineHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.deleteGrnStockReportLineHandler();
+  });
+
+  deleteGrnStockReportItemHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.deleteGrnStockReportItemHandler();
   });
 }
 

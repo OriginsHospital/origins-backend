@@ -19,7 +19,9 @@ const {
   getGrnItemsQuery,
   updateGrnMasterPaymentStatus,
   checkGrnPaymentStatus,
-  itemInfoByLineBillId
+  itemInfoByLineBillId,
+  verifyGrnItemLineBranchQuery,
+  deleteGrnItemLinesForItemBranchQuery
 } = require("../queries/pharmacy_queries");
 const {
   createTaxCategorySchema,
@@ -34,7 +36,8 @@ const {
   saveGrnDetailsSchema,
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,
-  saveGrnPaymentsSchema
+  saveGrnPaymentsSchema,
+  updateGrnStockReportLineSchema
 } = require("../schemas/pharmacySchema");
 const InventoryTypeMasterModel = require("../models/Master/InventoryTypeMasterModel");
 const SupplierMasterModel = require("../models/Master/SupplierMasterModel");
@@ -1032,6 +1035,145 @@ class PharmacyService {
       id: +id,
       type: type,
       availableGrnInfo: itemInfo
+    };
+  }
+
+  async updateGrnStockReportLineService() {
+    const payload = await updateGrnStockReportLineSchema.validateAsync(
+      this._request.body
+    );
+    const grnItemAssociationId = parseInt(
+      this._request.params.grnItemAssociationId,
+      10
+    );
+    if (Number.isNaN(grnItemAssociationId)) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "grn item association id")
+      );
+    }
+
+    const verified = await this.stocksqlConnection
+      .query(verifyGrnItemLineBranchQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          grnItemAssociationId,
+          branchId: payload.branchId
+        }
+      })
+      .catch(err => {
+        console.log("Error verifying GRN stock line", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (lodash.isEmpty(verified)) {
+      throw new createError.NotFound(
+        "GRN stock line not found for this branch or already returned."
+      );
+    }
+
+    const updatePayload = { totalQuantity: payload.totalQuantity };
+    if (
+      payload.expiryDate !== undefined &&
+      payload.expiryDate !== null &&
+      payload.expiryDate !== ""
+    ) {
+      updatePayload.expiryDate = moment(payload.expiryDate).format(
+        "YYYY-MM-DD"
+      );
+    }
+
+    await GrnItemsAssociationsModel.update(updatePayload, {
+      where: { id: grnItemAssociationId }
+    }).catch(err => {
+      console.log("Error updating GRN stock line", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async deleteGrnStockReportLineService() {
+    const grnItemAssociationId = parseInt(
+      this._request.params.grnItemAssociationId,
+      10
+    );
+    const branchId = parseInt(this._request.query.branchId, 10);
+    if (Number.isNaN(grnItemAssociationId)) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "grn item association id")
+      );
+    }
+    if (Number.isNaN(branchId)) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "branchId")
+      );
+    }
+
+    const verified = await this.stocksqlConnection
+      .query(verifyGrnItemLineBranchQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { grnItemAssociationId, branchId }
+      })
+      .catch(err => {
+        console.log("Error verifying GRN stock line for delete", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (lodash.isEmpty(verified)) {
+      throw new createError.NotFound(
+        "GRN stock line not found for this branch or already returned."
+      );
+    }
+
+    await GrnItemsAssociationsModel.destroy({
+      where: { id: grnItemAssociationId }
+    }).catch(err => {
+      console.log("Error deleting GRN stock line", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async deleteGrnStockReportItemService() {
+    const itemId = parseInt(this._request.params.itemId, 10);
+    const branchId = parseInt(this._request.query.branchId, 10);
+    if (Number.isNaN(itemId)) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "item id")
+      );
+    }
+    if (Number.isNaN(branchId)) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "branchId")
+      );
+    }
+
+    const queryResult = await this.stocksqlConnection
+      .query(deleteGrnItemLinesForItemBranchQuery, {
+        replacements: { itemId, branchId }
+      })
+      .catch(err => {
+        console.log("Error deleting GRN stock lines for item", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const meta = Array.isArray(queryResult) ? queryResult[1] : queryResult;
+    const deletedRows =
+      meta?.affectedRows ?? (typeof meta === "number" ? meta : 0);
+
+    return {
+      deletedRows
     };
   }
 }

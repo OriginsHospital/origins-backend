@@ -248,6 +248,19 @@ const saveGrnPaymentsSchema = Joi.object({
   remarks: Joi.string().optional()
 });
 
+const updateGrnStockReportLineSchema = Joi.object({
+  branchId: Joi.number()
+    .integer()
+    .required(),
+  totalQuantity: Joi.number()
+    .integer()
+    .min(0)
+    .required(),
+  expiryDate: Joi.string()
+    .allow("")
+    .optional()
+});
+
 module.exports = {
   createTaxCategorySchema,
   editTaxCategorySchema,
@@ -261,5 +274,6 @@ module.exports = {
   saveGrnDetailsSchema,
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,
-  saveGrnPaymentsSchema
+  saveGrnPaymentsSchema,
+  updateGrnStockReportLineSchema
 };

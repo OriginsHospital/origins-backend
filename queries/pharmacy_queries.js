@@ -246,6 +246,19 @@ END
 )
 `;
 
+const verifyGrnItemLineBranchQuery = `
+  SELECT gia.id
+  FROM stockmanagement.grn_items_associations gia
+  INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+  WHERE gia.id = :grnItemAssociationId AND gm.branchId = :branchId AND gia.isReturned = 0
+`;
+
+const deleteGrnItemLinesForItemBranchQuery = `
+  DELETE gia FROM stockmanagement.grn_items_associations gia
+  INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+  WHERE gia.itemId = :itemId AND gm.branchId = :branchId AND gia.isReturned = 0
+`;
+
 module.exports = {
   getTaxCategoryQuery,
   getInventoryTypeQuery,
@@ -260,5 +273,7 @@ module.exports = {
   getGrnItemsQuery,
   checkGrnPaymentStatus,
   updateGrnMasterPaymentStatus,
-  itemInfoByLineBillId
+  itemInfoByLineBillId,
+  verifyGrnItemLineBranchQuery,
+  deleteGrnItemLinesForItemBranchQuery
 };

@@ -738,7 +738,9 @@ itemInformation AS (
         im.id, 
         JSON_ARRAYAGG(
             JSON_OBJECT(
+                'grnItemAssociationId', gia.id,
                 'grnId', gia.grnId,
+                'batchNo', gia.batchNo,
                 'supplierName', (SELECT sm.supplier FROM stockmanagement.supplier_master sm WHERE sm.id = gm.supplierId),
                 'availableQuantity', gia.totalQuantity,
                 'branchId', gm.branchId,
