@@ -293,18 +293,27 @@ class ReportsService {
   }
 
   async getStockReportService() {
-    const { branchId } = this._request.query;
+    const rawBranchId = this._request.query.branchId;
     const currentUserBranchId = this._request.userDetails.branchDetails.map(
-      branch => {
-        return branch.id;
-      }
+      branch => String(branch.id)
     );
+    let branchIdReplacements;
+    if (
+      rawBranchId === undefined ||
+      rawBranchId === null ||
+      rawBranchId === ""
+    ) {
+      branchIdReplacements = currentUserBranchId;
+    } else if (Array.isArray(rawBranchId)) {
+      branchIdReplacements = rawBranchId.map(id => String(id));
+    } else {
+      branchIdReplacements = [String(rawBranchId)];
+    }
     return await this.mySqlConnection
       .query(getStockReportQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
-          branchId:
-            branchId || currentUserBranchId.map(branch => String(branch))
+          branchId: branchIdReplacements
         }
       })
       .catch(err => {

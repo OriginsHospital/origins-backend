@@ -721,7 +721,10 @@ const getStockReportQuery = `
 WITH itemQuantity AS (
     SELECT
         im.id,
-        COALESCE(SUM(gia.totalQuantity), 0) AS totalQuantity
+        COALESCE(SUM(CASE
+            WHEN gm.id IS NOT NULL AND gm.branchId IN (:branchId) THEN gia.totalQuantity
+            ELSE 0
+        END), 0) AS totalQuantity
     FROM
         stockmanagement.item_master im
     LEFT JOIN stockmanagement.grn_items_associations gia 
@@ -729,7 +732,7 @@ WITH itemQuantity AS (
     LEFT JOIN stockmanagement.grn_master gm 
         ON gm.id = gia.grnId 
     WHERE
-        im.isActive = 1  AND gm.branchId IN (:branchId)
+        im.isActive = 1
     GROUP BY 
         im.id
 ),
@@ -737,16 +740,19 @@ itemInformation AS (
     SELECT
         im.id, 
         JSON_ARRAYAGG(
-            JSON_OBJECT(
-                'grnItemAssociationId', gia.id,
-                'grnId', gia.grnId,
-                'batchNo', gia.batchNo,
-                'supplierName', (SELECT sm.supplier FROM stockmanagement.supplier_master sm WHERE sm.id = gm.supplierId),
-                'availableQuantity', gia.totalQuantity,
-                'branchId', gm.branchId,
-                'expiryDate', gia.expiryDate,
-                'branchName', (select bm.name from branch_master bm where bm.id = gm.branchId) 
-            )
+            CASE
+                WHEN gm.id IS NOT NULL AND gm.branchId IN (:branchId) THEN
+                    JSON_OBJECT(
+                        'grnItemAssociationId', gia.id,
+                        'grnId', gia.grnId,
+                        'batchNo', gia.batchNo,
+                        'supplierName', (SELECT sm.supplier FROM stockmanagement.supplier_master sm WHERE sm.id = gm.supplierId),
+                        'availableQuantity', gia.totalQuantity,
+                        'branchId', gm.branchId,
+                        'expiryDate', gia.expiryDate,
+                        'branchName', (select bm.name from branch_master bm where bm.id = gm.branchId) 
+                    )
+            END
         ) AS grnDetails
     FROM
         stockmanagement.item_master im
@@ -755,7 +761,7 @@ itemInformation AS (
     LEFT JOIN stockmanagement.grn_master gm 
         ON gm.id = gia.grnId 
     WHERE
-        im.isActive = 1  AND gm.branchId IN (:branchId)
+        im.isActive = 1
     GROUP BY 
         im.id
 )
