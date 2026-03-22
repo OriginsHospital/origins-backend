@@ -256,6 +256,15 @@ class PharmacyController {
       data: data
     });
   }
+
+  async updateGrnStockReportItemSummaryHandler() {
+    const data = await this._service.updateGrnStockReportItemSummaryService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = PharmacyController;

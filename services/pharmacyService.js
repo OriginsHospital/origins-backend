@@ -21,7 +21,9 @@ const {
   checkGrnPaymentStatus,
   itemInfoByLineBillId,
   verifyGrnItemLineBranchQuery,
-  deleteGrnItemLinesForItemBranchQuery
+  deleteGrnItemLinesForItemBranchQuery,
+  getGrnStockLinesForItemBranchQuery,
+  reassignGrnStockItemIdForBranchQuery
 } = require("../queries/pharmacy_queries");
 const {
   createTaxCategorySchema,
@@ -37,7 +39,8 @@ const {
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,
   saveGrnPaymentsSchema,
-  updateGrnStockReportLineSchema
+  updateGrnStockReportLineSchema,
+  updateGrnStockReportItemSummarySchema
 } = require("../schemas/pharmacySchema");
 const InventoryTypeMasterModel = require("../models/Master/InventoryTypeMasterModel");
 const SupplierMasterModel = require("../models/Master/SupplierMasterModel");
@@ -1175,6 +1178,188 @@ class PharmacyService {
     return {
       deletedRows
     };
+  }
+
+  async adjustGrnStockBranchTotalInTransaction(
+    itemId,
+    branchId,
+    targetTotal,
+    transaction
+  ) {
+    const target = Math.round(Number(targetTotal));
+    if (Number.isNaN(target) || target < 0) {
+      throw new createError.BadRequest("Invalid total quantity.");
+    }
+
+    const rows = await this.stocksqlConnection
+      .query(getGrnStockLinesForItemBranchQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { itemId, branchId },
+        transaction
+      })
+      .catch(err => {
+        console.log("Error fetching GRN stock lines for item", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (rows.length === 0) {
+      if (target > 0) {
+        throw new createError.BadRequest(
+          "No GRN stock lines exist for this item at this branch. Add stock via GRN first."
+        );
+      }
+      return;
+    }
+
+    const sum = rows.reduce((acc, r) => acc + Number(r.totalQuantity || 0), 0);
+    if (Math.abs(sum - target) < 0.0001) {
+      return;
+    }
+
+    if (rows.length === 1) {
+      await GrnItemsAssociationsModel.update(
+        { totalQuantity: target },
+        { where: { id: rows[0].id }, transaction }
+      ).catch(err => {
+        console.log("Error updating GRN stock total", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      return;
+    }
+
+    if (sum === 0) {
+      for (let i = 0; i < rows.length; i++) {
+        await GrnItemsAssociationsModel.update(
+          { totalQuantity: i === 0 ? target : 0 },
+          { where: { id: rows[i].id }, transaction }
+        ).catch(err => {
+          console.log("Error updating GRN stock total", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+      return;
+    }
+
+    let allocated = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const isLast = i === rows.length - 1;
+      const q = Number(rows[i].totalQuantity || 0);
+      const nextQty = isLast
+        ? target - allocated
+        : Math.round((target * q) / sum);
+      allocated += nextQty;
+      await GrnItemsAssociationsModel.update(
+        { totalQuantity: nextQty },
+        { where: { id: rows[i].id }, transaction }
+      ).catch(err => {
+        console.log("Error updating GRN stock total", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+  }
+
+  async updateGrnStockReportItemSummaryService() {
+    const payload = await updateGrnStockReportItemSummarySchema.validateAsync(
+      this._request.body
+    );
+    const { branchId, itemId } = payload;
+
+    const item = await ItemsMasterModel.findByPk(itemId);
+    if (!item) {
+      throw new createError.NotFound(Constants.ITEM_NOT_FOUND);
+    }
+
+    const trimmedName =
+      payload.itemName !== undefined ? String(payload.itemName).trim() : null;
+
+    if (trimmedName && trimmedName !== item.itemName) {
+      const validatedName = trimmedName.replace(/\s+/g, "").toLowerCase();
+      const sameItemNameExists = await ItemsMasterModel.findOne({
+        where: {
+          [Op.and]: [
+            Sequelize.where(
+              Sequelize.fn(
+                "REPLACE",
+                Sequelize.fn("LOWER", Sequelize.col("itemName")),
+                " ",
+                ""
+              ),
+              validatedName
+            ),
+            { id: { [Op.ne]: itemId } }
+          ]
+        }
+      }).catch(err => {
+        console.log("Error while checking duplicate item name", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (!lodash.isEmpty(sameItemNameExists)) {
+        throw new createError.BadRequest(Constants.SAME_MEDICATION_NAME_EXISTS);
+      }
+    }
+
+    const newItemId =
+      payload.newItemId !== undefined ? payload.newItemId : itemId;
+
+    await this.stocksqlConnection.transaction(async t => {
+      if (trimmedName && trimmedName !== item.itemName) {
+        await ItemsMasterModel.update(
+          { itemName: trimmedName },
+          { where: { id: itemId }, transaction: t }
+        ).catch(err => {
+          console.log("Error updating item name from GRN stock report", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+
+      if (payload.totalQuantity !== undefined) {
+        await this.adjustGrnStockBranchTotalInTransaction(
+          itemId,
+          branchId,
+          payload.totalQuantity,
+          t
+        );
+      }
+
+      if (newItemId !== itemId) {
+        const targetItem = await ItemsMasterModel.findByPk(newItemId, {
+          transaction: t
+        });
+        if (!targetItem) {
+          throw new createError.NotFound("Target item ID does not exist.");
+        }
+        await this.stocksqlConnection
+          .query(reassignGrnStockItemIdForBranchQuery, {
+            replacements: {
+              oldItemId: itemId,
+              newItemId,
+              branchId
+            },
+            transaction: t
+          })
+          .catch(err => {
+            console.log("Error reassigning GRN stock item id", err);
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+      }
+    });
+
+    return Constants.SUCCESS;
   }
 }
 

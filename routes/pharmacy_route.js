@@ -191,6 +191,13 @@ class PharmacyRoute {
       requireGrnStockReportAdmin,
       this.deleteGrnStockReportItemHandler
     );
+    this._route.put(
+      "/grnStockReport/itemSummary",
+      checkActiveSession,
+      tokenVerified,
+      requireGrnStockReportAdmin,
+      this.updateGrnStockReportItemSummaryHandler
+    );
   }
 
   getTaxCategory = asyncHandler(async (req, res, next) => {
@@ -326,6 +333,11 @@ class PharmacyRoute {
   deleteGrnStockReportItemHandler = asyncHandler(async (req, res, next) => {
     const controllerObj = new PharmacyController(req, res, next);
     await controllerObj.deleteGrnStockReportItemHandler();
+  });
+
+  updateGrnStockReportItemSummaryHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.updateGrnStockReportItemSummaryHandler();
   });
 }
 

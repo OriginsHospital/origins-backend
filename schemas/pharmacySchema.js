@@ -261,6 +261,25 @@ const updateGrnStockReportLineSchema = Joi.object({
     .optional()
 });
 
+const updateGrnStockReportItemSummarySchema = Joi.object({
+  branchId: Joi.number()
+    .integer()
+    .required(),
+  itemId: Joi.number()
+    .integer()
+    .required(),
+  itemName: Joi.string()
+    .max(100)
+    .allow("")
+    .optional(),
+  newItemId: Joi.number()
+    .integer()
+    .optional(),
+  totalQuantity: Joi.number()
+    .min(0)
+    .optional()
+});
+
 module.exports = {
   createTaxCategorySchema,
   editTaxCategorySchema,
@@ -275,5 +294,6 @@ module.exports = {
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,
   saveGrnPaymentsSchema,
-  updateGrnStockReportLineSchema
+  updateGrnStockReportLineSchema,
+  updateGrnStockReportItemSummarySchema
 };
