@@ -827,8 +827,8 @@ class PaymentService extends BaseService {
           return {
             serialNumber: index + 1,
             itemName: info.itemName,
-            presQty: info.purchaseQuantity,
-            purcQty: info.prescribedQuantity,
+            presQty: info.prescribedQuantity,
+            purcQty: info.purchaseQuantity,
             totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
             prescribedTo: info?.prescribedTo
           };

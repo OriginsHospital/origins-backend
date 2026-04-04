@@ -809,8 +809,10 @@ class PharmacyService {
     }
     const data = await ItemsMasterModel.findAll({
       where: {
-        itemName: { [Op.like]: "" + `%${searchText}%` + "" }
-      }
+        itemName: { [Op.like]: `%${searchText}%` },
+        isActive: 1
+      },
+      order: [["itemName", "ASC"], ["id", "DESC"]]
     }).catch(err => {
       console.log("Error while fetching item Names", err);
       throw new createError.InternalServerError(
@@ -818,7 +820,23 @@ class PharmacyService {
       );
     });
 
-    return !lodash.isEmpty(data) ? data : [];
+    if (lodash.isEmpty(data)) {
+      return [];
+    }
+
+    const rows = data.map(d => d.get({ plain: true }));
+    const seenNames = new Map();
+    const unique = [];
+    for (const r of rows) {
+      const nameKey = (r.itemName || "").trim().toLowerCase();
+      const dedupeKey = nameKey || `__id_${r.id}`;
+      if (seenNames.has(dedupeKey)) {
+        continue;
+      }
+      seenNames.set(dedupeKey, true);
+      unique.push(r);
+    }
+    return unique;
   }
 
   async getSupplierSuggestionService() {
