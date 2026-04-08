@@ -140,8 +140,52 @@ class PaymentsService {
 
   async getAllPaymentsService() {
     try {
-      return await this.mysqlConnection.query(getAllPaymentsQuery, {
-        type: Sequelize.QueryTypes.SELECT
+      const {
+        branchId,
+        departmentId,
+        vendorId,
+        amount,
+        paymentDate,
+        invoiceDate
+      } = this._request.query;
+
+      let query = getAllPaymentsQuery.replace("ORDER BY p.createdAt DESC;", "");
+      const whereConditions = [];
+      const replacements = {};
+
+      if (branchId && String(branchId).trim() !== "") {
+        whereConditions.push("p.branchId = :branchId");
+        replacements.branchId = String(branchId).trim();
+      }
+      if (departmentId && String(departmentId).trim() !== "") {
+        whereConditions.push("p.departmentId = :departmentId");
+        replacements.departmentId = String(departmentId).trim();
+      }
+      if (vendorId && String(vendorId).trim() !== "") {
+        whereConditions.push("p.vendorId = :vendorId");
+        replacements.vendorId = String(vendorId).trim();
+      }
+      if (amount && String(amount).trim() !== "") {
+        whereConditions.push("p.amount = :amount");
+        replacements.amount = Number(amount);
+      }
+      if (paymentDate && String(paymentDate).trim() !== "") {
+        whereConditions.push("DATE(p.paymentDate) = :paymentDate");
+        replacements.paymentDate = String(paymentDate).trim();
+      }
+      if (invoiceDate && String(invoiceDate).trim() !== "") {
+        whereConditions.push("DATE(p.invoiceDate) = :invoiceDate");
+        replacements.invoiceDate = String(invoiceDate).trim();
+      }
+
+      if (whereConditions.length > 0) {
+        query += ` WHERE ${whereConditions.join(" AND ")}`;
+      }
+      query += " ORDER BY p.createdAt DESC";
+
+      return await this.mysqlConnection.query(query, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements
       });
     } catch (err) {
       console.log("Error while fetching all payments", err);
