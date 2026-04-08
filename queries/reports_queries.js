@@ -959,6 +959,7 @@ ORDER BY DATE(gm.date) DESC, im.itemName ASC;
 const pharmacySalesDetailedReportQuery = `
 SELECT
   src.branch,
+  src.patientName,
   src.medicineName,
   ROUND(
     CASE
@@ -972,6 +973,7 @@ SELECT
 FROM (
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
     COALESCE(im.itemName, '-') AS medicineName,
     CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
     CAST(
@@ -1020,6 +1022,7 @@ FROM (
 
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
     COALESCE(im.itemName, '-') AS medicineName,
     CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
     CAST(
@@ -1065,7 +1068,7 @@ FROM (
     )
 ) src
 WHERE src.soldQuantity > 0
-GROUP BY src.branch, src.medicineName
+GROUP BY src.branch, src.patientName, src.medicineName
 ORDER BY totalAmount DESC, totalQuantitySold DESC;
 `;
 
