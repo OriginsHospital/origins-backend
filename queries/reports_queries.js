@@ -972,14 +972,14 @@ SELECT
 FROM (
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
-    COALESCE(jt.itemName, im.itemName, '-') AS medicineName,
+    COALESCE(ref.itemName, im.itemName, '-') AS medicineName,
     COALESCE(
-      NULLIF(SUM(COALESCE(jt.usedQuantity, 0)), 0),
+      NULLIF(SUM(COALESCE(pd.usedQuantity, 0)), 0),
       CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2))
     ) AS totalQuantitySold,
     COALESCE(
-      NULLIF(SUM(COALESCE(jt.usedQuantity, 0) * COALESCE(jt.mrpPerTablet, 0)), 0),
-      CAST(COALESCE(jt.totalCost, 0) AS DECIMAL(18,2))
+      NULLIF(SUM(COALESCE(pd.usedQuantity, 0) * COALESCE(pd.mrpPerTablet, 0)), 0),
+      CAST(COALESCE(ref.totalCost, 0) AS DECIMAL(18,2))
     ) AS totalAmount
   FROM order_details_master odm
   INNER JOIN consultation_appointments_associations caa ON caa.id = odm.appointmentId
@@ -988,21 +988,31 @@ FROM (
   INNER JOIN patient_master pm ON pm.id = pva.patientId
   LEFT JOIN branch_master bm ON bm.id = pm.branchId
   INNER JOIN JSON_TABLE(
-    odm.orderDetails,
+    CASE
+      WHEN JSON_VALID(odm.orderDetails) THEN odm.orderDetails
+      ELSE '[]'
+    END,
     '$[*]'
     COLUMNS (
       refId INT PATH '$.refId',
       itemName VARCHAR(255) PATH '$.itemName',
       totalCost DECIMAL(18,2) PATH '$.totalCost',
-      NESTED PATH '$.purchaseDetails[*]'
-      COLUMNS (
-        usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
-        mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
-      )
+      purchaseDetails JSON PATH '$.purchaseDetails'
     )
-  ) jt
+  ) ref
+  LEFT JOIN JSON_TABLE(
+    CASE
+      WHEN JSON_VALID(ref.purchaseDetails) THEN ref.purchaseDetails
+      ELSE '[]'
+    END,
+    '$[*]'
+    COLUMNS (
+      usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
+      mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
+    )
+  ) pd ON 1 = 1
   LEFT JOIN consultation_appointment_line_bills_associations calba
-    ON calba.id = jt.refId AND calba.billTypeId = 3
+    ON calba.id = ref.refId AND calba.billTypeId = 3
   LEFT JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
   WHERE
     odm.productType = 'PHARMACY'
@@ -1013,23 +1023,23 @@ FROM (
     AND (:branchId IS NULL OR pm.branchId = :branchId)
   GROUP BY
     COALESCE(bm.branchCode, bm.name, '-'),
-    COALESCE(jt.itemName, im.itemName, '-'),
-    jt.refId,
+    COALESCE(ref.itemName, im.itemName, '-'),
+    ref.refId,
     calba.purchaseQuantity,
-    jt.totalCost
+    ref.totalCost
 
   UNION ALL
 
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
-    COALESCE(jt.itemName, im.itemName, '-') AS medicineName,
+    COALESCE(ref.itemName, im.itemName, '-') AS medicineName,
     COALESCE(
-      NULLIF(SUM(COALESCE(jt.usedQuantity, 0)), 0),
+      NULLIF(SUM(COALESCE(pd.usedQuantity, 0)), 0),
       CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2))
     ) AS totalQuantitySold,
     COALESCE(
-      NULLIF(SUM(COALESCE(jt.usedQuantity, 0) * COALESCE(jt.mrpPerTablet, 0)), 0),
-      CAST(COALESCE(jt.totalCost, 0) AS DECIMAL(18,2))
+      NULLIF(SUM(COALESCE(pd.usedQuantity, 0) * COALESCE(pd.mrpPerTablet, 0)), 0),
+      CAST(COALESCE(ref.totalCost, 0) AS DECIMAL(18,2))
     ) AS totalAmount
   FROM order_details_master odm
   INNER JOIN treatment_appointments_associations taa ON taa.id = odm.appointmentId
@@ -1038,21 +1048,31 @@ FROM (
   INNER JOIN patient_master pm ON pm.id = pva.patientId
   LEFT JOIN branch_master bm ON bm.id = pm.branchId
   INNER JOIN JSON_TABLE(
-    odm.orderDetails,
+    CASE
+      WHEN JSON_VALID(odm.orderDetails) THEN odm.orderDetails
+      ELSE '[]'
+    END,
     '$[*]'
     COLUMNS (
       refId INT PATH '$.refId',
       itemName VARCHAR(255) PATH '$.itemName',
       totalCost DECIMAL(18,2) PATH '$.totalCost',
-      NESTED PATH '$.purchaseDetails[*]'
-      COLUMNS (
-        usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
-        mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
-      )
+      purchaseDetails JSON PATH '$.purchaseDetails'
     )
-  ) jt
+  ) ref
+  LEFT JOIN JSON_TABLE(
+    CASE
+      WHEN JSON_VALID(ref.purchaseDetails) THEN ref.purchaseDetails
+      ELSE '[]'
+    END,
+    '$[*]'
+    COLUMNS (
+      usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
+      mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
+    )
+  ) pd ON 1 = 1
   LEFT JOIN treatment_appointment_line_bills_associations talba
-    ON talba.id = jt.refId AND talba.billTypeId = 3
+    ON talba.id = ref.refId AND talba.billTypeId = 3
   LEFT JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
   WHERE
     odm.productType = 'PHARMACY'
@@ -1063,10 +1083,10 @@ FROM (
     AND (:branchId IS NULL OR pm.branchId = :branchId)
   GROUP BY
     COALESCE(bm.branchCode, bm.name, '-'),
-    COALESCE(jt.itemName, im.itemName, '-'),
-    jt.refId,
+    COALESCE(ref.itemName, im.itemName, '-'),
+    ref.refId,
     talba.purchaseQuantity,
-    jt.totalCost
+    ref.totalCost
 ) src
 GROUP BY src.branch, src.medicineName
 ORDER BY totalAmount DESC, totalQuantitySold DESC;
