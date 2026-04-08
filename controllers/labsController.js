@@ -36,6 +36,15 @@ class LabsController {
     });
   }
 
+  async getLabReportsHandler() {
+    const data = await this._service.getLabReportsService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getLabTestTemplateByIdHandler() {
     const data = await this._service.getLabTestTemplateByIdService();
     this._response.status(200).send({

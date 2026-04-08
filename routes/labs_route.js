@@ -40,6 +40,13 @@ class LabsRoute {
     );
 
     this._route.get(
+      "/labReports",
+      checkActiveSession,
+      tokenVerified,
+      this.getLabReports
+    );
+
+    this._route.get(
       "/getLabTestTemplate",
       checkActiveSession,
       tokenVerified,
@@ -93,6 +100,11 @@ class LabsRoute {
   getAllOutsourcingLabTests = asyncHandler(async (req, res, next) => {
     const controllerObj = new LabsController(req, res, next);
     await controllerObj.getAllOutsourcingLabTestsHandler();
+  });
+
+  getLabReports = asyncHandler(async (req, res, next) => {
+    const controllerObj = new LabsController(req, res, next);
+    await controllerObj.getLabReportsHandler();
   });
 
   getLabTestTemplateById = asyncHandler(async (req, res, next) => {

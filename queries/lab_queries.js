@@ -402,10 +402,113 @@ WHERE
 
 `;
 
+const getLabReportsBaseQuery = `
+WITH LabRecords AS (
+    SELECT
+        CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+        ltm.name AS labTestName,
+        DATE(caa.appointmentDate) AS dateOfTest,
+        COALESCE(ltmba.amount, 0) AS amountPaid,
+        bm.name AS branchName,
+        bm.id AS branchId,
+        calba.id AS referenceId,
+        CONCAT('CONS-', calba.id) AS recordId,
+        CASE WHEN ltmba.isOutSourced = 1 THEN 1 ELSE 0 END AS category
+    FROM consultation_appointment_line_bills_associations calba
+    INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+    INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+    INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+    INNER JOIN patient_master pm ON pm.id = pva.patientId
+    INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
+    INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
+    INNER JOIN branch_master bm ON bm.id = caa.branchId
+    WHERE calba.billTypeId = 1
+      AND calba.status = 'PAID'
+
+    UNION ALL
+
+    SELECT
+        CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+        ltm.name AS labTestName,
+        DATE(taa.appointmentDate) AS dateOfTest,
+        COALESCE(ltmba.amount, 0) AS amountPaid,
+        bm.name AS branchName,
+        bm.id AS branchId,
+        talba.id AS referenceId,
+        CONCAT('TRT-', talba.id) AS recordId,
+        CASE WHEN ltmba.isOutSourced = 1 THEN 1 ELSE 0 END AS category
+    FROM treatment_appointment_line_bills_associations talba
+    INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+    INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+    INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+    INNER JOIN patient_master pm ON pm.id = pva.patientId
+    INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
+    INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
+    INNER JOIN branch_master bm ON bm.id = taa.branchId
+    WHERE talba.billTypeId = 1
+      AND talba.status = 'PAID'
+)
+`;
+
+const getLabReportsListQuery = `
+${getLabReportsBaseQuery}
+SELECT
+    patientName,
+    labTestName,
+    dateOfTest,
+    amountPaid,
+    branchName,
+    referenceId,
+    recordId
+FROM LabRecords
+WHERE dateOfTest BETWEEN :fromDate AND :toDate
+  AND category = :category
+  AND (:branchId IS NULL OR branchId = :branchId)
+  AND (:patientName IS NULL OR patientName LIKE :patientName)
+  AND (:labTestName IS NULL OR labTestName LIKE :labTestName)
+ORDER BY dateOfTest DESC, referenceId DESC
+LIMIT :limit OFFSET :offset;
+`;
+
+const getLabReportsSummaryQuery = `
+${getLabReportsBaseQuery}
+SELECT
+    COUNT(*) AS totalRecords,
+    COALESCE(SUM(amountPaid), 0) AS totalAmountPaid
+FROM LabRecords
+WHERE dateOfTest BETWEEN :fromDate AND :toDate
+  AND category = :category
+  AND (:branchId IS NULL OR branchId = :branchId)
+  AND (:patientName IS NULL OR patientName LIKE :patientName)
+  AND (:labTestName IS NULL OR labTestName LIKE :labTestName);
+`;
+
+const getLabReportsExportQuery = `
+${getLabReportsBaseQuery}
+SELECT
+    patientName,
+    labTestName,
+    dateOfTest,
+    amountPaid,
+    branchName,
+    referenceId,
+    recordId
+FROM LabRecords
+WHERE dateOfTest BETWEEN :fromDate AND :toDate
+  AND category = :category
+  AND (:branchId IS NULL OR branchId = :branchId)
+  AND (:patientName IS NULL OR patientName LIKE :patientName)
+  AND (:labTestName IS NULL OR labTestName LIKE :labTestName)
+ORDER BY dateOfTest DESC, referenceId DESC;
+`;
+
 module.exports = {
   getLabtestsByDateQuery,
   getAllLabTestsQuery,
   getPatientInfoForTemplate,
   getLabHeaderInformation,
-  getAllOutsourcingLabtestsQuery
+  getAllOutsourcingLabtestsQuery,
+  getLabReportsListQuery,
+  getLabReportsSummaryQuery,
+  getLabReportsExportQuery
 };

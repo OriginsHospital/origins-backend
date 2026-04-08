@@ -8,7 +8,10 @@ const {
   getLabHeaderInformation,
   getAllOutsourcingLabtestsQuery,
   getAllLabTests,
-  getAllLabTestsQuery
+  getAllLabTestsQuery,
+  getLabReportsListQuery,
+  getLabReportsSummaryQuery,
+  getLabReportsExportQuery
 } = require("../queries/lab_queries");
 const { Sequelize } = require("sequelize");
 const {
@@ -117,6 +120,108 @@ class LabsService extends BaseService {
         );
       });
     return getAllOutsourcingLabTestsData;
+  }
+
+  async getLabReportsService() {
+    const {
+      fromDate,
+      toDate,
+      branchId,
+      category,
+      patientName,
+      labTestName,
+      page = 1,
+      limit = 25,
+      exportData = "false"
+    } = this._request.query;
+
+    if (lodash.isEmpty(fromDate?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "fromDate")
+      );
+    }
+    if (lodash.isEmpty(toDate?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "toDate")
+      );
+    }
+    if (lodash.isEmpty(category?.toString()?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "category")
+      );
+    }
+
+    const categoryInt = Number(category);
+    if (![0, 1].includes(categoryInt)) {
+      throw new createError.BadRequest(
+        "category must be 0 (In-House) or 1 (Out-House)"
+      );
+    }
+
+    if (new Date(fromDate) > new Date(toDate)) {
+      throw new createError.BadRequest(
+        "fromDate cannot be greater than toDate"
+      );
+    }
+
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.max(1, Math.min(200, Number(limit) || 25));
+    const shouldExport = String(exportData).toLowerCase() === "true";
+    const offset = (pageNumber - 1) * pageSize;
+
+    const replacements = {
+      fromDate,
+      toDate,
+      category: categoryInt,
+      branchId: branchId ? Number(branchId) : null,
+      patientName: patientName?.trim() ? `%${patientName.trim()}%` : null,
+      labTestName: labTestName?.trim() ? `%${labTestName.trim()}%` : null,
+      limit: pageSize,
+      offset
+    };
+
+    const listQuery = shouldExport
+      ? getLabReportsExportQuery
+      : getLabReportsListQuery;
+    const rows = await this.mysqlConnection
+      .query(listQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements
+      })
+      .catch(err => {
+        console.log("Error while fetching lab reports data", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const summary = await this.mysqlConnection
+      .query(getLabReportsSummaryQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements
+      })
+      .catch(err => {
+        console.log("Error while fetching lab reports summary", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const totalRecords = Number(summary?.[0]?.totalRecords || 0);
+    const totalAmountPaid = Number(summary?.[0]?.totalAmountPaid || 0);
+
+    return {
+      rows,
+      totals: {
+        totalAmountPaid
+      },
+      pagination: {
+        page: shouldExport ? 1 : pageNumber,
+        limit: shouldExport ? totalRecords : pageSize,
+        totalRecords,
+        totalPages: shouldExport ? 1 : Math.ceil(totalRecords / pageSize)
+      }
+    };
   }
 
   async labHeaderInformation(appointmentId, type, labTestId, isSpouse) {
