@@ -18,6 +18,15 @@ class ScanController {
     });
   }
 
+  async getScanReportsHandler() {
+    const data = await this._service.getScanReportsService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getScanTemplateByIdHandler() {
     const data = await this._service.getScanTemplateByIdService();
     this._response.status(200).send({

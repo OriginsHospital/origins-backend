@@ -239,8 +239,89 @@ LEFT JOIN patient_guardian_associations pga on pm.id = pga.patientId
 where taa.id = :appointmentId and :type = 'treatment'
 and talba.billTypeValue  = :scanId and talba.billTypeId  = 2
 `;
+
+const getScanReportsQuery = `
+WITH ScanReports AS (
+    SELECT
+        CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+        DATE(caa.appointmentDate) AS reportDate,
+        caa.branchId,
+        sm.name AS scanName,
+        'CONSULTATION' AS scanType,
+        CASE
+            WHEN (
+                SELECT COUNT(*)
+                FROM scan_results sr
+                WHERE sr.appointmentId = calba.appointmentId
+                    AND sr.scanId = sm.id
+                    AND sr.type = 'CONSULTATION'
+                    AND sr.scanTestStatus = 2
+            ) > 0 THEN 'Completed'
+            ELSE 'Pending'
+        END AS status,
+        calba.appointmentId AS appointmentId
+    FROM consultation_appointment_line_bills_associations calba
+    INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+    INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+    INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+    INNER JOIN patient_master pm ON pm.id = pva.patientId
+    INNER JOIN scan_master sm ON sm.id = calba.billTypeValue
+    INNER JOIN scan_master_branch_association smba
+        ON smba.scanId = sm.id AND smba.branchId = caa.branchId
+    WHERE
+        calba.status = 'PAID'
+        AND calba.billTypeId = 2
+        AND DATE(caa.appointmentDate) BETWEEN :fromDate AND :toDate
+        AND (:branchId IS NULL OR caa.branchId = :branchId)
+
+    UNION ALL
+
+    SELECT
+        CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+        DATE(taa.appointmentDate) AS reportDate,
+        taa.branchId,
+        sm.name AS scanName,
+        'TREATMENT' AS scanType,
+        CASE
+            WHEN (
+                SELECT COUNT(*)
+                FROM scan_results sr
+                WHERE sr.appointmentId = talba.appointmentId
+                    AND sr.scanId = sm.id
+                    AND sr.type = 'TREATMENT'
+                    AND sr.scanTestStatus = 2
+            ) > 0 THEN 'Completed'
+            ELSE 'Pending'
+        END AS status,
+        talba.appointmentId AS appointmentId
+    FROM treatment_appointment_line_bills_associations talba
+    INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+    INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+    INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+    INNER JOIN patient_master pm ON pm.id = pva.patientId
+    INNER JOIN scan_master sm ON sm.id = talba.billTypeValue
+    INNER JOIN scan_master_branch_association smba
+        ON smba.scanId = sm.id AND smba.branchId = taa.branchId
+    WHERE
+        talba.status = 'PAID'
+        AND talba.billTypeId = 2
+        AND DATE(taa.appointmentDate) BETWEEN :fromDate AND :toDate
+        AND (:branchId IS NULL OR taa.branchId = :branchId)
+)
+SELECT
+    patientName,
+    reportDate,
+    branchId,
+    scanName,
+    scanType,
+    status,
+    appointmentId
+FROM ScanReports
+ORDER BY reportDate DESC;
+`;
 module.exports = {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
-  getScanHeaderInformation
+  getScanHeaderInformation,
+  getScanReportsQuery
 };

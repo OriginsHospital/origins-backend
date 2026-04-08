@@ -5,7 +5,8 @@ const MySqlConnection = require("../connections/mysql_connection");
 const {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
-  getScanHeaderInformation
+  getScanHeaderInformation,
+  getScanReportsQuery
 } = require("../queries/scan_queries");
 const { Sequelize } = require("sequelize");
 const ScanTemplatesMaster = require("../models/Master/ScanTemplatesMaster");
@@ -53,6 +54,38 @@ class ScanService extends BaseService {
       })
       .catch(err => {
         console.log("Error while getting lab test fields", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data;
+  }
+
+  async getScanReportsService() {
+    const { fromDate, toDate, branchId = null } = this._request.query;
+    if (lodash.isEmpty(fromDate?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "fromDate")
+      );
+    }
+    if (lodash.isEmpty(toDate?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "toDate")
+      );
+    }
+
+    const data = await this.mysqlConnection
+      .query(getScanReportsQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          fromDate,
+          toDate,
+          branchId: branchId || null
+        }
+      })
+      .catch(err => {
+        console.log("Error while getting scan reports", err);
         throw createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
