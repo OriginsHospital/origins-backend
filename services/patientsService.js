@@ -670,7 +670,12 @@ class PatientsService extends BaseService {
         this.uploadDocumentToS3(isExistedPatient.dataValues.id, doc)
       );
       const documentPaths = await Promise.all(documentUploadPromises);
-      updateData.uploadedDocuments = documentPaths;
+      const existingDocuments = Array.isArray(
+        isExistedPatient.dataValues.uploadedDocuments
+      )
+        ? isExistedPatient.dataValues.uploadedDocuments
+        : [];
+      updateData.uploadedDocuments = [...existingDocuments, ...documentPaths];
     }
 
     console.log("Update Data:", JSON.stringify(updateData, null, 2));
