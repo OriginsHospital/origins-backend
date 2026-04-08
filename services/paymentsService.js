@@ -146,7 +146,9 @@ class PaymentsService {
         vendorId,
         amount,
         paymentDate,
-        invoiceDate
+        invoiceDate,
+        fromDate,
+        toDate
       } = this._request.query;
 
       let query = getAllPaymentsQuery.replace("ORDER BY p.createdAt DESC;", "");
@@ -176,6 +178,28 @@ class PaymentsService {
       if (invoiceDate && String(invoiceDate).trim() !== "") {
         whereConditions.push("DATE(p.invoiceDate) = :invoiceDate");
         replacements.invoiceDate = String(invoiceDate).trim();
+      }
+      const hasFromDate = fromDate && String(fromDate).trim() !== "";
+      const hasToDate = toDate && String(toDate).trim() !== "";
+      if (hasFromDate) {
+        replacements.fromDate = String(fromDate).trim();
+      }
+      if (hasToDate) {
+        replacements.toDate = String(toDate).trim();
+      }
+      // At least one of paymentDate/invoiceDate must match the chosen range.
+      if (hasFromDate && hasToDate) {
+        whereConditions.push(
+          "((DATE(p.paymentDate) BETWEEN :fromDate AND :toDate) OR (DATE(p.invoiceDate) BETWEEN :fromDate AND :toDate))"
+        );
+      } else if (hasFromDate) {
+        whereConditions.push(
+          "((DATE(p.paymentDate) >= :fromDate) OR (DATE(p.invoiceDate) >= :fromDate))"
+        );
+      } else if (hasToDate) {
+        whereConditions.push(
+          "((DATE(p.paymentDate) <= :toDate) OR (DATE(p.invoiceDate) <= :toDate))"
+        );
       }
 
       if (whereConditions.length > 0) {
