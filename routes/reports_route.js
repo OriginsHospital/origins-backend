@@ -62,6 +62,12 @@ class ReportsRoute {
       this.getStockReport
     );
     this._route.get(
+      "/grnStockReportTab",
+      checkActiveSession,
+      tokenVerified,
+      this.getGrnStockReportTab
+    );
+    this._route.get(
       "/itemPurchaseHistoryReport/:itemId",
       checkActiveSession,
       tokenVerified,
@@ -149,6 +155,11 @@ class ReportsRoute {
   getStockReport = asyncHandler(async (req, res, next) => {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.getStockReportHandler();
+  });
+
+  getGrnStockReportTab = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.getGrnStockReportTabHandler();
   });
 
   itemPurchaseHistoryReport =  asyncHandler(async (req, res, next) => {

@@ -893,6 +893,69 @@ ORDER BY
 
 `;
 
+const getGrnStockReportTabQuery = `
+WITH soldByItemBranch AS (
+  SELECT
+    sold.itemId,
+    sold.branchId,
+    SUM(sold.soldQuantity) AS soldQuantity
+  FROM (
+    SELECT
+      calba.billTypeValue AS itemId,
+      caa.branchId AS branchId,
+      SUM(COALESCE(calba.purchaseQuantity, 0)) AS soldQuantity
+    FROM consultation_appointment_line_bills_associations calba
+    INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+    WHERE
+      calba.billTypeId = 3
+      AND calba.status = 'PAID'
+      AND (:fromDate IS NULL OR DATE(caa.appointmentDate) >= :fromDate)
+      AND (:toDate IS NULL OR DATE(caa.appointmentDate) <= :toDate)
+      AND (:branchId IS NULL OR caa.branchId = :branchId)
+    GROUP BY calba.billTypeValue, caa.branchId
+
+    UNION ALL
+
+    SELECT
+      talba.billTypeValue AS itemId,
+      taa.branchId AS branchId,
+      SUM(COALESCE(talba.purchaseQuantity, 0)) AS soldQuantity
+    FROM treatment_appointment_line_bills_associations talba
+    INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+    WHERE
+      talba.billTypeId = 3
+      AND talba.status = 'PAID'
+      AND (:fromDate IS NULL OR DATE(taa.appointmentDate) >= :fromDate)
+      AND (:toDate IS NULL OR DATE(taa.appointmentDate) <= :toDate)
+      AND (:branchId IS NULL OR taa.branchId = :branchId)
+    GROUP BY talba.billTypeValue, taa.branchId
+  ) sold
+  GROUP BY sold.itemId, sold.branchId
+)
+SELECT
+  gia.grnId,
+  im.id AS itemId,
+  im.itemName AS productName,
+  COALESCE(gia.totalQuantity, 0) AS availableQuantity,
+  COALESCE(gia.mrpPerTablet, gia.ratePerTablet, 0) AS price,
+  COALESCE(sold.soldQuantity, 0) AS soldQuantity,
+  COALESCE(gia.batchNo, '-') AS batchNo,
+  gm.branchId,
+  COALESCE(bm.branchCode, bm.name, '-') AS branch
+FROM stockmanagement.grn_items_associations gia
+INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+INNER JOIN stockmanagement.item_master im ON im.id = gia.itemId
+LEFT JOIN branch_master bm ON bm.id = gm.branchId
+LEFT JOIN soldByItemBranch sold ON sold.itemId = gia.itemId AND sold.branchId = gm.branchId
+WHERE
+  im.isActive = 1
+  AND gia.isReturned = 0
+  AND (:fromDate IS NULL OR DATE(gm.date) >= :fromDate)
+  AND (:toDate IS NULL OR DATE(gm.date) <= :toDate)
+  AND (:branchId IS NULL OR gm.branchId = :branchId)
+ORDER BY DATE(gm.date) DESC, im.itemName ASC;
+`;
+
 const noShowReportQuery = `
 SELECT * FROM (
     SELECT 
@@ -1002,6 +1065,7 @@ module.exports = {
   returnsDataQuery,
   patientPharmacySalesReportQuery,
   grnSalesReportQuery,
+  getGrnStockReportTabQuery,
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,

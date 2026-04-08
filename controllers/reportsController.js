@@ -92,6 +92,15 @@ class ReportsController {
     });
   }
 
+  async getGrnStockReportTabHandler() {
+    const data = await this._service.getGrnStockReportTabService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getItemPurchaseHistoryReport() {
     const data = await this._service.getItemPurchaseHistoryReportService(
       this._request

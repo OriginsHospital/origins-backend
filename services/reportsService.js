@@ -13,6 +13,7 @@ const {
   returnsDataQuery,
   patientPharmacySalesReportQuery,
   grnSalesReportQuery,
+  getGrnStockReportTabQuery,
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
@@ -322,6 +323,26 @@ class ReportsService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+  }
+
+  async getGrnStockReportTabService() {
+    const { fromDate, toDate, branchId } = this._request.query;
+    const data = await this.mySqlConnection
+      .query(getGrnStockReportTabQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          fromDate: fromDate?.trim() ? fromDate.trim() : null,
+          toDate: toDate?.trim() ? toDate.trim() : null,
+          branchId: branchId?.trim() ? branchId.trim() : null
+        }
+      })
+      .catch(err => {
+        console.log("Error while fetching GRN stock report tab data", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    return data || [];
   }
 
   async getItemPurchaseHistoryReportService() {
