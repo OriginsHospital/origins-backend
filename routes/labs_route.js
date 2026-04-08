@@ -40,7 +40,7 @@ class LabsRoute {
     );
 
     this._route.get(
-      "/labReports",
+      "/getLabReports",
       checkActiveSession,
       tokenVerified,
       this.getLabReports
