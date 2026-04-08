@@ -962,132 +962,109 @@ SELECT
   src.medicineName,
   ROUND(
     CASE
-      WHEN SUM(src.totalQuantitySold) > 0 THEN SUM(src.totalAmount) / SUM(src.totalQuantitySold)
+      WHEN SUM(src.soldQuantity) > 0 THEN SUM(src.soldQuantity * src.unitPrice) / SUM(src.soldQuantity)
       ELSE 0
     END,
     2
   ) AS mrp,
-  ROUND(SUM(src.totalQuantitySold), 2) AS totalQuantitySold,
-  ROUND(SUM(src.totalAmount), 2) AS totalAmount
+  ROUND(SUM(src.soldQuantity), 2) AS totalQuantitySold,
+  ROUND(SUM(src.soldQuantity * src.unitPrice), 2) AS totalAmount
 FROM (
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
-    COALESCE(ref.itemName, im.itemName, '-') AS medicineName,
-    COALESCE(
-      NULLIF(SUM(COALESCE(pd.usedQuantity, 0)), 0),
-      CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2))
-    ) AS totalQuantitySold,
-    COALESCE(
-      NULLIF(SUM(COALESCE(pd.usedQuantity, 0) * COALESCE(pd.mrpPerTablet, 0)), 0),
-      CAST(COALESCE(ref.totalCost, 0) AS DECIMAL(18,2))
-    ) AS totalAmount
-  FROM order_details_master odm
-  INNER JOIN consultation_appointments_associations caa ON caa.id = odm.appointmentId
+    COALESCE(im.itemName, '-') AS medicineName,
+    CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
+    CAST(
+      COALESCE(
+        NULLIF(ipm.price, 0),
+        NULLIF(gp.mrpPerTablet, 0),
+        NULLIF(gp.ratePerTablet, 0),
+        0
+      ) AS DECIMAL(18,2)
+    ) AS unitPrice
+  FROM consultation_appointment_line_bills_associations calba
+  INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
   INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
   INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
   INNER JOIN patient_master pm ON pm.id = pva.patientId
   LEFT JOIN branch_master bm ON bm.id = pm.branchId
-  INNER JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_VALID(odm.orderDetails) THEN odm.orderDetails
-      ELSE '[]'
-    END,
-    '$[*]'
-    COLUMNS (
-      refId INT PATH '$.refId',
-      itemName VARCHAR(255) PATH '$.itemName',
-      totalCost DECIMAL(18,2) PATH '$.totalCost',
-      purchaseDetails JSON PATH '$.purchaseDetails'
-    )
-  ) ref
-  LEFT JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_VALID(ref.purchaseDetails) THEN ref.purchaseDetails
-      ELSE '[]'
-    END,
-    '$[*]'
-    COLUMNS (
-      usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
-      mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
-    )
-  ) pd ON 1 = 1
-  LEFT JOIN consultation_appointment_line_bills_associations calba
-    ON calba.id = ref.refId AND calba.billTypeId = 3
-  LEFT JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
+  INNER JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
+  LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
+  LEFT JOIN (
+    SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+    FROM stockmanagement.grn_items_associations gi
+    INNER JOIN (
+      SELECT itemId, MAX(id) AS maxId
+      FROM stockmanagement.grn_items_associations
+      WHERE isReturned = 0
+      GROUP BY itemId
+    ) lm ON lm.maxId = gi.id
+  ) gp ON gp.itemId = im.id
   WHERE
-    odm.productType = 'PHARMACY'
-    AND odm.paymentStatus = 'PAID'
-    AND odm.type = 'Consultation'
-    AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
-    AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    calba.billTypeId = 3
+    AND calba.status = 'PAID'
     AND (:branchId IS NULL OR pm.branchId = :branchId)
-  GROUP BY
-    COALESCE(bm.branchCode, bm.name, '-'),
-    COALESCE(ref.itemName, im.itemName, '-'),
-    ref.refId,
-    calba.purchaseQuantity,
-    ref.totalCost
+    AND EXISTS (
+      SELECT 1
+      FROM order_details_master odm
+      WHERE
+        odm.appointmentId = calba.appointmentId
+        AND odm.type = 'Consultation'
+        AND odm.productType = 'PHARMACY'
+        AND odm.paymentStatus = 'PAID'
+        AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
+        AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    )
 
   UNION ALL
 
   SELECT
     COALESCE(bm.branchCode, bm.name, '-') AS branch,
-    COALESCE(ref.itemName, im.itemName, '-') AS medicineName,
-    COALESCE(
-      NULLIF(SUM(COALESCE(pd.usedQuantity, 0)), 0),
-      CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2))
-    ) AS totalQuantitySold,
-    COALESCE(
-      NULLIF(SUM(COALESCE(pd.usedQuantity, 0) * COALESCE(pd.mrpPerTablet, 0)), 0),
-      CAST(COALESCE(ref.totalCost, 0) AS DECIMAL(18,2))
-    ) AS totalAmount
-  FROM order_details_master odm
-  INNER JOIN treatment_appointments_associations taa ON taa.id = odm.appointmentId
+    COALESCE(im.itemName, '-') AS medicineName,
+    CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
+    CAST(
+      COALESCE(
+        NULLIF(ipm.price, 0),
+        NULLIF(gp.mrpPerTablet, 0),
+        NULLIF(gp.ratePerTablet, 0),
+        0
+      ) AS DECIMAL(18,2)
+    ) AS unitPrice
+  FROM treatment_appointment_line_bills_associations talba
+  INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
   INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
   INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
   INNER JOIN patient_master pm ON pm.id = pva.patientId
   LEFT JOIN branch_master bm ON bm.id = pm.branchId
-  INNER JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_VALID(odm.orderDetails) THEN odm.orderDetails
-      ELSE '[]'
-    END,
-    '$[*]'
-    COLUMNS (
-      refId INT PATH '$.refId',
-      itemName VARCHAR(255) PATH '$.itemName',
-      totalCost DECIMAL(18,2) PATH '$.totalCost',
-      purchaseDetails JSON PATH '$.purchaseDetails'
-    )
-  ) ref
-  LEFT JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_VALID(ref.purchaseDetails) THEN ref.purchaseDetails
-      ELSE '[]'
-    END,
-    '$[*]'
-    COLUMNS (
-      usedQuantity DECIMAL(18,2) PATH '$.usedQuantity',
-      mrpPerTablet DECIMAL(18,2) PATH '$.mrpPerTablet'
-    )
-  ) pd ON 1 = 1
-  LEFT JOIN treatment_appointment_line_bills_associations talba
-    ON talba.id = ref.refId AND talba.billTypeId = 3
-  LEFT JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
+  INNER JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
+  LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
+  LEFT JOIN (
+    SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+    FROM stockmanagement.grn_items_associations gi
+    INNER JOIN (
+      SELECT itemId, MAX(id) AS maxId
+      FROM stockmanagement.grn_items_associations
+      WHERE isReturned = 0
+      GROUP BY itemId
+    ) lm ON lm.maxId = gi.id
+  ) gp ON gp.itemId = im.id
   WHERE
-    odm.productType = 'PHARMACY'
-    AND odm.paymentStatus = 'PAID'
-    AND odm.type = 'Treatment'
-    AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
-    AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    talba.billTypeId = 3
+    AND talba.status = 'PAID'
     AND (:branchId IS NULL OR pm.branchId = :branchId)
-  GROUP BY
-    COALESCE(bm.branchCode, bm.name, '-'),
-    COALESCE(ref.itemName, im.itemName, '-'),
-    ref.refId,
-    talba.purchaseQuantity,
-    ref.totalCost
+    AND EXISTS (
+      SELECT 1
+      FROM order_details_master odm
+      WHERE
+        odm.appointmentId = talba.appointmentId
+        AND odm.type = 'Treatment'
+        AND odm.productType = 'PHARMACY'
+        AND odm.paymentStatus = 'PAID'
+        AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
+        AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    )
 ) src
+WHERE src.soldQuantity > 0
 GROUP BY src.branch, src.medicineName
 ORDER BY totalAmount DESC, totalQuantitySold DESC;
 `;
