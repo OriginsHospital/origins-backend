@@ -956,6 +956,49 @@ WHERE
 ORDER BY DATE(gm.date) DESC, im.itemName ASC;
 `;
 
+const pharmacySalesDetailedReportQuery = `
+SELECT
+  bm.branchCode AS branch,
+  im.itemName AS medicineName,
+  COALESCE(ipm.price, 0) AS mrp,
+  SUM(src.soldQuantity) AS totalQuantitySold,
+  ROUND(SUM(src.soldQuantity * COALESCE(ipm.price, 0)), 2) AS totalAmount
+FROM (
+  SELECT
+    caa.branchId AS branchId,
+    calba.billTypeValue AS itemId,
+    CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity
+  FROM consultation_appointment_line_bills_associations calba
+  INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+  WHERE
+    calba.billTypeId = 3
+    AND calba.status = 'PAID'
+    AND (:fromDate IS NULL OR DATE(caa.appointmentDate) >= :fromDate)
+    AND (:toDate IS NULL OR DATE(caa.appointmentDate) <= :toDate)
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
+
+  UNION ALL
+
+  SELECT
+    taa.branchId AS branchId,
+    talba.billTypeValue AS itemId,
+    CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity
+  FROM treatment_appointment_line_bills_associations talba
+  INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+  WHERE
+    talba.billTypeId = 3
+    AND talba.status = 'PAID'
+    AND (:fromDate IS NULL OR DATE(taa.appointmentDate) >= :fromDate)
+    AND (:toDate IS NULL OR DATE(taa.appointmentDate) <= :toDate)
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
+) src
+INNER JOIN stockmanagement.item_master im ON im.id = src.itemId
+LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = src.itemId
+LEFT JOIN branch_master bm ON bm.id = src.branchId
+GROUP BY bm.branchCode, im.itemName, ipm.price
+ORDER BY totalAmount DESC, totalQuantitySold DESC;
+`;
+
 const noShowReportQuery = `
 SELECT * FROM (
     SELECT 
@@ -1066,6 +1109,7 @@ module.exports = {
   patientPharmacySalesReportQuery,
   grnSalesReportQuery,
   getGrnStockReportTabQuery,
+  pharmacySalesDetailedReportQuery,
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,

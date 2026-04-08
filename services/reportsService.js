@@ -14,6 +14,7 @@ const {
   patientPharmacySalesReportQuery,
   grnSalesReportQuery,
   getGrnStockReportTabQuery,
+  pharmacySalesDetailedReportQuery,
   getStockReportQuery,
   getItemPurchaseHistoryQuery,
   noShowReportQuery,
@@ -278,6 +279,26 @@ class ReportsService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+  }
+
+  async getPharmacySalesDetailedReportService() {
+    const { fromDate, toDate, branchId } = this._request.query;
+    const data = await this.mySqlConnection
+      .query(pharmacySalesDetailedReportQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          fromDate: fromDate?.trim() ? fromDate.trim() : null,
+          toDate: toDate?.trim() ? toDate.trim() : null,
+          branchId: branchId?.trim() ? branchId.trim() : null
+        }
+      })
+      .catch(err => {
+        console.log("Error while fetching pharmacy sales detailed report", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    return data || [];
   }
 
   async getGrnSalesReportService() {

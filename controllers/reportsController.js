@@ -74,6 +74,17 @@ class ReportsController {
     });
   }
 
+  async getPharmacySalesDetailedReportHandler() {
+    const data = await this._service.getPharmacySalesDetailedReportService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getGrnSalesReportHandler() {
     const data = await this._service.getGrnSalesReportService(this._request);
     this._response.status(200).send({

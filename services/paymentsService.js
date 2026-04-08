@@ -48,7 +48,14 @@ class PaymentsService {
       amount
     } = this._request.body;
 
-    if (!branchId || !paymentDate || !departmentId || !vendorId || !amount) {
+    if (
+      !branchId ||
+      !paymentDate ||
+      !invoiceDate ||
+      !departmentId ||
+      !vendorId ||
+      !amount
+    ) {
       throw new createError.BadRequest("Missing required fields");
     }
 

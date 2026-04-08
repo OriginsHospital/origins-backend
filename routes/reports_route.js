@@ -50,6 +50,12 @@ class ReportsRoute {
       this.getPatientPharmacySalesReport
     );
     this._route.get(
+      "/pharmacySalesDetailedReport",
+      checkActiveSession,
+      tokenVerified,
+      this.getPharmacySalesDetailedReport
+    );
+    this._route.get(
       "/grnSalesReport",
       checkActiveSession,
       tokenVerified,
@@ -145,6 +151,11 @@ class ReportsRoute {
   getPatientPharmacySalesReport = asyncHandler(async (req, res, next) => {
     const controllerObj = new ReportsController(req, res, next);
     await controllerObj.getPatientPharmacySalesReportHandler();
+  });
+
+  getPharmacySalesDetailedReport = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ReportsController(req, res, next);
+    await controllerObj.getPharmacySalesDetailedReportHandler();
   });
 
   getGrnSalesReport = asyncHandler(async (req, res, next) => {
