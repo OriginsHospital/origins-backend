@@ -958,29 +958,24 @@ ORDER BY DATE(gm.date) DESC, im.itemName ASC;
 
 const pharmacySalesDetailedReportQuery = `
 SELECT
-  DATE(odm.orderDate) AS saleDate,
-  odm.orderId AS orderId,
-  calba.id AS lineBillId,
-  'Consultation' AS lineType,
-  odm.orderDetails AS orderDetailsRaw,
-  ppdt.purchaseDetails AS tempPurchaseDetails,
-  COALESCE(bm.branchCode, bm.name, '-') AS branch,
-  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
-  COALESCE(im.itemName, '-') AS medicineName,
+  src.branch,
+  src.patientName,
+  src.medicineName,
   ROUND(
-    CAST(
-      COALESCE(
-        NULLIF(ipm.price, 0),
-        NULLIF(gp.mrpPerTablet, 0),
-        NULLIF(gp.ratePerTablet, 0),
-        0
-      ) AS DECIMAL(18,2)
-    ),
+    CASE
+      WHEN SUM(src.soldQuantity) > 0 THEN SUM(src.soldQuantity * src.unitPrice) / SUM(src.soldQuantity)
+      ELSE 0
+    END,
     2
   ) AS mrp,
-  ROUND(CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)), 2) AS totalQuantitySold,
-  ROUND(
-    CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)) *
+  ROUND(SUM(src.soldQuantity), 2) AS totalQuantitySold,
+  ROUND(SUM(src.soldQuantity * src.unitPrice), 2) AS totalAmount
+FROM (
+  SELECT
+    COALESCE(bm.branchCode, bm.name, '-') AS branch,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(im.itemName, '-') AS medicineName,
+    CAST(COALESCE(calba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
     CAST(
       COALESCE(
         NULLIF(ipm.price, 0),
@@ -988,59 +983,48 @@ SELECT
         NULLIF(gp.ratePerTablet, 0),
         0
       ) AS DECIMAL(18,2)
-    ),
-    2
-  ) AS totalAmount
-FROM consultation_appointment_line_bills_associations calba
-INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
-INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
-INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
-INNER JOIN patient_master pm ON pm.id = pva.patientId
-LEFT JOIN branch_master bm ON bm.id = pm.branchId
-INNER JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
-LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
-LEFT JOIN (
-  SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
-  FROM stockmanagement.grn_items_associations gi
-  INNER JOIN (
-    SELECT itemId, MAX(id) AS maxId
-    FROM stockmanagement.grn_items_associations
-    WHERE isReturned = 0
-    GROUP BY itemId
-  ) lm ON lm.maxId = gi.id
-) gp ON gp.itemId = im.id
-INNER JOIN order_details_master odm
-  ON odm.id = (
-    SELECT MAX(odm2.id)
-    FROM order_details_master odm2
-    WHERE odm2.appointmentId = calba.appointmentId
-      AND odm2.type = 'Consultation'
-      AND odm2.productType = 'PHARMACY'
-      AND odm2.paymentStatus = 'PAID'
-      AND (:fromDate IS NULL OR DATE(odm2.orderDate) >= :fromDate)
-      AND (:toDate IS NULL OR DATE(odm2.orderDate) <= :toDate)
-  )
-LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
-  ON ppdt.refId = calba.id AND ppdt.type = 'Consultation'
-WHERE
-  calba.billTypeId = 3
-  AND calba.status = 'PAID'
-  AND (:branchId IS NULL OR pm.branchId = :branchId)
-  AND COALESCE(calba.purchaseQuantity, 0) > 0
+    ) AS unitPrice
+  FROM consultation_appointment_line_bills_associations calba
+  INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+  INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+  INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  LEFT JOIN branch_master bm ON bm.id = pm.branchId
+  INNER JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
+  LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
+  LEFT JOIN (
+    SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+    FROM stockmanagement.grn_items_associations gi
+    INNER JOIN (
+      SELECT itemId, MAX(id) AS maxId
+      FROM stockmanagement.grn_items_associations
+      WHERE isReturned = 0
+      GROUP BY itemId
+    ) lm ON lm.maxId = gi.id
+  ) gp ON gp.itemId = im.id
+  WHERE
+    calba.billTypeId = 3
+    AND calba.status = 'PAID'
+    AND (:branchId IS NULL OR pm.branchId = :branchId)
+    AND EXISTS (
+      SELECT 1
+      FROM order_details_master odm
+      WHERE
+        odm.appointmentId = calba.appointmentId
+        AND odm.type = 'Consultation'
+        AND odm.productType = 'PHARMACY'
+        AND odm.paymentStatus = 'PAID'
+        AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
+        AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    )
 
-UNION ALL
+  UNION ALL
 
-SELECT
-  DATE(odm.orderDate) AS saleDate,
-  odm.orderId AS orderId,
-  talba.id AS lineBillId,
-  'Treatment' AS lineType,
-  odm.orderDetails AS orderDetailsRaw,
-  ppdt.purchaseDetails AS tempPurchaseDetails,
-  COALESCE(bm.branchCode, bm.name, '-') AS branch,
-  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
-  COALESCE(im.itemName, '-') AS medicineName,
-  ROUND(
+  SELECT
+    COALESCE(bm.branchCode, bm.name, '-') AS branch,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(im.itemName, '-') AS medicineName,
+    CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)) AS soldQuantity,
     CAST(
       COALESCE(
         NULLIF(ipm.price, 0),
@@ -1048,59 +1032,44 @@ SELECT
         NULLIF(gp.ratePerTablet, 0),
         0
       ) AS DECIMAL(18,2)
-    ),
-    2
-  ) AS mrp,
-  ROUND(CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)), 2) AS totalQuantitySold,
-  ROUND(
-    CAST(COALESCE(talba.purchaseQuantity, 0) AS DECIMAL(18,2)) *
-    CAST(
-      COALESCE(
-        NULLIF(ipm.price, 0),
-        NULLIF(gp.mrpPerTablet, 0),
-        NULLIF(gp.ratePerTablet, 0),
-        0
-      ) AS DECIMAL(18,2)
-    ),
-    2
-  ) AS totalAmount
-FROM treatment_appointment_line_bills_associations talba
-INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
-INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
-INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
-INNER JOIN patient_master pm ON pm.id = pva.patientId
-LEFT JOIN branch_master bm ON bm.id = pm.branchId
-INNER JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
-LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
-LEFT JOIN (
-  SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
-  FROM stockmanagement.grn_items_associations gi
-  INNER JOIN (
-    SELECT itemId, MAX(id) AS maxId
-    FROM stockmanagement.grn_items_associations
-    WHERE isReturned = 0
-    GROUP BY itemId
-  ) lm ON lm.maxId = gi.id
-) gp ON gp.itemId = im.id
-INNER JOIN order_details_master odm
-  ON odm.id = (
-    SELECT MAX(odm2.id)
-    FROM order_details_master odm2
-    WHERE odm2.appointmentId = talba.appointmentId
-      AND odm2.type = 'Treatment'
-      AND odm2.productType = 'PHARMACY'
-      AND odm2.paymentStatus = 'PAID'
-      AND (:fromDate IS NULL OR DATE(odm2.orderDate) >= :fromDate)
-      AND (:toDate IS NULL OR DATE(odm2.orderDate) <= :toDate)
-  )
-LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
-  ON ppdt.refId = talba.id AND ppdt.type = 'Treatment'
-WHERE
-  talba.billTypeId = 3
-  AND talba.status = 'PAID'
-  AND (:branchId IS NULL OR pm.branchId = :branchId)
-  AND COALESCE(talba.purchaseQuantity, 0) > 0
-ORDER BY saleDate DESC, totalAmount DESC;
+    ) AS unitPrice
+  FROM treatment_appointment_line_bills_associations talba
+  INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+  INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+  INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  LEFT JOIN branch_master bm ON bm.id = pm.branchId
+  INNER JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
+  LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
+  LEFT JOIN (
+    SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+    FROM stockmanagement.grn_items_associations gi
+    INNER JOIN (
+      SELECT itemId, MAX(id) AS maxId
+      FROM stockmanagement.grn_items_associations
+      WHERE isReturned = 0
+      GROUP BY itemId
+    ) lm ON lm.maxId = gi.id
+  ) gp ON gp.itemId = im.id
+  WHERE
+    talba.billTypeId = 3
+    AND talba.status = 'PAID'
+    AND (:branchId IS NULL OR pm.branchId = :branchId)
+    AND EXISTS (
+      SELECT 1
+      FROM order_details_master odm
+      WHERE
+        odm.appointmentId = talba.appointmentId
+        AND odm.type = 'Treatment'
+        AND odm.productType = 'PHARMACY'
+        AND odm.paymentStatus = 'PAID'
+        AND (:fromDate IS NULL OR DATE(odm.orderDate) >= :fromDate)
+        AND (:toDate IS NULL OR DATE(odm.orderDate) <= :toDate)
+    )
+) src
+WHERE src.soldQuantity > 0
+GROUP BY src.branch, src.patientName, src.medicineName
+ORDER BY totalAmount DESC, totalQuantitySold DESC;
 `;
 
 const noShowReportQuery = `
