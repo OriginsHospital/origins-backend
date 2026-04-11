@@ -5,6 +5,9 @@ const {
   checkActiveSession,
   tokenVerified
 } = require("../middlewares/authMiddlewares.js");
+const {
+  requirePharmacySalesReportAccess
+} = require("../middlewares/pharmacySalesReportAccessMiddleware");
 
 class ReportsRoute {
   _route = express.Router();
@@ -53,6 +56,7 @@ class ReportsRoute {
       "/pharmacySalesDetailedReport",
       checkActiveSession,
       tokenVerified,
+      requirePharmacySalesReportAccess,
       this.getPharmacySalesDetailedReport
     );
     this._route.get(
