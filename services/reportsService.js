@@ -24,6 +24,62 @@ const {
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
 
+function mapPharmacySalesDetailedRow(row) {
+  const lineBillId = row.lineBillId;
+  const orderDetailsRaw = row.orderDetailsRaw;
+  const tempPurchaseDetails = row.tempPurchaseDetails;
+
+  let purchaseDetails = [];
+  if (orderDetailsRaw) {
+    try {
+      const parsed =
+        typeof orderDetailsRaw === "string"
+          ? JSON.parse(orderDetailsRaw)
+          : orderDetailsRaw;
+      if (Array.isArray(parsed)) {
+        const line = parsed.find(o => Number(o.refId) === Number(lineBillId));
+        if (
+          line &&
+          Array.isArray(line.purchaseDetails) &&
+          line.purchaseDetails.length
+        ) {
+          purchaseDetails = line.purchaseDetails;
+        }
+      }
+    } catch (_e) {
+      /* ignore malformed JSON */
+    }
+  }
+  if (!purchaseDetails.length && tempPurchaseDetails) {
+    try {
+      const temp =
+        typeof tempPurchaseDetails === "string"
+          ? JSON.parse(tempPurchaseDetails)
+          : tempPurchaseDetails;
+      if (Array.isArray(temp)) {
+        purchaseDetails = temp;
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+
+  const grnIds = [
+    ...new Set(
+      (purchaseDetails || [])
+        .map(p => p && p.grnId)
+        .filter(id => id != null && id !== "")
+    )
+  ];
+
+  const { orderDetailsRaw: _a, tempPurchaseDetails: _b, ...rest } = row;
+  return {
+    ...rest,
+    grnIds,
+    linePurchaseBreakdown: purchaseDetails || []
+  };
+}
+
 class ReportsService {
   constructor(request, response, next) {
     this._request = request;
@@ -298,7 +354,7 @@ class ReportsService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
-    return data || [];
+    return (data || []).map(mapPharmacySalesDetailedRow);
   }
 
   async getGrnSalesReportService() {
