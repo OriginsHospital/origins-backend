@@ -16,6 +16,23 @@ const PatientMasterModel = require("../models/Master/patientMaster");
 const TriggerTimeStampsModel = require("../models/Master/triggerTimeStampsMaster");
 const VisitEraConsentsAssociations = require("../models/Associations/visitEraConsentsAssociations");
 
+const getS3KeyFromConsentRecord = consentRecord => {
+  if (consentRecord?.key) {
+    return consentRecord.key;
+  }
+
+  if (!consentRecord?.link) {
+    return null;
+  }
+
+  try {
+    const url = new URL(consentRecord.link);
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch (error) {
+    return null;
+  }
+};
+
 class ConsentFormsTemplateService {
   constructor(request, response, next) {
     this._request = request;
@@ -131,9 +148,17 @@ class ConsentFormsTemplateService {
         );
       });
 
+      const s3Key = getS3KeyFromConsentRecord(getIcsiConsent);
+      if (!s3Key) {
+        console.log(
+          `Warning: skipped S3 delete for ICSI consent id ${id} due to missing key`
+        );
+        return `consent form with id ${id} ${Constants.DELETED_SUCCESSFULLY}`;
+      }
+
       const deleteParams = {
         Bucket: this.bucketName,
-        Key: getIcsiConsent.key
+        Key: s3Key
       };
 
       try {
@@ -142,9 +167,9 @@ class ConsentFormsTemplateService {
           `Deleted S3 file for consent form with id ${id} successfully.`
         );
       } catch (err) {
-        console.log("Error while deleting file from S3", err.message);
-        throw new createError.InternalServerError(
-          "Failed to delete file from S3 after database deletion"
+        console.log(
+          "Warning: database record deleted but S3 delete failed",
+          err.message
         );
       }
 
@@ -366,9 +391,17 @@ class ConsentFormsTemplateService {
         );
       });
 
+      const s3Key = getS3KeyFromConsentRecord(getEraConsent);
+      if (!s3Key) {
+        console.log(
+          `Warning: skipped S3 delete for ERA consent id ${id} due to missing key`
+        );
+        return `consent form with id ${id} ${Constants.DELETED_SUCCESSFULLY}`;
+      }
+
       const deleteParams = {
         Bucket: this.bucketName,
-        Key: getEraConsent.key
+        Key: s3Key
       };
 
       try {
@@ -377,9 +410,9 @@ class ConsentFormsTemplateService {
           `Deleted S3 file for consent form with id ${id} successfully.`
         );
       } catch (err) {
-        console.log("Error while deleting file from S3", err.message);
-        throw new createError.InternalServerError(
-          "Failed to delete file from S3 after database deletion"
+        console.log(
+          "Warning: database record deleted but S3 delete failed",
+          err.message
         );
       }
 
