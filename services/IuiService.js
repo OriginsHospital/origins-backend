@@ -132,9 +132,11 @@ class IUIService {
           `Deleted S3 file for consent form with id ${id} successfully.`
         );
       } catch (err) {
-        console.log("Error while deleting file from S3", err.message);
-        throw new createError.InternalServerError(
-          "Failed to delete file from S3 after database deletion"
+        // Best-effort S3 cleanup: keep DB deletion successful for end users.
+        // This can happen when the object was already removed externally.
+        console.log(
+          "Warning: database record deleted but S3 delete failed",
+          err.message
         );
       }
 
