@@ -39,6 +39,12 @@ async function debugAntenatalTemplates() {
       );
       console.log(`Labels found: ${labels ? labels.join(", ") : "none"}`);
       console.log(`TR count: ${(template.match(/<tr/gi) || []).length}`);
+      console.log(
+        `Contains COMMON FINDINGS: ${/COMMON\s*FINDINGS/i.test(template)}`
+      );
+      console.log(
+        `Contains COMMON ENTRIES: ${/COMMON\s*ENTRIES/i.test(template)}`
+      );
       console.log("Template start preview:");
       console.log(template.slice(0, 500));
 
