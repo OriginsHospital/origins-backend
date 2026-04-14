@@ -52,26 +52,30 @@ function buildTripletTemplateFromTwins(twinsTemplate) {
     throw new Error("Could not find 'TWIN B' section in twins template");
   }
 
-  const blockStart = twinBMatch.index;
-  const afterTwinB = twinsTemplate.slice(blockStart);
+  // Duplicate full table rows of TWIN B to keep TWIN C tabular.
+  const labelIndex = twinBMatch.index;
+  const blockStart = twinsTemplate.lastIndexOf("<tr", labelIndex);
+  if (blockStart === -1) {
+    throw new Error("Could not find table row start for 'TWIN B'");
+  }
 
+  const afterLabel = twinsTemplate.slice(labelIndex);
   const nextSectionMatch = /(IMPRESSION|CONCLUSION|SUMMARY|COMMENTS|ADVICE|FINDINGS|REMARKS)\s*:?/i.exec(
-    afterTwinB
+    afterLabel
   );
+  const nextSectionIndex =
+    nextSectionMatch && nextSectionMatch.index != null
+      ? labelIndex + nextSectionMatch.index
+      : twinsTemplate.length;
 
-  let blockEnd = -1;
-  if (nextSectionMatch && nextSectionMatch.index != null) {
-    blockEnd = blockStart + nextSectionMatch.index;
-  } else {
-    const tableEndRelative = afterTwinB.search(/<\/table>/i);
-    if (tableEndRelative !== -1) {
-      blockEnd = blockStart + tableEndRelative;
-    }
+  const lastTrEndBeforeSection = twinsTemplate.lastIndexOf(
+    "</tr>",
+    nextSectionIndex
+  );
+  if (lastTrEndBeforeSection === -1) {
+    throw new Error("Could not find table row end for 'TWIN B' block");
   }
-
-  if (blockEnd === -1 || blockEnd <= blockStart) {
-    throw new Error("Could not determine end of 'TWIN B' section");
-  }
+  const blockEnd = lastTrEndBeforeSection + "</tr>".length;
 
   const twinBBlock = twinsTemplate.slice(blockStart, blockEnd);
   const twinCBlock = twinBBlock.replace(/TWIN\s*B/gi, "TWIN C");
