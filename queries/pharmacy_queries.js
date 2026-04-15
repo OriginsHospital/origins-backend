@@ -23,6 +23,19 @@ const getPharmacyListByDateQuery = `
 	pm.photoPath,
 	(select cdm.Name from consultation_doctor_master cdm where cdm.userId = caa.consultationDoctorId) as doctorName,
 	calba.appointmentId as appointmentId,
+	pva.id as visitId,
+	CASE
+		WHEN pva.isActive = 1 AND EXISTS (
+			SELECT 1
+			FROM visit_packages_associations vpa
+			WHERE vpa.visitId = pva.id
+				AND (
+					IFNULL(vpa.marketingPackage, 0) > 0
+					OR IFNULL(vpa.doctorSuggestedPackage, 0) > 0
+				)
+		) THEN 1
+		ELSE 0
+	END AS hasActivePackage,
 	'Consultation' as type,
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
@@ -95,6 +108,19 @@ select
 	pm.photoPath,
 	(select cdm.Name from consultation_doctor_master cdm where cdm.userId = taa.consultationDoctorId) as doctorName,
 	talba.appointmentId as appointmentId,
+	pva.id as visitId,
+	CASE
+		WHEN pva.isActive = 1 AND EXISTS (
+			SELECT 1
+			FROM visit_packages_associations vpa
+			WHERE vpa.visitId = pva.id
+				AND (
+					IFNULL(vpa.marketingPackage, 0) > 0
+					OR IFNULL(vpa.doctorSuggestedPackage, 0) > 0
+				)
+		) THEN 1
+		ELSE 0
+	END AS hasActivePackage,
 	'Treatment' as type,
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
