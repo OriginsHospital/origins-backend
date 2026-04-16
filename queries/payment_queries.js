@@ -144,6 +144,23 @@ const pharmacyTreatmentProductTable = `
     group by appointmentId ;
 `;
 
+/** PAID pharmacy line bill ids for an appointment (used to repair invoice vs orderDetails mismatch). */
+const pharmacyPaidLineRefIdsForConsultationQuery = `
+  SELECT calba.id AS refId
+  FROM consultation_appointment_line_bills_associations calba
+  WHERE calba.appointmentId = :appointmentId
+    AND calba.billTypeId = 3
+    AND calba.status = 'PAID'
+`;
+
+const pharmacyPaidLineRefIdsForTreatmentQuery = `
+  SELECT talba.id AS refId
+  FROM treatment_appointment_line_bills_associations talba
+  WHERE talba.appointmentId = :appointmentId
+    AND talba.billTypeId = 3
+    AND talba.status = 'PAID'
+`;
+
 const consultationOrderDetailsForInvoiceQuery = `
     SELECT 
     (
@@ -940,6 +957,8 @@ module.exports = {
   invoiceForTreatementAppointmentsQuery,
   pharmacyConsultationProductTable,
   pharmacyTreatmentProductTable,
+  pharmacyPaidLineRefIdsForConsultationQuery,
+  pharmacyPaidLineRefIdsForTreatmentQuery,
   patientItemReturnConsultationQuery,
   patientItemReturnTreatementQuery,
   consultationOrderDetailsForInvoiceQuery,
