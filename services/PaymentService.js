@@ -694,6 +694,21 @@ class PaymentService extends BaseService {
         });
     }
 
+    const splitSummary = orderDetails?.splitPaymentSummary;
+    const splitCashAmount = orderDetails?.splitCashAmount;
+    const splitUpiAmount = orderDetails?.splitUpiAmount;
+    let paymentModeLabel = orderDetails?.paymentMode || "";
+
+    if (splitSummary) {
+      paymentModeLabel = `${orderDetails?.paymentMode} (Split)`;
+      if (splitCashAmount || splitUpiAmount) {
+        paymentModeLabel += ` | Cash: ${splitCashAmount ||
+          0}, UPI: ${splitUpiAmount || 0}`;
+      } else {
+        paymentModeLabel += ` | ${splitSummary}`;
+      }
+    }
+
     let patientHeaderInforForInvoice = patientHeaderForInvoice;
     patientHeaderInforForInvoice = patientHeaderInforForInvoice
       .replaceAll("{{orderNo}}", orderDetails?.orderNo)
@@ -703,7 +718,7 @@ class PaymentService extends BaseService {
       .replaceAll("{{doctorName}}", data[0]?.patientInformation?.doctorName)
       .replaceAll("{{ageGender}}", data[0]?.patientInformation?.ageGender)
       .replaceAll("{{mobileNumber}}", data[0]?.patientInformation?.mobileNumber)
-      .replaceAll("{{paymentMode}}", orderDetails?.paymentMode);
+      .replaceAll("{{paymentMode}}", paymentModeLabel);
 
     return patientHeaderInforForInvoice;
   }
