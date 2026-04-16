@@ -26,8 +26,6 @@ const {
   invoiceForTreatementAppointmentsQuery,
   pharmacyConsultationProductTable,
   pharmacyTreatmentProductTable,
-  pharmacyPaidLineRefIdsForConsultationQuery,
-  pharmacyPaidLineRefIdsForTreatmentQuery,
   patientItemReturnConsultationQuery,
   patientItemReturnTreatementQuery,
   getConsultationFormFPatientDetails,
@@ -821,50 +819,6 @@ class PaymentService extends BaseService {
         return each.refId;
       });
 
-      // If orderDetails omitted some medicines but those lines are already PAID in the bill table,
-      // include them on the invoice. Only when there is a single PAID PHARMACY order for this
-      // appointment + type so we do not mix items across multiple pharmacy payments.
-      const apptId = purchaseDetails?.appointmentId;
-      if (apptId) {
-        const paidPharmacyOrderCount = await OrderDetailsMasterModel.count({
-          where: {
-            appointmentId: apptId,
-            type: type,
-            productType: "PHARMACY",
-            paymentStatus: "PAID"
-          }
-        }).catch(() => 0);
-
-        if (paidPharmacyOrderCount === 1) {
-          const paidRefQuery =
-            type == "Consultation"
-              ? pharmacyPaidLineRefIdsForConsultationQuery
-              : type == "Treatment"
-              ? pharmacyPaidLineRefIdsForTreatmentQuery
-              : null;
-
-          if (paidRefQuery) {
-            const paidRows = await this.mySqlConnection
-              .query(paidRefQuery, {
-                type: Sequelize.QueryTypes.SELECT,
-                replacements: { appointmentId: apptId }
-              })
-              .catch(() => []);
-
-            const seen = new Set(refIds.map(id => String(id)));
-            for (const row of paidRows || []) {
-              const rid = row?.refId;
-              if (rid == null) continue;
-              const key = String(rid);
-              if (!seen.has(key)) {
-                seen.add(key);
-                refIds.push(rid);
-              }
-            }
-          }
-        }
-      }
-
       let query = null;
       if (type == "Consultation") {
         query = pharmacyConsultationProductTable;
@@ -890,7 +844,7 @@ class PaymentService extends BaseService {
             itemName: info.itemName,
             presQty: info.prescribedQuantity,
             purcQty: info.purchaseQuantity,
-            totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "Rs. 0",
+            totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
             prescribedTo: info?.prescribedTo
           };
         });
