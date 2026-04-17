@@ -92,6 +92,38 @@ const AppointmentReasonMaster = require("../models/Master/appointmentReasonMaste
 const AppointmentChargesBranchAssociation = require("../models/Associations/appointmentChargesBranchAssocitation");
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
+
+/**
+ * Raw MySQL TIME values may be strings, Date objects, or plain objects depending on driver/config.
+ * Slot generation expects a colon-separated time (e.g. HH:mm:ss).
+ */
+function slotQueryTimeToString(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof Date) {
+    return moment.utc(value).format("HH:mm:ss");
+  }
+  if (typeof value === "object") {
+    if (
+      value.hours !== undefined ||
+      value.minutes !== undefined ||
+      value.seconds !== undefined
+    ) {
+      const h = Number(value.hours) || 0;
+      const m = Number(value.minutes) || 0;
+      const s = Number(value.seconds) || 0;
+      const pad = n => String(n).padStart(2, "0");
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+  }
+  const s = String(value).trim();
+  return s.includes(":") ? s : "";
+}
+
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -155,6 +187,88 @@ class AppointmentsPaymentService extends BaseService {
     return lodash.uniq(timeSlots);
   }
 
+  /**
+   * Builds available 15-minute slot strings from raw consultationAvailableSlotsQuery rows.
+   */
+  async buildConsultationAvailableSlotsList(data) {
+    const blockSlots = [];
+    const shiftSlots = [];
+    const bookedSlots = [];
+
+    data.forEach(entry => {
+      const timeStart = slotQueryTimeToString(entry.timeStart);
+      const timeEnd = slotQueryTimeToString(entry.timeEnd);
+      if (
+        !timeStart ||
+        !timeEnd ||
+        !timeStart.includes(":") ||
+        !timeEnd.includes(":")
+      ) {
+        return;
+      }
+
+      const rowType = String(entry.type || "").toUpperCase();
+
+      if (rowType === "BLOCK") {
+        const startHour = parseInt(timeStart.split(":")[0], 10);
+        const startMinute = parseInt(timeStart.split(":")[1], 10);
+        const endHour = parseInt(timeEnd.split(":")[0], 10);
+        const endMinute = parseInt(timeEnd.split(":")[1], 10);
+        if (
+          [startHour, startMinute, endHour, endMinute].some(n =>
+            Number.isNaN(n)
+          )
+        ) {
+          return;
+        }
+        const blockSlot = [
+          [0, startHour * 60 + startMinute],
+          [endHour * 60 + endMinute, 1440]
+        ];
+        blockSlots.push(
+          timeSlotGenerator.getTimeSlots(blockSlot, true, "quarter", true, true)
+        );
+      } else if (rowType === "BOOKED") {
+        const startHour = parseInt(timeStart.split(":")[0], 10);
+        const startMinute = timeStart.split(":")[1];
+        const endHour = parseInt(timeEnd.split(":")[0], 10);
+        const endMinute = timeEnd.split(":")[1];
+        if ([startHour, endHour].some(n => Number.isNaN(n))) {
+          return;
+        }
+        bookedSlots.push(
+          `${startHour}:${startMinute} - ${endHour}:${endMinute}`
+        );
+      } else {
+        const startHour = parseInt(timeStart.split(":")[0], 10);
+        const startMinute = parseInt(timeStart.split(":")[1], 10);
+        const endHour = parseInt(timeEnd.split(":")[0], 10);
+        const endMinute = parseInt(timeEnd.split(":")[1], 10);
+        if (
+          [startHour, startMinute, endHour, endMinute].some(n =>
+            Number.isNaN(n)
+          )
+        ) {
+          return;
+        }
+        const blockSlot = [
+          [0, startHour * 60 + startMinute],
+          [endHour * 60 + endMinute, 1440]
+        ];
+        shiftSlots.push(
+          timeSlotGenerator.getTimeSlots(blockSlot, true, "quarter", true, true)
+        );
+      }
+    });
+
+    const totalSlots = await this.generateTimeSlots(shiftSlots);
+    const unavailableSlots = await this.generateTimeSlots(blockSlots);
+
+    unavailableSlots.push(...bookedSlots);
+
+    return lodash.difference(totalSlots, unavailableSlots);
+  }
+
   async consultationGetAvailableSlotsService() {
     const payload = await consultationGetAvailableSlotsSchema.validateAsync(
       this._request.body
@@ -176,56 +290,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-    const blockSlots = [];
-    const shiftSlots = [];
-    const bookedSlots = [];
-
-    data.map(entry => {
-      if (entry.type == "BLOCK") {
-        // Generate blocked 15 minutes slots
-        const startHour = parseInt(entry.timeStart.split(":")[0]);
-        const startMinute = parseInt(entry.timeStart.split(":")[1]);
-        const endHour = parseInt(entry.timeEnd.split(":")[0]);
-        const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-        const blockSlot = [
-          [0, startHour * 60 + startMinute],
-          [endHour * 60 + endMinute, 1440]
-        ];
-        blockSlots.push(
-          timeSlotGenerator.getTimeSlots(blockSlot, true, "quarter", true, true)
-        );
-      } else if (entry.type == "BOOKED") {
-        // Add 15 minutes appointments slots
-        const startHour = parseInt(entry.timeStart.split(":")[0]);
-        const startMinute = entry.timeStart.split(":")[1];
-        const endHour = parseInt(entry.timeEnd.split(":")[0]);
-        const endMinute = entry.timeEnd.split(":")[1];
-        bookedSlots.push(
-          `${startHour}:${startMinute} - ${endHour}:${endMinute}`
-        );
-      } else {
-        // Generate shift 15 minutes slots
-        const startHour = parseInt(entry.timeStart.split(":")[0]);
-        const startMinute = parseInt(entry.timeStart.split(":")[1]);
-        const endHour = parseInt(entry.timeEnd.split(":")[0]);
-        const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-        const blockSlot = [
-          [0, startHour * 60 + startMinute],
-          [endHour * 60 + endMinute, 1440]
-        ];
-        shiftSlots.push(
-          timeSlotGenerator.getTimeSlots(blockSlot, true, "quarter", true, true)
-        );
-      }
-    });
-
-    const totalSlots = await this.generateTimeSlots(shiftSlots);
-    const unavailableSlots = await this.generateTimeSlots(blockSlots);
-
-    unavailableSlots.push(...bookedSlots);
-
-    // available slots
-    return lodash.difference(totalSlots, unavailableSlots);
+    return this.buildConsultationAvailableSlotsList(data);
   }
 
   async consultationBookAppointmentService() {
@@ -3113,68 +3178,9 @@ class AppointmentsPaymentService extends BaseService {
           );
         });
 
-      const blockSlots = [];
-      const shiftSlots = [];
-      const bookedSlots = [];
-
-      data.map(entry => {
-        if (entry.type == "BLOCK") {
-          // Generate blocked 15 minutes slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = parseInt(entry.timeStart.split(":")[1]);
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-          const blockSlot = [
-            [0, startHour * 60 + startMinute],
-            [endHour * 60 + endMinute, 1440]
-          ];
-          blockSlots.push(
-            timeSlotGenerator.getTimeSlots(
-              blockSlot,
-              true,
-              "quarter",
-              true,
-              true
-            )
-          );
-        } else if (entry.type == "BOOKED") {
-          // Add 15 minutes appointments slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = entry.timeStart.split(":")[1];
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = entry.timeEnd.split(":")[1];
-          bookedSlots.push(
-            `${startHour}:${startMinute} - ${endHour}:${endMinute}`
-          );
-        } else {
-          // Generate shift 15 minutes slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = parseInt(entry.timeStart.split(":")[1]);
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-          const blockSlot = [
-            [0, startHour * 60 + startMinute],
-            [endHour * 60 + endMinute, 1440]
-          ];
-          shiftSlots.push(
-            timeSlotGenerator.getTimeSlots(
-              blockSlot,
-              true,
-              "quarter",
-              true,
-              true
-            )
-          );
-        }
-      });
-
-      const totalSlots = await this.generateTimeSlots(shiftSlots);
-      const unavailableSlots = await this.generateTimeSlots(blockSlots);
-
-      unavailableSlots.push(...bookedSlots);
-
-      // available slots
-      const availableSlots = lodash.difference(totalSlots, unavailableSlots);
+      const availableSlots = await this.buildConsultationAvailableSlotsList(
+        data
+      );
 
       if (availableSlots.length < 1) {
         throw new createError.BadRequest(
