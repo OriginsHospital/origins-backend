@@ -50,7 +50,6 @@ from
 where
 	caa.consultationDoctorId = :doctorId
 	and caa.appointmentDate = :date
-	and (:branchId IS NULL OR caa.branchId = :branchId)
 UNION 
 select
 	taa.timeStart ,
@@ -61,7 +60,6 @@ from
 where
 	taa.consultationDoctorId = :doctorId
 	and taa.appointmentDate = :date
-	and (:branchId IS NULL OR taa.branchId = :branchId)
 `;
 
 const isBookedSlotQuery = `

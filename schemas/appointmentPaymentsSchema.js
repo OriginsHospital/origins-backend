@@ -12,11 +12,7 @@ const consultationGetAvailableSlotsSchema = Joi.object({
     .required(),
   doctorId: Joi.number()
     .integer()
-    .required(),
-  branchId: Joi.number()
-    .integer()
-    .allow(null)
-    .optional()
+    .required()
 });
 
 const consultationBookAppointmentSchema = Joi.object({
