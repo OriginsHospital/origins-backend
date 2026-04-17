@@ -165,7 +165,8 @@ class AppointmentsPaymentService extends BaseService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           doctorId: payload.doctorId,
-          date: payload.date
+          date: payload.date,
+          branchId: payload.branchId != null ? payload.branchId : null
         }
       })
       .catch(err => {
@@ -3100,7 +3101,8 @@ class AppointmentsPaymentService extends BaseService {
           type: Sequelize.QueryTypes.SELECT,
           replacements: {
             doctorId: doctorId,
-            date: date
+            date: date,
+            branchId: branchId != null ? branchId : null
           },
           transaction: t
         })
