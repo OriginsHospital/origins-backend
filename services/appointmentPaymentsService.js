@@ -2953,16 +2953,19 @@ class AppointmentsPaymentService extends BaseService {
     try {
       // Fetch existing records
       const existingLineBills = await LineBillsModel.findAll({
-        where: { appointmentId },
+        where: { appointmentId, isSpouse },
         transaction: t
       });
 
-      // Create a map of existing records for comparison
-      const existingMap = new Map(
-        existingLineBills.map(record => [
-          `${record.billTypeId}-${record.billTypeValue}-${record.isSpouse}`,
-          record
-        ])
+      // Only DUE rows are editable/replaceable. PAID rows are immutable history.
+      // If same medicine was already paid, re-prescribe should create a new DUE row.
+      const existingDueMap = new Map(
+        existingLineBills
+          .filter(record => record.status === "DUE")
+          .map(record => [
+            `${record.billTypeId}-${record.billTypeValue}-${record.isSpouse}`,
+            record
+          ])
       );
 
       const incomingMap = new Map(); // To track incoming records for deletion check
@@ -2980,8 +2983,8 @@ class AppointmentsPaymentService extends BaseService {
 
           incomingMap.set(key, true); // Mark this record as incoming
 
-          if (existingMap.has(key)) {
-            const existingRecord = existingMap.get(key);
+          if (existingDueMap.has(key)) {
+            const existingRecord = existingDueMap.get(key);
 
             // Check if any field needs an update
             if (
@@ -3007,8 +3010,8 @@ class AppointmentsPaymentService extends BaseService {
               );
             }
 
-            // Remove from existingMap as it's being handled
-            existingMap.delete(key);
+            // Remove from existingDueMap as it's being handled
+            existingDueMap.delete(key);
           } else {
             // New record
             insertEntries.push({
@@ -3025,18 +3028,13 @@ class AppointmentsPaymentService extends BaseService {
         });
       });
 
-      // Records left which has status DUE in existingMap need to be deleted
-      //we will not delete the record which has status PAID and spouse that not matches
-      const deletePromises = Array.from(existingMap.values())
-        .filter(
-          record => record.status === "DUE" && record.isSpouse === isSpouse
-        )
-        .map(record => {
-          LineBillsModel.destroy({
-            where: { id: record.id },
-            transaction: t
-          });
+      // DUE rows not sent in payload should be removed.
+      const deletePromises = Array.from(existingDueMap.values()).map(record => {
+        return LineBillsModel.destroy({
+          where: { id: record.id },
+          transaction: t
         });
+      });
 
       // Insert new records
       const createdEntries = await LineBillsModel.bulkCreate(insertEntries, {
