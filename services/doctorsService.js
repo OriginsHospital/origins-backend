@@ -130,6 +130,7 @@ class DoctorsService {
       notes,
       isSpouse
     } = validatedLabTests;
+    const normalizedIsSpouse = Number(isSpouse) === 1 ? 1 : 0;
     const NotesModel =
       createType === "Consultation"
         ? consultationAppointmentNotesAssociations
@@ -143,18 +144,31 @@ class DoctorsService {
         let notesData = null;
         let spouseNotesData = null;
 
-        // Fetch existing records
+        // Normalize historical nulls to patient-side entries for backward compatibility
+        if (normalizedIsSpouse === 0) {
+          await LineBillsModel.update(
+            { isSpouse: 0 },
+            {
+              where: { appointmentId, isSpouse: null },
+              transaction: t
+            }
+          );
+        }
+
+        // Fetch existing records for the same spouse flag
         const existingLineBills = await LineBillsModel.findAll({
-          where: { appointmentId },
+          where: { appointmentId, isSpouse: normalizedIsSpouse },
           transaction: t
         });
 
-        // Create a map of existing records for comparison
-        const existingMap = new Map(
-          existingLineBills.map(record => [
-            `${record.billTypeId}-${record.billTypeValue}-${record.isSpouse}`,
-            record
-          ])
+        // Only DUE rows are mutable; PAID rows remain immutable history.
+        const existingDueMap = new Map(
+          existingLineBills
+            .filter(record => record.status === "DUE")
+            .map(record => [
+              `${record.billTypeId}-${record.billTypeValue}-${record.isSpouse}`,
+              record
+            ])
         );
 
         const incomingMap = new Map(); // To track incoming records for deletion check
@@ -164,7 +178,7 @@ class DoctorsService {
         // Process incoming payload
         lineBillEntries.forEach(entry => {
           entry.billTypeValues.forEach(value => {
-            const key = `${entry.billTypeId}-${value.id}-${isSpouse}`;
+            const key = `${entry.billTypeId}-${value.id}-${normalizedIsSpouse}`;
             const prescribedQuantity =
               entry.billTypeId === 3 ? value.prescribedQuantity : 1;
             const prescriptionDays =
@@ -172,8 +186,8 @@ class DoctorsService {
 
             incomingMap.set(key, true); // Mark this record as incoming
 
-            if (existingMap.has(key)) {
-              const existingRecord = existingMap.get(key);
+            if (existingDueMap.has(key)) {
+              const existingRecord = existingDueMap.get(key);
 
               // Check if any field needs an update
               if (
@@ -199,8 +213,8 @@ class DoctorsService {
                 );
               }
 
-              // Remove from existingMap as it's being handled
-              existingMap.delete(key);
+              // Remove from existingDueMap as it's being handled
+              existingDueMap.delete(key);
             } else {
               // New record
               insertEntries.push({
@@ -210,25 +224,22 @@ class DoctorsService {
                 prescribedQuantity,
                 prescriptionDetails: value.prescriptionDetails,
                 prescriptionDays,
-                isSpouse: isSpouse,
+                isSpouse: normalizedIsSpouse,
                 createdBy: createdByUserId
               });
             }
           });
         });
 
-        // Records left which has status DUE in existingMap need to be deleted
-        //we will not delete the record which has status PAID and spouse that not matches
-        const deletePromises = Array.from(existingMap.values())
-          .filter(
-            record => record.status === "DUE" && record.isSpouse === isSpouse
-          )
-          .map(record => {
-            LineBillsModel.destroy({
+        // DUE rows not present in incoming payload should be removed.
+        const deletePromises = Array.from(existingDueMap.values()).map(
+          record => {
+            return LineBillsModel.destroy({
               where: { id: record.id },
               transaction: t
             });
-          });
+          }
+        );
 
         // Insert new records
         const createdEntries = await LineBillsModel.bulkCreate(insertEntries, {
@@ -241,7 +252,7 @@ class DoctorsService {
         // Handle notes
         if (notes && notes.trim() !== "") {
           const [notesRecord, created] = await NotesModel.findOrCreate({
-            where: { appointmentId, isSpouse: isSpouse || 0 }, // Add isSpouseForNotes
+            where: { appointmentId, isSpouse: normalizedIsSpouse },
             defaults: { notes, createdBy: createdByUserId },
             transaction: t
           });
@@ -250,12 +261,12 @@ class DoctorsService {
             await NotesModel.update(
               { notes },
               {
-                where: { appointmentId, isSpouse: isSpouse || 0 },
+                where: { appointmentId, isSpouse: normalizedIsSpouse },
                 transaction: t
               }
             );
             notesData = await NotesModel.findOne({
-              where: { appointmentId, isSpouse: isSpouse || 0 },
+              where: { appointmentId, isSpouse: normalizedIsSpouse },
               transaction: t
             });
           } else {
@@ -264,7 +275,7 @@ class DoctorsService {
         } else {
           // If notes is an empty string or not provided, delete the existing notes
           await NotesModel.destroy({
-            where: { appointmentId, isSpouse: isSpouse || 0 }, // Include isSpouseForNotes
+            where: { appointmentId, isSpouse: normalizedIsSpouse },
             transaction: t
           });
           notesData = null; // Set notesData to null as the record is deleted
