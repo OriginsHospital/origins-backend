@@ -40,6 +40,32 @@ const getPharmacyListByDateQuery = `
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
 			'id', calba.id,
+			'orderId', (
+				SELECT odm.orderId
+				FROM defaultdb.order_details_master odm
+				JOIN JSON_TABLE(
+					odm.orderDetails,
+					'$[*]' COLUMNS(refId INT PATH '$.refId')
+				) refTable ON refTable.refId = calba.id
+				WHERE odm.productType = 'PHARMACY'
+					AND odm.type = 'Consultation'
+					AND odm.paymentStatus = 'PAID'
+				ORDER BY odm.id DESC
+				LIMIT 1
+			),
+			'orderDbId', (
+				SELECT odm.id
+				FROM defaultdb.order_details_master odm
+				JOIN JSON_TABLE(
+					odm.orderDetails,
+					'$[*]' COLUMNS(refId INT PATH '$.refId')
+				) refTable ON refTable.refId = calba.id
+				WHERE odm.productType = 'PHARMACY'
+					AND odm.type = 'Consultation'
+					AND odm.paymentStatus = 'PAID'
+				ORDER BY odm.id DESC
+				LIMIT 1
+			),
 			'itemName', (select sm.itemName from stockmanagement.item_master sm where sm.id = calba.billTypeValue),
 			'prescribedQuantity', calba.prescribedQuantity,
 			'availableQuantity', (
@@ -125,6 +151,32 @@ select
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
 			'id', talba.id,
+			'orderId', (
+				SELECT odm.orderId
+				FROM defaultdb.order_details_master odm
+				JOIN JSON_TABLE(
+					odm.orderDetails,
+					'$[*]' COLUMNS(refId INT PATH '$.refId')
+				) refTable ON refTable.refId = talba.id
+				WHERE odm.productType = 'PHARMACY'
+					AND odm.type = 'Treatment'
+					AND odm.paymentStatus = 'PAID'
+				ORDER BY odm.id DESC
+				LIMIT 1
+			),
+			'orderDbId', (
+				SELECT odm.id
+				FROM defaultdb.order_details_master odm
+				JOIN JSON_TABLE(
+					odm.orderDetails,
+					'$[*]' COLUMNS(refId INT PATH '$.refId')
+				) refTable ON refTable.refId = talba.id
+				WHERE odm.productType = 'PHARMACY'
+					AND odm.type = 'Treatment'
+					AND odm.paymentStatus = 'PAID'
+				ORDER BY odm.id DESC
+				LIMIT 1
+			),
 			'itemName', (select sm.itemName from stockmanagement.item_master sm where sm.id = talba.billTypeValue),
 			'prescribedQuantity', talba.prescribedQuantity,
 			'availableQuantity', (
