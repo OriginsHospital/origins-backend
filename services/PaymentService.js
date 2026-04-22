@@ -349,6 +349,9 @@ class PaymentService extends BaseService {
       return orderDetailsResponse;
     } catch (err) {
       console.error("Error while adding order details:", err.message);
+      if (err?.isJoi || err?.status || err?.statusCode) {
+        throw err;
+      }
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
