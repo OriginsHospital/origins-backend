@@ -51,12 +51,14 @@ const prescriptionDetailsTemplate = `
                     <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Name</th>
                     <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Dosage</th>
                     <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Prescribed Quantity</th>
+                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Bought Quantity</th>
                 </tr>
                 {{#each pharmacyDetails}}
                 <tr>
                     <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.name}}</td>
                     <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.dosage}}</td>
                     <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.prescribedQuantity}}</td>
+                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.purchaseQuantity}}</td>
                 </tr>
                 {{/each}}
             </table>
