@@ -123,8 +123,16 @@ class PaymentService extends BaseService {
 
       let orderId;
 
-      let totalPayableAmount = totalOrderAmount - discountAmount;
-      if (totalPayableAmount != paidOrderAmount) {
+      const normalizeCurrency = amount =>
+        Number((Number(amount) || 0).toFixed(2));
+
+      const totalPayableAmount = normalizeCurrency(
+        totalOrderAmount - discountAmount
+      );
+      const normalizedPaidOrderAmount = normalizeCurrency(paidOrderAmount);
+
+      // Compare in 2-decimal currency precision to avoid floating-point mismatches.
+      if (totalPayableAmount !== normalizedPaidOrderAmount) {
         throw new createError.BadRequest(Constants.PAYABLE_AMOUNT_WRONG);
       }
       if (paymentMode === "ONLINE") {
@@ -349,9 +357,6 @@ class PaymentService extends BaseService {
       return orderDetailsResponse;
     } catch (err) {
       console.error("Error while adding order details:", err.message);
-      if (err?.isJoi || err?.status || err?.statusCode) {
-        throw err;
-      }
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
