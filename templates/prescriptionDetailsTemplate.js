@@ -47,7 +47,7 @@ const prescriptionDetailsTemplate = `
         {{#if showPharmacy}}
             <h3 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Pharmacy</h3>
             <p style="font-size: 12px; color: black; text-align: right; margin: 4px 0 6px 0;">
-                <strong>Prescribed By:</strong> Dr. {{doctorName}}
+                <strong>Prescribed By:</strong> {{doctorName}}
             </p>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
                 <tr>
