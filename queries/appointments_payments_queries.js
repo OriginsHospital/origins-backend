@@ -1082,7 +1082,8 @@ SELECT
 						        WHEN :isSpouse = 0 THEN YEAR(NOW()) - YEAR(pm.dateOfBirth)
 						        ELSE pga.age
 	 						END,
-				'appointmentReason', appointmentInformation.appointmentReason
+				'appointmentReason', appointmentInformation.appointmentReason,
+				'doctorName', appointmentInformation.doctorName
 			) as patientDetails
 		FROM
 			patient_master pm
@@ -1130,7 +1131,11 @@ FROM (
 		caa.id,
 		pva.patientId,
 		arm.isSpouse,
-		arm.name as appointmentReason
+		arm.name as appointmentReason,
+		COALESCE(
+			(SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = caa.consultationDoctorId),
+			''
+		) as doctorName
 	from
 		consultation_appointments_associations caa
 	INNER JOIN appointment_reason_master arm on
@@ -1161,7 +1166,8 @@ SELECT
 						        WHEN :isSpouse = 0 THEN YEAR(NOW()) - YEAR(pm.dateOfBirth)
 						        ELSE pga.age
 	 						END,
-				'appointmentReason', appointmentInformation.appointmentReason
+				'appointmentReason', appointmentInformation.appointmentReason,
+				'doctorName', appointmentInformation.doctorName
 			) as patientDetails
 		FROM
 			patient_master pm
@@ -1209,7 +1215,11 @@ FROM (
 		taa.id,
 		pva.patientId,
 		arm.isSpouse,
-		arm.name as appointmentReason
+		arm.name as appointmentReason,
+		COALESCE(
+			(SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+			''
+		) as doctorName
 	from
 		treatment_appointments_associations taa
 	INNER JOIN appointment_reason_master arm on
