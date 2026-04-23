@@ -1637,7 +1637,8 @@ class AppointmentsPaymentService extends BaseService {
         .query(fetNotStartedCheckQuery, {
           type: Sequelize.QueryTypes.SELECT,
           replacements: {
-            id: visitId
+            id: visitId,
+            treatmentType: treatmentType
           }
         })
         .catch(err => {
@@ -1655,7 +1656,8 @@ class AppointmentsPaymentService extends BaseService {
         .query(fetStartedCheckQuery, {
           type: Sequelize.QueryTypes.SELECT,
           replacements: {
-            id: visitId
+            id: visitId,
+            treatmentType: treatmentType
           }
         })
         .catch(err => {
@@ -2477,27 +2479,56 @@ class AppointmentsPaymentService extends BaseService {
       if ([1, 2, 3].includes(treatmentType)) {
         throw new createError.BadRequest(Constants.FET_CANNOT_BE_STARTED);
       }
-      await TriggerTimeStampsMaster.update(
-        {
+      const existingFetRecord = await TriggerTimeStampsMaster.findOne({
+        where: {
           visitId: visitId,
-          fetStartDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
-          fetStartedBy: this._request?.userDetails?.id
+          treatmentType
         },
-        {
-          where: {
-            visitId: visitId,
-            treatmentType
-          },
-          transaction: transaction
-        }
-      ).catch(err => {
-        console.log("Error while adding record in timestamps master", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
+        transaction: transaction
       });
+
+      if (existingFetRecord) {
+        await TriggerTimeStampsMaster.update(
+          {
+            visitId: visitId,
+            fetStartDate: moment()
+              .tz("Asia/Kolkata")
+              .format("YYYY-MM-DD HH:mm:ss"),
+            fetStartedBy: this._request?.userDetails?.id
+          },
+          {
+            where: {
+              visitId: visitId,
+              treatmentType
+            },
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while adding record in timestamps master", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      } else {
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId: visitId,
+            treatmentType,
+            fetStartDate: moment()
+              .tz("Asia/Kolkata")
+              .format("YYYY-MM-DD HH:mm:ss"),
+            fetStartedBy: this._request?.userDetails?.id
+          },
+          {
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while adding record in timestamps master", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
 
       await VisitPackagesAssociation.update(
         {

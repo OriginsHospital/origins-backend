@@ -437,8 +437,11 @@ SELECT JSON_OBJECT(
     END,
     'FET_START', 
     CASE 
-        WHEN :treatmentType IN (4, 5, 6, 7) THEN 
-            CASE WHEN vpa.fetDate IS NULL THEN 0 ELSE 1 END
+        WHEN :treatmentType IN (4, 5, 6, 7, 8) THEN 
+            CASE 
+                WHEN tt.fetStartDate IS NULL AND vpa.fetDate IS NULL THEN 0 
+                ELSE 1 
+            END
         ELSE -1 
     END,
     'END_ICSI', 
@@ -461,7 +464,7 @@ SELECT JSON_OBJECT(
     END,
     'END_FET', 
     CASE 
-        WHEN :treatmentType IN (4, 5, 6, 7) THEN 
+        WHEN :treatmentType IN (4, 5, 6, 7, 8) THEN 
         	CASE WHEN tt.fetEndedDate IS NULL THEN 0 ELSE 1 END
         ELSE -1 
     END,
@@ -569,11 +572,11 @@ from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :trea
 const fetStartedCheckQuery = `
 SELECT (
 	CASE 
-		WHEN vpa.fetDate IS NOT NULL THEN TRUE
+		WHEN tt.fetStartDate IS NOT NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 
-from visit_packages_associations vpa where vpa.visitId = :id
+from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :treatmentType
 `;
 
 const icsiConsentsExistsQuery = `
@@ -691,11 +694,11 @@ where arm.visit_type = :patientTypeId and arm.isOther !=1
 const fetNotStartedCheckQuery = `
 SELECT (
 	CASE 
-		WHEN vpa.fetDate IS NULL THEN TRUE
+		WHEN tt.fetStartDate IS NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 
-from visit_packages_associations vpa where vpa.visitId = :id
+from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :treatmentType
 `;
 
 const eraNotStartedCheckQuery = `
