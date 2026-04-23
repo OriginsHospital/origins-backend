@@ -391,11 +391,13 @@ class VisitsService {
           );
         });
 
-      // Check if package required or not
-      if (
-        validatedInfoData?.treatmentTypeId &&
-        treatmentTypes[(validatedInfoData?.treatmentTypeId)].isPackageExists
-      ) {
+      // Check if package is required for selected treatment type.
+      // Some environments may contain newer treatment types in DB that are not yet
+      // present in local constants; in that case, default to non-package flow.
+      const selectedTreatmentTypeConfig =
+        treatmentTypes[(validatedInfoData?.treatmentTypeId)];
+      const isPackageRequired = !!selectedTreatmentTypeConfig?.isPackageExists;
+      if (validatedInfoData?.treatmentTypeId && isPackageRequired) {
         const isPackageExist = await VisitPackagesAssociation.findOne({
           where: {
             visitId: visitId

@@ -33,5 +33,15 @@ module.exports = {
     name: "ICSI Donor Oocyte + Donor Sperm",
     isPackageExists: 1,
     isConsentsExists: 1
+  },
+  8: {
+    name: "FET Cycle",
+    isPackageExists: 0,
+    isConsentsExists: 1
+  },
+  9: {
+    name: "ERA",
+    isPackageExists: 0,
+    isConsentsExists: 1
   }
 };
