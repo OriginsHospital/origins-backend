@@ -406,13 +406,10 @@ FROM
 			WHERE 
                 DATE(opom.orderDate) BETWEEN :fromDate AND :toDate
                 AND opom.paymentStatus = 'PAID' 
-                AND (
-                    select
-                        pm.branchId
-                    from
-                        patient_master pm
-                    WHERE
-                        pm.id = popa.patientId) = :branchId
+                AND COALESCE(
+                  (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
+                  (SELECT pm.branchId FROM patient_master pm WHERE pm.id = popa.patientId LIMIT 1)
+                ) = :branchId
                 GROUP by
                     opom.refId
         UNION ALL 
@@ -429,8 +426,23 @@ FROM
                     FROM treatment_orders_master tom
                     INNER JOIN patient_visits_association pva ON pva.id = tom.visitId
                     WHERE DATE(tom.orderDate) BETWEEN :fromDate AND :toDate
-                    AND (
-                        SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId
+                    AND COALESCE(
+                      CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
+                        SELECT taa.branchId FROM treatment_appointments_associations taa
+                        WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
+                      ) ELSE NULL END,
+                      (
+                        SELECT taa2.branchId FROM treatment_appointments_associations taa2
+                        INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
+                        WHERE vtca2.visitId = tom.visitId
+                        ORDER BY taa2.appointmentDate DESC, taa2.id DESC
+                        LIMIT 1
+                      ),
+                      (
+                        SELECT pm.branchId FROM patient_visits_association pva3
+                        INNER JOIN patient_master pm ON pm.id = pva3.patientId
+                        WHERE pva3.id = tom.visitId LIMIT 1
+                      )
                     ) = :branchId
                 ) AS treatmentPayments 
                 GROUP BY treatmentPayments.productType
@@ -512,8 +524,14 @@ const salesDataQuery = `
     	JSON_OBJECT(
             'patientName', CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')),
             'patientId',  pm.patientId ,
-            'branchId', pm.branchId,
-            'branch',(select name from branch_master bm where bm.id = pm.branchId),
+            'branchId', COALESCE(
+              (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
+              pm.branchId
+            ),
+            'branch',(select name from branch_master bm where bm.id = COALESCE(
+              (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
+              pm.branchId
+            )),
             'orderId', opom.orderId ,
             'type', opom.type ,
             'date', DATE(opom.orderDate),
@@ -532,15 +550,44 @@ const salesDataQuery = `
         INNER JOIN patient_master pm on 
             pm.id = popa.patientId
         WHERE opom.paymentStatus  = 'PAID'
-        AND pm.branchId  = :branchId
+        AND COALESCE(
+          (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
+          pm.branchId
+        ) = :branchId
         AND DATE(opom.orderDate) BETWEEN :fromDate AND :toDate
     UNION ALL
    	select  
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', (select pm.branchId from patient_master pm where pm.id = pva.patientId),
-            'branch',(select name from branch_master bm where bm.id = (select pm.branchId from patient_master pm where pm.id = pva.patientId)),
+            'branchId', COALESCE(
+              CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
+                SELECT taa.branchId FROM treatment_appointments_associations taa
+                WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
+              ) ELSE NULL END,
+              (
+                SELECT taa2.branchId FROM treatment_appointments_associations taa2
+                INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
+                WHERE vtca2.visitId = tom.visitId
+                ORDER BY taa2.appointmentDate DESC, taa2.id DESC
+                LIMIT 1
+              ),
+              (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
+            ),
+            'branch',(select name from branch_master bm where bm.id = COALESCE(
+              CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
+                SELECT taa.branchId FROM treatment_appointments_associations taa
+                WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
+              ) ELSE NULL END,
+              (
+                SELECT taa2.branchId FROM treatment_appointments_associations taa2
+                INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
+                WHERE vtca2.visitId = tom.visitId
+                ORDER BY taa2.appointmentDate DESC, taa2.id DESC
+                LIMIT 1
+              ),
+              (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
+            )),
             'orderId', tom.orderId ,
             'type', tom.type ,
             'date', DATE(tom.orderDate),
@@ -570,12 +617,20 @@ const salesDataQuery = `
     INNER JOIN patient_visits_association pva on pva.id = tom.visitId 
     where
         DATE(tom.orderDate) BETWEEN :fromDate AND :toDate
-        AND EXISTS (
-        SELECT 1
-            FROM patient_master pm
-            WHERE pm.id = pva.patientId
-        AND pm.branchId = :branchId
-    )
+        AND COALESCE(
+          CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
+            SELECT taa.branchId FROM treatment_appointments_associations taa
+            WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
+          ) ELSE NULL END,
+          (
+            SELECT taa3.branchId FROM treatment_appointments_associations taa3
+            INNER JOIN visit_treatment_cycles_associations vtca3 ON vtca3.id = taa3.treatmentCycleId
+            WHERE vtca3.visitId = tom.visitId
+            ORDER BY taa3.appointmentDate DESC, taa3.id DESC
+            LIMIT 1
+          ),
+          (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
+        ) = :branchId
 `;
 
 const returnsDataQuery = `
