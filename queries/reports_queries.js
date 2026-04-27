@@ -324,11 +324,33 @@ const salesReportQuery = `
 	CEIL(SUM(total_amount)) as totalSales,
 	(
 	select
-		sum(pppr.totalAmount)
+		SUM(returnRows.totalAmount)
 	from
-		stockmanagement.patient_pharamacy_purchase_returns pppr INNER JOIN patient_master pm on pm.patientId = pppr.patientId
-	where
-		DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate AND pm.branchId = :branchId
+		(
+		select
+			pppr.totalAmount
+		from
+			stockmanagement.patient_pharamacy_purchase_returns pppr
+		INNER JOIN order_details_master odm ON odm.orderId = pppr.orderId
+		INNER JOIN consultation_appointments_associations caa on
+			caa.id = odm.appointmentId
+		where
+			DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
+			AND odm.type = 'Consultation'
+			AND caa.branchId = :branchId
+		UNION ALL
+		select
+			pppr.totalAmount
+		from
+			stockmanagement.patient_pharamacy_purchase_returns pppr
+		INNER JOIN order_details_master odm ON odm.orderId = pppr.orderId
+		INNER JOIN treatment_appointments_associations taa on
+			taa.id = odm.appointmentId
+		where
+			DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
+			AND odm.type = 'Treatment'
+			AND taa.branchId = :branchId
+		) returnRows
     ) AS totalReturns
 FROM
 	(
@@ -352,14 +374,7 @@ FROM
 			odm.type = 'Consultation'
 			AND odm.paymentStatus = 'PAID'
 			AND DATE(odm.orderDate) BETWEEN :fromDate AND :toDate
-			AND 
- 			(
-				select
-					pm.branchId
-				from
-					patient_master pm
-				WHERE
-					pm.id = pva.patientId) = :branchId
+			AND caa.branchId = :branchId
 			GROUP by
 				odm.productType
 		UNION ALL
@@ -378,14 +393,7 @@ FROM
 				odm.type = 'Treatment'
 				AND odm.paymentStatus = 'PAID'
 				AND DATE(odm.orderDate) BETWEEN :fromDate AND :toDate
-				AND 
- 				(
-					select
-						pm.branchId
-					from
-						patient_master pm
-					WHERE
-						pm.id = pva.patientId) = :branchId
+				AND taa.branchId = :branchId
 				GROUP by
 					odm.productType
         UNION ALL 
@@ -437,8 +445,8 @@ const salesDataQuery = `
 	JSON_OBJECT(
         'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
         'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-        'branchId', (select pm.branchId from patient_master pm where pm.id = pva.patientId),
-        'branch',(select name from branch_master bm where bm.id = (select pm.branchId from patient_master pm where pm.id = pva.patientId)),
+        'branchId', caa.branchId,
+        'branch',(select name from branch_master bm where bm.id = caa.branchId),
         'orderId', odm.orderId ,
         'type', odm.type ,
         'date', DATE(odm.orderDate),
@@ -462,18 +470,14 @@ const salesDataQuery = `
         and odm.appointmentId IS NOT NULL
         AND odm.paymentStatus = 'PAID'
         AND odm.type = 'Consultation'
-        AND EXISTS (
-        SELECT 1
-        FROM patient_master pm
-        WHERE pm.id = pva.patientId
-          AND pm.branchId = :branchId)
+        AND caa.branchId = :branchId
     UNION ALL
     select
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', (select pm.branchId from patient_master pm where pm.id = pva.patientId),
-            'branch',(select name from branch_master bm where bm.id = (select pm.branchId from patient_master pm where pm.id = pva.patientId)),
+            'branchId', taa.branchId,
+            'branch',(select name from branch_master bm where bm.id = taa.branchId),
             'orderId', odm.orderId ,
             'type', odm.type ,
             'date', DATE(odm.orderDate),
@@ -498,12 +502,7 @@ const salesDataQuery = `
         and odm.appointmentId IS NOT NULL
         AND odm.paymentStatus = 'PAID'
         AND odm.type = 'Treatment'
-        AND EXISTS (
-        SELECT 1
-        FROM patient_master pm
-        WHERE pm.id = pva.patientId
-          AND pm.branchId = :branchId
-    )
+        AND taa.branchId = :branchId
     UNION ALL
     SELECT 
     	JSON_OBJECT(
@@ -580,8 +579,8 @@ const returnsDataQuery = `
 	JSON_OBJECT(
         'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
         'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-        'branchId', (select pm.branchId from patient_master pm where pm.id = pva.patientId),
-        'branch',(select name from branch_master bm where bm.id = (select pm.branchId from patient_master pm where pm.id = pva.patientId)),
+        'branchId', caa.branchId,
+        'branch',(select name from branch_master bm where bm.id = caa.branchId),
         'orderId', odm.orderId ,
         'type', odm.type ,
         'date', DATE(pppr.returnedDate),
@@ -599,19 +598,14 @@ const returnsDataQuery = `
     where
         DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
         AND odm.type = 'Consultation'
-        AND EXISTS (
-        SELECT 1
-        FROM patient_master pm
-        WHERE pm.id = pva.patientId
-          AND pm.branchId = :branchId
-    )
+        AND caa.branchId = :branchId
     UNION ALL
     select
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', (select pm.branchId from patient_master pm where pm.id = pva.patientId),
-            'branch',(select name from branch_master bm where bm.id = (select pm.branchId from patient_master pm where pm.id = pva.patientId)),
+            'branchId', taa.branchId,
+            'branch',(select name from branch_master bm where bm.id = taa.branchId),
             'orderId', odm.orderId ,
             'type', odm.type ,
             'date', DATE(pppr.returnedDate),
@@ -630,12 +624,7 @@ const returnsDataQuery = `
     where
         DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
         AND odm.type = 'Treatment'
-        AND EXISTS (
-        SELECT 1
-        FROM patient_master pm
-        WHERE pm.id = pva.patientId
-          AND pm.branchId = :branchId
-    );
+        AND taa.branchId = :branchId;
 `;
 const patientPharmacySalesReportQuery = `
 SELECT 
