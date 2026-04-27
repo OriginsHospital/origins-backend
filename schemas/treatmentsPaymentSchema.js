@@ -31,14 +31,31 @@ const getOrderIdSchema = Joi.object({
   payableAfterDiscountAmount: Joi.string().required(),
   pendingOrderAmount: Joi.string().required(),
   productType: Joi.string().required(),
-  dateColumn: Joi.string().optional().allow("").allow(null),
-  mileStoneStartedDate: Joi.string().optional().allow("").allow(null),
+  dateColumn: Joi.string()
+    .optional()
+    .allow("")
+    .allow(null),
+  mileStoneStartedDate: Joi.string()
+    .optional()
+    .allow("")
+    .allow(null),
   appointmentId: Joi.number()
     .integer()
     .optional()
     .allow(null),
-  comments: Joi.string().optional().allow(""),
-  dueDate: Joi.string().optional().allow(null).allow("")
+  comments: Joi.string()
+    .optional()
+    .allow(""),
+  dueDate: Joi.string()
+    .optional()
+    .allow(null)
+    .allow(""),
+  splitPayment: Joi.object({
+    cashAmount: Joi.number().required(),
+    upiAmount: Joi.number().required(),
+    totalAmount: Joi.number().required()
+  }).optional(),
+  splitPaymentSummary: Joi.string().optional()
 });
 
 const sendTransactionSchema = Joi.object({
@@ -64,7 +81,7 @@ const getTreatmentOrderIdSchema = Joi.object({
   isPackageExists: Joi.number().required(),
   packageDetails: packageDetailsSchema.optional().allow(null),
   orderDetails: Joi.array().items(getOrderIdSchema)
-})
+});
 
 module.exports = {
   getOrderIdSchema,

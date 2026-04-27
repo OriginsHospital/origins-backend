@@ -246,24 +246,33 @@ class TreatmentPaymentsService {
       orderId = moment.tz("Asia/Kolkata").format("YYYYMMDDHHmmssSS");
     }
 
-    const ordersDataForInsertion = orderDetails.map(currentOrder => ({
-      orderId,
-      paymentMode,
-      pendingOrderAmount: currentOrder?.pendingOrderAmount,
-      totalOrderAmount: currentOrder?.totalOrderAmount,
-      paidOrderAmountBeforeDiscount: +currentOrder?.payableAmount,
-      couponCode: currentOrder?.couponCode,
-      discountAmount: currentOrder?.discountAmount,
-      paidOrderAmount: +currentOrder?.payableAfterDiscountAmount,
-      productType: currentOrder?.productType,
-      paymentStatus: paymentMode == "ONLINE" ? "DUE" : "PAID",
-      orderDate: moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD HH:mm:ss"),
-      visitId,
-      comments: currentOrder?.comments,
-      dueDate: currentOrder?.dueDate
-    }));
+    const ordersDataForInsertion = orderDetails.map(currentOrder => {
+      let commentsValue = currentOrder?.comments;
+      if (currentOrder?.splitPaymentSummary) {
+        const splitNote = `[Split payment expert] ${currentOrder.splitPaymentSummary}`;
+        commentsValue = commentsValue
+          ? `${splitNote} | ${commentsValue}`
+          : splitNote;
+      }
+      return {
+        orderId,
+        paymentMode,
+        pendingOrderAmount: currentOrder?.pendingOrderAmount,
+        totalOrderAmount: currentOrder?.totalOrderAmount,
+        paidOrderAmountBeforeDiscount: +currentOrder?.payableAmount,
+        couponCode: currentOrder?.couponCode,
+        discountAmount: currentOrder?.discountAmount,
+        paidOrderAmount: +currentOrder?.payableAfterDiscountAmount,
+        productType: currentOrder?.productType,
+        paymentStatus: paymentMode == "ONLINE" ? "DUE" : "PAID",
+        orderDate: moment()
+          .tz("Asia/Kolkata")
+          .format("YYYY-MM-DD HH:mm:ss"),
+        visitId,
+        comments: commentsValue,
+        dueDate: currentOrder?.dueDate
+      };
+    });
 
     // Updating milestone start dates
     const dateColumns = {};
