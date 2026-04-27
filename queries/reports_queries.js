@@ -456,7 +456,9 @@ const salesDataQuery = `
         'amount', odm.paidOrderAmount ,
         'productType', odm.productType,
         'paymentMasterId', odm.id,
-        'revenueSource', 'ORDER_DETAILS' ) as orderDetails
+        'revenueSource', 'ORDER_DETAILS',
+        'isSplitPayment', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(odm.orderDetails, '$[0].isSplitPayment')), ''),
+        'splitPayment', JSON_EXTRACT(odm.orderDetails, '$[0].splitPayment') ) as orderDetails
     from
         order_details_master odm
     INNER JOIN consultation_appointments_associations caa on
@@ -487,7 +489,9 @@ const salesDataQuery = `
             'amount', odm.paidOrderAmount ,
             'productType', odm.productType,
             'paymentMasterId', odm.id,
-            'revenueSource', 'ORDER_DETAILS'
+            'revenueSource', 'ORDER_DETAILS',
+            'isSplitPayment', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(odm.orderDetails, '$[0].isSplitPayment')), ''),
+            'splitPayment', JSON_EXTRACT(odm.orderDetails, '$[0].splitPayment')
         ) as orderDetails
     from
         order_details_master odm

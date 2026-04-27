@@ -24,6 +24,102 @@ const {
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
 
+/**
+ * Pharmacy / front-desk orders store split tender in order_details_master.orderDetails JSON:
+ * $[0].splitPayment = [{ method, amount }, ...] and $[0].isSplitPayment.
+ * Revenue rows must list one amount per payment mode (not the full total on the first mode only).
+ */
+function coerceOrderDetailSplitParts(splitPaymentRaw) {
+  if (splitPaymentRaw == null) return [];
+  let val = splitPaymentRaw;
+  if (Buffer.isBuffer(val)) {
+    val = val.toString("utf8");
+  }
+  if (typeof val === "string") {
+    try {
+      val = JSON.parse(val);
+    } catch (e) {
+      return [];
+    }
+  }
+  if (Array.isArray(val)) {
+    const parts = val
+      .map(p => ({
+        method: String(p.method || "")
+          .trim()
+          .toUpperCase(),
+        amount: Number(p.amount) || 0
+      }))
+      .filter(p => p.amount > 0 && p.method);
+    return parts.length > 1 ? parts : [];
+  }
+  if (val && typeof val === "object") {
+    const cash = Number(val.cashAmount ?? val.CASH ?? 0);
+    const upi = Number(val.upiAmount ?? val.UPI ?? 0);
+    const online = Number(val.onlineAmount ?? val.ONLINE ?? 0);
+    const card = Number(val.cardAmount ?? val.CARD ?? 0);
+    const parts = [];
+    if (cash > 0) parts.push({ method: "CASH", amount: cash });
+    if (upi > 0) parts.push({ method: "UPI", amount: upi });
+    if (online > 0) parts.push({ method: "ONLINE", amount: online });
+    if (card > 0) parts.push({ method: "CARD", amount: card });
+    return parts.length > 1 ? parts : [];
+  }
+  return [];
+}
+
+function expandSplitPaymentSalesRows(rows) {
+  if (!Array.isArray(rows)) return rows;
+  const out = [];
+  for (const row of rows) {
+    if (!row || row.revenueSource !== "ORDER_DETAILS") {
+      out.push(row);
+      continue;
+    }
+    const parts = coerceOrderDetailSplitParts(row.splitPayment);
+    const isSplitFlag =
+      row.isSplitPayment === true ||
+      row.isSplitPayment === "true" ||
+      row.isSplitPayment === 1 ||
+      row.isSplitPayment === "1";
+    if (!isSplitFlag && parts.length < 2) {
+      const clean = { ...row };
+      delete clean.splitPayment;
+      delete clean.isSplitPayment;
+      out.push(clean);
+      continue;
+    }
+    if (parts.length < 2) {
+      const clean = { ...row };
+      delete clean.splitPayment;
+      delete clean.isSplitPayment;
+      out.push(clean);
+      continue;
+    }
+    const totalDisc = Number(row.discountAmount) || 0;
+    const sumParts = parts.reduce((s, p) => s + p.amount, 0);
+    let discountAllocated = 0;
+    parts.forEach((p, idx) => {
+      const ratio = sumParts > 0 ? p.amount / sumParts : 1 / parts.length;
+      let lineDiscount =
+        idx === parts.length - 1
+          ? Math.round((totalDisc - discountAllocated) * 100) / 100
+          : Math.round(totalDisc * ratio * 100) / 100;
+      discountAllocated += lineDiscount;
+      out.push({
+        ...row,
+        paymentMode: p.method,
+        amount: p.amount,
+        discountAmount: lineDiscount,
+        splitPaymentLineIndex: idx,
+        splitPayment: undefined,
+        isSplitPayment: undefined
+      });
+    });
+  }
+  return out;
+}
+
 class ReportsService {
   constructor(request, response, next) {
     this._request = request;
@@ -239,6 +335,7 @@ class ReportsService {
       });
     if (!lodash.isEmpty(salesData)) {
       salesData = salesData.map(data => data.orderDetails);
+      salesData = expandSplitPaymentSalesRows(salesData);
     }
 
     let returnsData = await this.mySqlConnection
