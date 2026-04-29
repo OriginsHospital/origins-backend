@@ -42,7 +42,36 @@ const returnPharmacyItemSchema = Joi.object({
   orderId: Joi.string().required(),
   totalAmount: Joi.number().required(),
   type: Joi.string().required(),
-  returnDetails: Joi.array().items()
+  refundMethod: Joi.string()
+    .valid("CASH", "CARD", "BANK_TRANSFER", "WALLET", "CREDIT_NOTE")
+    .optional(),
+  returnDetails: Joi.array()
+    .items(
+      Joi.object({
+        refId: Joi.number()
+          .integer()
+          .required(),
+        itemId: Joi.number()
+          .integer()
+          .required(),
+        returnInfo: Joi.array()
+          .items(
+            Joi.object({
+              grnId: Joi.number()
+                .integer()
+                .required(),
+              returnQuantity: Joi.number()
+                .integer()
+                .min(1)
+                .required()
+            })
+          )
+          .min(1)
+          .required()
+      })
+    )
+    .min(1)
+    .required()
 });
 
 const returnSchema = Joi.object({

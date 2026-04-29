@@ -1257,7 +1257,209 @@ class PaymentService extends BaseService {
     };
   }
 
+  buildOrderDetailsMap(orderDetails) {
+    const parsed =
+      typeof orderDetails === "string"
+        ? JSON.parse(orderDetails)
+        : orderDetails;
+    if (!Array.isArray(parsed)) {
+      return { parsedOrderDetails: [], byRefId: new Map() };
+    }
+    const byRefId = new Map(parsed.map(item => [Number(item.refId), item]));
+    return { parsedOrderDetails: parsed, byRefId };
+  }
+
   async returnPharmacyItemService() {
+    const payload = await returnPharmacyItemSchema.validateAsync(
+      this._request.body
+    );
+    const { orderId, patientId, returnDetails, totalAmount, type } = payload;
+
+    const orderDetails = await OrderDetailsMasterModel.findOne({
+      where: {
+        orderId: orderId,
+        productType: "PHARMACY",
+        paymentStatus: "PAID",
+        type: type
+      }
+    }).catch(err => {
+      console.log("error while fetching pharmacy order details", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(orderDetails)) {
+      throw new createError.BadRequest(Constants.ORDER_DETAILS_DOES_NOT_EXIST);
+    }
+
+    const { parsedOrderDetails, byRefId } = this.buildOrderDetailsMap(
+      orderDetails.orderDetails
+    );
+    const refIds = returnDetails.map(item => Number(item.refId));
+    const lineBillModel =
+      type === "Treatment"
+        ? treatmentAppointmentLineBillsAssociations
+        : consultationAppointmentLineBillsAssociations;
+    const lineBillRows = await lineBillModel.findAll({
+      where: { id: refIds },
+      attributes: ["id", "billTypeValue", "purchaseQuantity", "returnQuantity"]
+    });
+    const lineBillByRefId = new Map(
+      lineBillRows.map(row => [Number(row.id), row.dataValues || row])
+    );
+
+    let computedTotalAmount = 0;
+    for (const detail of returnDetails) {
+      const refId = Number(detail.refId);
+      const itemId = Number(detail.itemId);
+      const lineBill = lineBillByRefId.get(refId);
+      if (!lineBill) {
+        throw new createError.BadRequest(`Invalid refId ${refId}.`);
+      }
+      if (Number(lineBill.billTypeValue) !== itemId) {
+        throw new createError.BadRequest(
+          `Item mismatch for refId ${refId}. Please refresh and try again.`
+        );
+      }
+
+      const orderEntry = byRefId.get(refId);
+      const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
+        ? orderEntry.purchaseDetails
+        : [];
+      const purchaseByGrnId = new Map(
+        purchaseDetails.map(pd => [Number(pd.grnId), pd])
+      );
+
+      const requestedQty = detail.returnInfo.reduce(
+        (sum, row) => sum + Number(row.returnQuantity || 0),
+        0
+      );
+      const alreadyReturned = Number(lineBill.returnQuantity || 0);
+      const purchasedQty = Number(lineBill.purchaseQuantity || 0);
+      if (requestedQty <= 0) {
+        throw new createError.BadRequest(
+          `Return quantity should be greater than 0 for refId ${refId}.`
+        );
+      }
+      if (alreadyReturned + requestedQty > purchasedQty) {
+        throw new createError.BadRequest(
+          `Return quantity exceeds purchased quantity for refId ${refId}.`
+        );
+      }
+
+      let lineCost = 0;
+      for (const row of detail.returnInfo) {
+        const grnId = Number(row.grnId);
+        const returnQty = Number(row.returnQuantity || 0);
+        const purchaseInfo = purchaseByGrnId.get(grnId);
+        if (!purchaseInfo) {
+          throw new createError.BadRequest(
+            `Invalid GRN mapping for refId ${refId}.`
+          );
+        }
+        const usedQty = Number(
+          purchaseInfo.initialUsedQuantity ?? purchaseInfo.usedQuantity ?? 0
+        );
+        const returnedQty = Number(purchaseInfo.returnedQuantity || 0);
+        if (returnedQty + returnQty > usedQty) {
+          throw new createError.BadRequest(
+            `Return quantity exceeds sold quantity for GRN ${grnId}.`
+          );
+        }
+        lineCost += Number(purchaseInfo.mrpPerTablet || 0) * returnQty;
+      }
+      computedTotalAmount += lineCost;
+    }
+
+    const roundedInputAmount = Number(Number(totalAmount).toFixed(2));
+    const roundedComputedAmount = Number(computedTotalAmount.toFixed(2));
+    if (roundedInputAmount !== roundedComputedAmount) {
+      throw new createError.BadRequest(Constants.PAYABLE_AMOUNT_WRONG);
+    }
+
+    await this.stockMySqlConnection.transaction(async stockTransaction => {
+      for (const detail of returnDetails) {
+        for (const row of detail.returnInfo) {
+          await GrnItemsAssociationsModel.update(
+            {
+              totalQuantity: Sequelize.literal(
+                `totalQuantity + ${Number(row.returnQuantity)}`
+              )
+            },
+            {
+              where: {
+                grnId: Number(row.grnId),
+                itemId: Number(detail.itemId)
+              },
+              transaction: stockTransaction
+            }
+          );
+        }
+      }
+    });
+
+    await this.mySqlConnection.transaction(async defaultDbTransaction => {
+      for (const detail of returnDetails) {
+        const refId = Number(detail.refId);
+        const requestedQty = detail.returnInfo.reduce(
+          (sum, row) => sum + Number(row.returnQuantity || 0),
+          0
+        );
+        await lineBillModel.update(
+          {
+            returnQuantity: Sequelize.literal(
+              `IFNULL(returnQuantity, 0) + ${requestedQty}`
+            )
+          },
+          {
+            where: { id: refId },
+            transaction: defaultDbTransaction
+          }
+        );
+
+        const orderEntry = byRefId.get(refId);
+        if (orderEntry && Array.isArray(orderEntry.purchaseDetails)) {
+          const returnByGrn = new Map(
+            detail.returnInfo.map(item => [
+              Number(item.grnId),
+              Number(item.returnQuantity)
+            ])
+          );
+          orderEntry.purchaseDetails = orderEntry.purchaseDetails.map(pd => {
+            const delta = returnByGrn.get(Number(pd.grnId)) || 0;
+            return {
+              ...pd,
+              returnedQuantity: Number(pd.returnedQuantity || 0) + delta
+            };
+          });
+        }
+      }
+
+      await OrderDetailsMasterModel.update(
+        {
+          orderDetails: JSON.stringify(parsedOrderDetails)
+        },
+        {
+          where: { id: orderDetails.id },
+          transaction: defaultDbTransaction
+        }
+      );
+
+      await PatientPharmacyPurchaseReturnsModel.create(
+        {
+          patientId,
+          orderId,
+          returnedDate: moment()
+            .tz("Asia/Kolkata")
+            .format("YYYY-MM-DD HH:mm:ss"),
+          returnDetails: JSON.stringify(returnDetails),
+          totalAmount: roundedComputedAmount
+        },
+        { transaction: defaultDbTransaction }
+      );
+    });
+
     return Constants.DATA_UPDATED_SUCCESS;
   }
 
