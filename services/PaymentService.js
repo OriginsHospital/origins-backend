@@ -1414,7 +1414,9 @@ class PaymentService extends BaseService {
               `SELECT gia.grnId
                FROM stockmanagement.grn_items_associations gia
                INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-               WHERE gm.branchId = :branchId AND gia.itemId = :itemId
+               WHERE gm.branchId = :branchId
+                 AND gia.itemId = :itemId
+                 AND IFNULL(gia.isReturned, 0) = 0
                ORDER BY gia.expiryDate ASC, gia.id ASC
                LIMIT 1`,
               {
@@ -1493,6 +1495,7 @@ class PaymentService extends BaseService {
              WHERE gia.grnId = :grnId
                AND gia.itemId = :itemId
                AND gm.branchId = :branchId
+               AND IFNULL(gia.isReturned, 0) = 0
              ORDER BY gia.id DESC
              LIMIT 1`,
             {
