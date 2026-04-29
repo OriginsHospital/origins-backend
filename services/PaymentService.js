@@ -44,7 +44,6 @@ const {
 let { invoiceTemplate } = require("../templates/invoiceTemplate");
 let { patientHeaderForInvoice } = require("../templates/headerTemplates");
 const GrnDetailsMasterModel = require("../models/Master/grnDetailsMaster");
-const PatientPharmacyPurchaseReturnsModel = require("../models/Master/PatientPharmacyPurchaseReturnsModel");
 const formFTemplate = require("../templates/formFTemplate");
 const patientScanFormFAssociationsModel = require("../models/Associations/patientScanFormFAssociation");
 const BaseService = require("../services/baseService");
@@ -1533,17 +1532,31 @@ class PaymentService extends BaseService {
         }
       );
 
-      await PatientPharmacyPurchaseReturnsModel.create(
+      const returnsInsertPayload = {
+        patientId,
+        orderId,
+        returnedDate: moment()
+          .tz("Asia/Kolkata")
+          .format("YYYY-MM-DD HH:mm:ss"),
+        returnDetails: JSON.stringify(returnDetails),
+        totalAmount: roundedComputedAmount
+      };
+
+      await this.stockMySqlConnection.query(
+        `INSERT INTO stockmanagement.patient_pharamacy_purchase_returns
+          (patientId, orderId, returnDetails, returnedDate, totalAmount, createdAt, updatedAt)
+         VALUES
+          (:patientId, :orderId, :returnDetails, :returnedDate, :totalAmount, NOW(), NOW())`,
         {
-          patientId,
-          orderId,
-          returnedDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
-          returnDetails: JSON.stringify(returnDetails),
-          totalAmount: roundedComputedAmount
-        },
-        { transaction: defaultDbTransaction }
+          replacements: {
+            patientId: returnsInsertPayload.patientId,
+            orderId: returnsInsertPayload.orderId,
+            returnDetails: returnsInsertPayload.returnDetails,
+            returnedDate: returnsInsertPayload.returnedDate,
+            totalAmount: returnsInsertPayload.totalAmount
+          },
+          type: Sequelize.QueryTypes.INSERT
+        }
       );
     });
 
