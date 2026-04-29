@@ -1319,6 +1319,7 @@ class PaymentService extends BaseService {
     );
 
     let computedTotalAmount = 0;
+    const branchByRefId = new Map();
     for (const detail of returnDetails) {
       const refId = Number(detail.refId);
       const itemId = Number(detail.itemId);
@@ -1374,6 +1375,14 @@ class PaymentService extends BaseService {
         );
       }
 
+      const { branchId } = await this.getBranchIdByRefIdAndType(refId, type);
+      if (!branchId) {
+        throw new createError.BadRequest(
+          `Unable to resolve branch for refund refId ${refId}.`
+        );
+      }
+      branchByRefId.set(refId, Number(branchId));
+
       // If frontend could not map GRNs, derive the split server-side from sold details.
       if (normalizedReturnInfo.length === 0) {
         let remainingQty = requestedQty;
@@ -1399,10 +1408,7 @@ class PaymentService extends BaseService {
         // Legacy fallback: if orderDetails does not retain purchase split,
         // map to any active GRN line for this item in the same branch.
         if (remainingQty > 0 && normalizedReturnInfo.length === 0) {
-          const { branchId } = await this.getBranchIdByRefIdAndType(
-            refId,
-            type
-          );
+          const branchId = branchByRefId.get(refId);
           if (branchId) {
             const fallbackGrnRows = await this.stockMySqlConnection.query(
               `SELECT gia.grnId
@@ -1466,62 +1472,39 @@ class PaymentService extends BaseService {
 
     await this.stockMySqlConnection.transaction(async stockTransaction => {
       for (const detail of returnDetails) {
+        const refId = Number(detail.refId);
+        const itemId = Number(detail.itemId);
+        const branchId = branchByRefId.get(refId);
+        if (!branchId) {
+          throw new createError.BadRequest(
+            `Unable to resolve branch for refund refId ${refId}.`
+          );
+        }
+
         for (const row of detail.returnInfo) {
           const qty = Number(row.returnQuantity);
           const grnId = Number(row.grnId);
-          const itemId = Number(detail.itemId);
 
-          // Update one concrete stock line for this GRN+item.
-          const updateResult = await this.stockMySqlConnection.query(
-            `UPDATE stockmanagement.grn_items_associations
-             SET totalQuantity = totalQuantity + :qty
-             WHERE grnId = :grnId AND itemId = :itemId
-             ORDER BY id DESC
+          // Validate GRN belongs to the same branch and item exists in GRN stock rows.
+          const eligibleRows = await this.stockMySqlConnection.query(
+            `SELECT gia.id
+             FROM stockmanagement.grn_items_associations gia
+             INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+             WHERE gia.grnId = :grnId
+               AND gia.itemId = :itemId
+               AND gm.branchId = :branchId
+             ORDER BY gia.id DESC
              LIMIT 1`,
             {
-              replacements: { qty, grnId, itemId },
+              type: Sequelize.QueryTypes.SELECT,
+              replacements: { grnId, itemId, branchId },
               transaction: stockTransaction
             }
           );
 
-          const updateMeta = Array.isArray(updateResult)
-            ? updateResult[1]
-            : updateResult;
-          const affectedRows =
-            Number(updateMeta?.affectedRows) || Number(updateMeta) || 0;
-
-          if (affectedRows > 0) {
-            continue;
-          }
-
-          // Fallback for legacy rows where GRN+item mapping drifted:
-          // update any active stock line for this item in the same branch.
-          const { branchId } = await this.getBranchIdByRefIdAndType(
-            Number(detail.refId),
-            type
-          );
-          if (!branchId) {
+          if (!eligibleRows?.length) {
             throw new createError.BadRequest(
-              `Unable to resolve branch for refund refId ${detail.refId}.`
-            );
-          }
-
-          const fallbackRows = await this.stockMySqlConnection.query(
-            `SELECT gia.id
-             FROM stockmanagement.grn_items_associations gia
-             INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-             WHERE gm.branchId = :branchId AND gia.itemId = :itemId
-             ORDER BY gia.expiryDate ASC, gia.id ASC
-             LIMIT 1`,
-            {
-              type: Sequelize.QueryTypes.SELECT,
-              replacements: { branchId: Number(branchId), itemId }
-            }
-          );
-
-          if (!fallbackRows?.length) {
-            throw new createError.BadRequest(
-              `Stock line not found to add refund quantity for item ${itemId}.`
+              `Invalid GRN ${grnId} for item ${itemId} at branch ${branchId}.`
             );
           }
 
@@ -1533,7 +1516,7 @@ class PaymentService extends BaseService {
             {
               replacements: {
                 qty,
-                grnItemAssociationId: Number(fallbackRows[0].id)
+                grnItemAssociationId: Number(eligibleRows[0].id)
               },
               transaction: stockTransaction
             }
