@@ -49,6 +49,7 @@ const patientScanFormFAssociationsModel = require("../models/Associations/patien
 const BaseService = require("../services/baseService");
 const GenerateHtmlTemplate = require("../utils/templateUtils");
 const PatientPurchaseReturnsModel = require("../models/Master/patientPurchaseReturnsModel");
+const PatientPharmacyPurchaseReturnsModel = require("../models/Master/PatientPharmacyPurchaseReturnsModel");
 class PaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -1258,7 +1259,26 @@ class PaymentService extends BaseService {
       }
     }
 
-    let itemReturnHistory = [];
+    let itemReturnHistory = await this.stockMySqlConnection
+      .query(
+        `SELECT id, orderId, returnDetails, returnedDate, totalAmount
+         FROM stockmanagement.patient_pharamacy_purchase_returns
+         WHERE orderId = :orderId
+         ORDER BY id DESC`,
+        {
+          replacements: { orderId },
+          type: Sequelize.QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("error while fetching pharmacy return history", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    itemReturnHistory = Array.isArray(itemReturnHistory)
+      ? itemReturnHistory.map(row => this.normalizePharmacyReturnRecord(row))
+      : [];
 
     return {
       orderInformation,
@@ -1278,11 +1298,51 @@ class PaymentService extends BaseService {
     return { parsedOrderDetails: parsed, byRefId };
   }
 
+  normalizePharmacyReturnRecord(row) {
+    let parsedReturnDetails = null;
+    try {
+      parsedReturnDetails =
+        typeof row.returnDetails === "string"
+          ? JSON.parse(row.returnDetails)
+          : row.returnDetails;
+    } catch (err) {
+      parsedReturnDetails = row.returnDetails;
+    }
+
+    const isNewFormat =
+      parsedReturnDetails &&
+      typeof parsedReturnDetails === "object" &&
+      !Array.isArray(parsedReturnDetails);
+    const returnItems = isNewFormat
+      ? Array.isArray(parsedReturnDetails.items)
+        ? parsedReturnDetails.items
+        : []
+      : Array.isArray(parsedReturnDetails)
+      ? parsedReturnDetails
+      : [];
+
+    return {
+      returnId: row.id,
+      orderId: row.orderId,
+      returnedDate: row.returnedDate,
+      totalAmount: Number(row.totalAmount || 0),
+      refundMethod: isNewFormat
+        ? parsedReturnDetails.refundMethod || "N/A"
+        : "N/A",
+      returnedBy: isNewFormat
+        ? parsedReturnDetails.returnedByName || "N/A"
+        : "N/A",
+      returnDetails: returnItems
+    };
+  }
+
   async returnPharmacyItemService() {
     const payload = await returnPharmacyItemSchema.validateAsync(
       this._request.body
     );
     const { orderId, patientId, returnDetails, totalAmount, type } = payload;
+    const refundMethod = payload?.refundMethod || "CASH";
+    const returnedByName = this._request?.userDetails?.fullName || "N/A";
 
     const orderDetails = await OrderDetailsMasterModel.findOne({
       where: {
@@ -1528,6 +1588,7 @@ class PaymentService extends BaseService {
       }
     });
 
+    let refundResponse = null;
     await this.mySqlConnection.transaction(async defaultDbTransaction => {
       for (const detail of returnDetails) {
         const refId = Number(detail.refId);
@@ -1581,29 +1642,29 @@ class PaymentService extends BaseService {
         returnedDate: moment()
           .tz("Asia/Kolkata")
           .format("YYYY-MM-DD HH:mm:ss"),
-        returnDetails: JSON.stringify(returnDetails),
+        returnDetails: JSON.stringify({
+          items: returnDetails,
+          refundMethod,
+          returnedByName
+        }),
         totalAmount: roundedComputedAmount
       };
 
-      await this.stockMySqlConnection.query(
-        `INSERT INTO stockmanagement.patient_pharamacy_purchase_returns
-          (patientId, orderId, returnDetails, returnedDate, totalAmount, createdAt, updatedAt)
-         VALUES
-          (:patientId, :orderId, :returnDetails, :returnedDate, :totalAmount, NOW(), NOW())`,
-        {
-          replacements: {
-            patientId: returnsInsertPayload.patientId,
-            orderId: returnsInsertPayload.orderId,
-            returnDetails: returnsInsertPayload.returnDetails,
-            returnedDate: returnsInsertPayload.returnedDate,
-            totalAmount: returnsInsertPayload.totalAmount
-          },
-          type: Sequelize.QueryTypes.INSERT
-        }
+      const createdReturn = await PatientPharmacyPurchaseReturnsModel.create(
+        returnsInsertPayload
       );
+      refundResponse = {
+        message: Constants.DATA_UPDATED_SUCCESS,
+        returnId: createdReturn?.id || null,
+        orderId,
+        refundMethod,
+        returnedBy: returnedByName,
+        totalAmount: roundedComputedAmount,
+        returnDetails
+      };
     });
 
-    return Constants.DATA_UPDATED_SUCCESS;
+    return refundResponse || Constants.DATA_UPDATED_SUCCESS;
   }
 
   async consultationFeeOrderIdService(orderData, orderDetailsResponse) {
