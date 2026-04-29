@@ -54,6 +54,10 @@ const returnPharmacyItemSchema = Joi.object({
         itemId: Joi.number()
           .integer()
           .required(),
+        returnQuantity: Joi.number()
+          .integer()
+          .min(1)
+          .required(),
         returnInfo: Joi.array()
           .items(
             Joi.object({
@@ -66,8 +70,8 @@ const returnPharmacyItemSchema = Joi.object({
                 .required()
             })
           )
-          .min(1)
-          .required()
+          .optional()
+          .default([])
       })
     )
     .min(1)

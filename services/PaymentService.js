@@ -1331,9 +1331,21 @@ class PaymentService extends BaseService {
         purchaseDetails.map(pd => [Number(pd.grnId), pd])
       );
 
-      const requestedQty = detail.returnInfo.reduce(
+      let normalizedReturnInfo = Array.isArray(detail.returnInfo)
+        ? detail.returnInfo
+            .map(row => ({
+              grnId: Number(row.grnId),
+              returnQuantity: Number(row.returnQuantity || 0)
+            }))
+            .filter(row => row.grnId && row.returnQuantity > 0)
+        : [];
+
+      const requestedQtyFromInfo = normalizedReturnInfo.reduce(
         (sum, row) => sum + Number(row.returnQuantity || 0),
         0
+      );
+      const requestedQty = Number(
+        detail.returnQuantity || requestedQtyFromInfo || 0
       );
       const alreadyReturned = Number(lineBill.returnQuantity || 0);
       const purchasedQty = Number(lineBill.purchaseQuantity || 0);
@@ -1348,8 +1360,36 @@ class PaymentService extends BaseService {
         );
       }
 
+      // If frontend could not map GRNs, derive the split server-side from sold details.
+      if (normalizedReturnInfo.length === 0) {
+        let remainingQty = requestedQty;
+        for (const pd of purchaseDetails) {
+          if (remainingQty <= 0) break;
+          const grnId = Number(pd.grnId);
+          const usedQty = Number(
+            pd.initialUsedQuantity ?? pd.usedQuantity ?? 0
+          );
+          const returnedQty = Number(pd.returnedQuantity || 0);
+          const availableQty = Math.max(0, usedQty - returnedQty);
+          const qtyForThisGrn = Math.min(remainingQty, availableQty);
+          if (grnId && qtyForThisGrn > 0) {
+            normalizedReturnInfo.push({
+              grnId,
+              returnQuantity: qtyForThisGrn
+            });
+            remainingQty -= qtyForThisGrn;
+          }
+        }
+        if (remainingQty > 0) {
+          throw new createError.BadRequest(
+            `Insufficient sold quantity available for return at refId ${refId}.`
+          );
+        }
+        detail.returnInfo = normalizedReturnInfo;
+      }
+
       let lineCost = 0;
-      for (const row of detail.returnInfo) {
+      for (const row of normalizedReturnInfo) {
         const grnId = Number(row.grnId);
         const returnQty = Number(row.returnQuantity || 0);
         const purchaseInfo = purchaseByGrnId.get(grnId);
