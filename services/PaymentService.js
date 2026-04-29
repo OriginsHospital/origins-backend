@@ -1195,6 +1195,16 @@ class PaymentService extends BaseService {
       orderInformation = orderInformation[0];
     }
 
+    if (orderInformation) {
+      orderInformation.type = orderDetails?.type || null;
+      if (orderInformation.patientDetails) {
+        orderInformation.patientDetails = {
+          ...orderInformation.patientDetails,
+          purchaseType: orderDetails?.type || null
+        };
+      }
+    }
+
     // If purchasedItems is null or empty, try to parse orderDetails directly as fallback
     if (
       orderInformation &&
