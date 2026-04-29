@@ -311,6 +311,11 @@ SELECT
         ),
         'appointmentDate', caa.appointmentDate
     ) AS patientDetails,
+    JSON_OBJECT(
+        'totalOrderAmount', odm.totalOrderAmount,
+        'paidOrderAmount', odm.paidOrderAmount,
+        'discountAmount', odm.discountAmount
+    ) AS orderSummary,
     (
         SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
@@ -405,6 +410,11 @@ SELECT
         ),
         'appointmentDate', taa.appointmentDate
     ) AS patientDetails,
+    JSON_OBJECT(
+        'totalOrderAmount', odm.totalOrderAmount,
+        'paidOrderAmount', odm.paidOrderAmount,
+        'discountAmount', odm.discountAmount
+    ) AS orderSummary,
     (
         SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
