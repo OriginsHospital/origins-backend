@@ -1379,8 +1379,9 @@ class PaymentService extends BaseService {
           const usedQty = Number(
             pd.initialUsedQuantity ?? pd.usedQuantity ?? 0
           );
-          const returnedQty = Number(pd.returnedQuantity || 0);
-          const availableQty = Math.max(0, usedQty - returnedQty);
+          // For older orders, returnedQuantity in stored purchaseDetails can be stale.
+          // Keep line-bill level checks as source of truth and allocate from sold GRNs.
+          const availableQty = Math.max(0, usedQty);
           const qtyForThisGrn = Math.min(remainingQty, availableQty);
           if (grnId && qtyForThisGrn > 0) {
             normalizedReturnInfo.push({
@@ -1390,6 +1391,48 @@ class PaymentService extends BaseService {
             remainingQty -= qtyForThisGrn;
           }
         }
+
+        // Legacy fallback: if orderDetails does not retain purchase split,
+        // map to any active GRN line for this item in the same branch.
+        if (remainingQty > 0 && normalizedReturnInfo.length === 0) {
+          const { branchId } = await this.getBranchIdByRefIdAndType(
+            refId,
+            type
+          );
+          if (branchId) {
+            const fallbackGrnRows = await this.stockMySqlConnection.query(
+              `SELECT gia.grnId
+               FROM stockmanagement.grn_items_associations gia
+               INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+               WHERE gm.branchId = :branchId AND gia.itemId = :itemId
+               ORDER BY gia.expiryDate ASC, gia.id ASC
+               LIMIT 1`,
+              {
+                type: Sequelize.QueryTypes.SELECT,
+                replacements: {
+                  branchId: Number(branchId),
+                  itemId: Number(itemId)
+                }
+              }
+            );
+            if (fallbackGrnRows?.length > 0) {
+              normalizedReturnInfo.push({
+                grnId: Number(fallbackGrnRows[0].grnId),
+                returnQuantity: remainingQty
+              });
+              remainingQty = 0;
+            }
+          }
+        }
+
+        // If some quantity remains due rounding/legacy detail mismatch, assign it
+        // to first derived GRN so the refund can proceed with line-bill safeguards.
+        if (remainingQty > 0 && normalizedReturnInfo.length > 0) {
+          normalizedReturnInfo[0].returnQuantity =
+            Number(normalizedReturnInfo[0].returnQuantity) + remainingQty;
+          remainingQty = 0;
+        }
+
         if (remainingQty > 0) {
           throw new createError.BadRequest(
             `Insufficient sold quantity available for return at refId ${refId}.`
@@ -1406,15 +1449,6 @@ class PaymentService extends BaseService {
         if (!purchaseInfo) {
           throw new createError.BadRequest(
             `Invalid GRN mapping for refId ${refId}.`
-          );
-        }
-        const usedQty = Number(
-          purchaseInfo.initialUsedQuantity ?? purchaseInfo.usedQuantity ?? 0
-        );
-        const returnedQty = Number(purchaseInfo.returnedQuantity || 0);
-        if (returnedQty + returnQty > usedQty) {
-          throw new createError.BadRequest(
-            `Return quantity exceeds sold quantity for GRN ${grnId}.`
           );
         }
         lineCost += Number(purchaseInfo.mrpPerTablet || 0) * returnQty;
