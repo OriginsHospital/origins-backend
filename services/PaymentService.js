@@ -1337,6 +1337,11 @@ class PaymentService extends BaseService {
       const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
         ? orderEntry.purchaseDetails
         : [];
+      const fallbackUnitPrice =
+        Number(lineBill.purchaseQuantity || 0) > 0
+          ? Number(orderEntry?.totalCost || 0) /
+            Number(lineBill.purchaseQuantity || 1)
+          : 0;
       const purchaseByGrnId = new Map(
         purchaseDetails.map(pd => [Number(pd.grnId), pd])
       );
@@ -1446,12 +1451,10 @@ class PaymentService extends BaseService {
         const grnId = Number(row.grnId);
         const returnQty = Number(row.returnQuantity || 0);
         const purchaseInfo = purchaseByGrnId.get(grnId);
-        if (!purchaseInfo) {
-          throw new createError.BadRequest(
-            `Invalid GRN mapping for refId ${refId}.`
-          );
-        }
-        lineCost += Number(purchaseInfo.mrpPerTablet || 0) * returnQty;
+        const unitPrice = Number(
+          purchaseInfo?.mrpPerTablet ?? fallbackUnitPrice ?? 0
+        );
+        lineCost += unitPrice * returnQty;
       }
       computedTotalAmount += lineCost;
     }
