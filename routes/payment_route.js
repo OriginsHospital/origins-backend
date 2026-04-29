@@ -57,6 +57,12 @@ class PaymentRoute {
       tokenVerified,
       this.returnPurchasedItems
     );
+    this._route.get(
+      "/getPharmacyRefundLogs",
+      checkActiveSession,
+      tokenVerified,
+      this.getPharmacyRefundLogs
+    );
   }
 
   getOrderId = asyncHandler(async (req, res, next) => {
@@ -92,6 +98,11 @@ class PaymentRoute {
   returnPurchasedItems = asyncHandler(async (req, res, next) => {
     const controllerObj = new PaymentController(req, res, next);
     await controllerObj.returnPurchasedItemsHandler();
+  });
+
+  getPharmacyRefundLogs = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PaymentController(req, res, next);
+    await controllerObj.getPharmacyRefundLogsHandler();
   });
 }
 

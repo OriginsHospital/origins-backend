@@ -1336,6 +1336,38 @@ class PaymentService extends BaseService {
     };
   }
 
+  async getPharmacyRefundLogsService() {
+    const orderId = this._request?.query?.orderId;
+    let whereClause = "";
+    const replacements = {};
+    if (orderId && String(orderId).trim()) {
+      whereClause = " WHERE orderId = :orderId ";
+      replacements.orderId = String(orderId).trim();
+    }
+
+    const refundRows = await this.stockMySqlConnection
+      .query(
+        `SELECT id, orderId, returnDetails, returnedDate, totalAmount
+         FROM stockmanagement.patient_pharamacy_purchase_returns
+         ${whereClause}
+         ORDER BY id DESC`,
+        {
+          replacements,
+          type: Sequelize.QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("error while fetching pharmacy refund logs", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Array.isArray(refundRows)
+      ? refundRows.map(row => this.normalizePharmacyReturnRecord(row))
+      : [];
+  }
+
   async returnPharmacyItemService() {
     const payload = await returnPharmacyItemSchema.validateAsync(
       this._request.body

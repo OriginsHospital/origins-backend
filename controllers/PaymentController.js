@@ -81,6 +81,17 @@ class PaymentController {
       data: data
     });
   }
+
+  async getPharmacyRefundLogsHandler() {
+    const data = await this._service.getPharmacyRefundLogsService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = PaymentController;
