@@ -79,6 +79,13 @@ const getPharmacyListByDateQuery = `
 					where itemId  = calba.billTypeValue and gm.branchId = caa.branchId
 			),
 			'purchaseQuantity', calba.purchaseQuantity ,
+			'nonPurchaseReason', (
+				SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+				WHERE ppdt.refId = calba.id
+				  AND ppdt.type = 'Consultation'
+				LIMIT 1
+			),
 			'prescriptionDetails', calba.prescriptionDetails ,
 			'prescriptionDays', calba.prescriptionDays ,
 			'isSpouse', calba.isSpouse,
@@ -190,6 +197,13 @@ select
 					where itemId  = talba.billTypeValue and gm.branchId = taa.branchId
 			),
 			'purchaseQuantity', talba.purchaseQuantity ,
+			'nonPurchaseReason', (
+				SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+				WHERE ppdt.refId = talba.id
+				  AND ppdt.type = 'Treatment'
+				LIMIT 1
+			),
 			'prescriptionDetails', talba.prescriptionDetails ,
 			'prescriptionDays', talba.prescriptionDays ,
 			'isSpouse', talba.isSpouse,

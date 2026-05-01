@@ -491,6 +491,17 @@ WITH BillDetails AS (
                         WHEN lb.billTypeId = 3 THEN lb.purchaseQuantity
                         ELSE NULL
                     END,
+                    'nonPurchaseReason',
+                    CASE
+                        WHEN lb.billTypeId = 3 THEN (
+                            SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+                            FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+                            WHERE ppdt.refId = lb.id
+                              AND ppdt.type = 'Consultation'
+                            LIMIT 1
+                        )
+                        ELSE NULL
+                    END,
                     'refId', 
                     CASE 
                         WHEN lb.billTypeId = 1 THEN lb.id 
@@ -596,6 +607,17 @@ WITH BillDetails AS (
                     'purchaseQuantity', 
                     CASE 
                         WHEN lb.billTypeId = 3 THEN lb.purchaseQuantity
+                        ELSE NULL
+                    END,
+                    'nonPurchaseReason',
+                    CASE
+                        WHEN lb.billTypeId = 3 THEN (
+                            SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+                            FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+                            WHERE ppdt.refId = lb.id
+                              AND ppdt.type = 'Treatment'
+                            LIMIT 1
+                        )
                         ELSE NULL
                     END,
                     'refId', 

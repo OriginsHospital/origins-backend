@@ -309,7 +309,14 @@ FROM (
 	                'isSpouse', calba.isSpouse,
 	                'paymentStatus', calba.status,
 	                'prescribedQuantity', calba.prescribedQuantity,
-	                'purchaseQuantity', calba.purchaseQuantity
+	                'purchaseQuantity', calba.purchaseQuantity,
+	                'nonPurchaseReason', (
+	                    SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+	                    FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+	                    WHERE ppdt.refId = calba.id
+	                      AND ppdt.type = 'Consultation'
+	                    LIMIT 1
+	                )
 	            )
 	        END AS prescriptionDetails
 	    FROM 
@@ -404,7 +411,14 @@ FROM (
 	                'isSpouse', talba.isSpouse,
 	                'paymentStatus', talba.status,
 	                'prescribedQuantity', talba.prescribedQuantity,
-	                'purchaseQuantity', talba.purchaseQuantity
+	                'purchaseQuantity', talba.purchaseQuantity,
+	                'nonPurchaseReason', (
+	                    SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+	                    FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+	                    WHERE ppdt.refId = talba.id
+	                      AND ppdt.type = 'Treatment'
+	                    LIMIT 1
+	                )
 	            )
 	        END AS prescriptionDetails
 	    FROM 
@@ -628,6 +642,13 @@ SELECT * FROM (
     calba.prescribedQuantity AS prescribedQuantity,
     COALESCE(calba.purchaseQuantity, 0) AS purchasedQuantity,
     calba.status AS paymentStatus,
+    (
+      SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+      FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+      WHERE ppdt.refId = calba.id
+        AND ppdt.type = 'Consultation'
+      LIMIT 1
+    ) AS nonPurchaseReason,
     calba.id AS lineBillId
   FROM consultation_appointment_line_bills_associations calba
   INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
@@ -652,6 +673,13 @@ SELECT * FROM (
     talba.prescribedQuantity AS prescribedQuantity,
     COALESCE(talba.purchaseQuantity, 0) AS purchasedQuantity,
     talba.status AS paymentStatus,
+    (
+      SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+      FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+      WHERE ppdt.refId = talba.id
+        AND ppdt.type = 'Treatment'
+      LIMIT 1
+    ) AS nonPurchaseReason,
     talba.id AS lineBillId
   FROM treatment_appointment_line_bills_associations talba
   INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId

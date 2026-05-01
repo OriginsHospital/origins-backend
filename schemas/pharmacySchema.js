@@ -127,7 +127,10 @@ const itemPurchaseInformation = Joi.object({
   returnedQuantity: Joi.number().required(),
   usedQuantity: Joi.number().required(),
   initialUsedQuantity: Joi.number().optional(),
-  batchNo: Joi.string().optional()
+  batchNo: Joi.string().optional(),
+  nonPurchaseReason: Joi.string()
+    .optional()
+    .allow("", null)
 });
 
 const updatePharmacyDetailsSchema = Joi.array().items(
