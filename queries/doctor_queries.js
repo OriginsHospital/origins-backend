@@ -494,8 +494,14 @@ WITH BillDetails AS (
                     'nonPurchaseReason',
                     CASE
                         WHEN lb.billTypeId = 3 THEN (
-                            SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+                            SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
                             FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+                            JOIN JSON_TABLE(
+                                ppdt.purchaseDetails,
+                                '$[*]' COLUMNS (
+                                    nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+                                )
+                            ) jt
                             WHERE ppdt.refId = lb.id
                               AND ppdt.type = 'Consultation'
                             LIMIT 1
@@ -612,8 +618,14 @@ WITH BillDetails AS (
                     'nonPurchaseReason',
                     CASE
                         WHEN lb.billTypeId = 3 THEN (
-                            SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+                            SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
                             FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+                            JOIN JSON_TABLE(
+                                ppdt.purchaseDetails,
+                                '$[*]' COLUMNS (
+                                    nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+                                )
+                            ) jt
                             WHERE ppdt.refId = lb.id
                               AND ppdt.type = 'Treatment'
                             LIMIT 1

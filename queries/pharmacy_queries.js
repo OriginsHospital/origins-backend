@@ -80,8 +80,14 @@ const getPharmacyListByDateQuery = `
 			),
 			'purchaseQuantity', calba.purchaseQuantity ,
 			'nonPurchaseReason', (
-				SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+				SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
 				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+				JOIN JSON_TABLE(
+					ppdt.purchaseDetails,
+					'$[*]' COLUMNS (
+						nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+					)
+				) jt
 				WHERE ppdt.refId = calba.id
 				  AND ppdt.type = 'Consultation'
 				LIMIT 1
@@ -198,8 +204,14 @@ select
 			),
 			'purchaseQuantity', talba.purchaseQuantity ,
 			'nonPurchaseReason', (
-				SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+				SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
 				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+				JOIN JSON_TABLE(
+					ppdt.purchaseDetails,
+					'$[*]' COLUMNS (
+						nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+					)
+				) jt
 				WHERE ppdt.refId = talba.id
 				  AND ppdt.type = 'Treatment'
 				LIMIT 1

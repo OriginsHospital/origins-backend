@@ -311,8 +311,14 @@ FROM (
 	                'prescribedQuantity', calba.prescribedQuantity,
 	                'purchaseQuantity', calba.purchaseQuantity,
 	                'nonPurchaseReason', (
-	                    SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+	                    SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
 	                    FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+	                    JOIN JSON_TABLE(
+	                        ppdt.purchaseDetails,
+	                        '$[*]' COLUMNS (
+	                            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+	                        )
+	                    ) jt
 	                    WHERE ppdt.refId = calba.id
 	                      AND ppdt.type = 'Consultation'
 	                    LIMIT 1
@@ -413,8 +419,14 @@ FROM (
 	                'prescribedQuantity', talba.prescribedQuantity,
 	                'purchaseQuantity', talba.purchaseQuantity,
 	                'nonPurchaseReason', (
-	                    SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+	                    SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
 	                    FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+	                    JOIN JSON_TABLE(
+	                        ppdt.purchaseDetails,
+	                        '$[*]' COLUMNS (
+	                            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+	                        )
+	                    ) jt
 	                    WHERE ppdt.refId = talba.id
 	                      AND ppdt.type = 'Treatment'
 	                    LIMIT 1
@@ -643,8 +655,14 @@ SELECT * FROM (
     COALESCE(calba.purchaseQuantity, 0) AS purchasedQuantity,
     calba.status AS paymentStatus,
     (
-      SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+      SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
       FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+      JOIN JSON_TABLE(
+        ppdt.purchaseDetails,
+        '$[*]' COLUMNS (
+          nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+        )
+      ) jt
       WHERE ppdt.refId = calba.id
         AND ppdt.type = 'Consultation'
       LIMIT 1
@@ -674,8 +692,14 @@ SELECT * FROM (
     COALESCE(talba.purchaseQuantity, 0) AS purchasedQuantity,
     talba.status AS paymentStatus,
     (
-      SELECT JSON_UNQUOTE(JSON_EXTRACT(ppdt.purchaseDetails, '$[0].nonPurchaseReason'))
+      SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
       FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+      JOIN JSON_TABLE(
+        ppdt.purchaseDetails,
+        '$[*]' COLUMNS (
+          nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+        )
+      ) jt
       WHERE ppdt.refId = talba.id
         AND ppdt.type = 'Treatment'
       LIMIT 1
