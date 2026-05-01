@@ -404,18 +404,9 @@ class PaymentService extends BaseService {
         })
       );
 
-      await PharmacyPurchaseDetailsTemp.destroy({
-        where: {
-          refId: item.refId,
-          type: item.type
-        },
-        transaction: transaction
-      }).catch(err => {
-        console.log("Error during destroying the temp data", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
+      // Keep temp purchase details after payment so downstream history
+      // (doctor/patient pharmacy history) can display nonPurchaseReason.
+      // These rows are overwritten on subsequent pack/save for same refId.
     }
   }
 
