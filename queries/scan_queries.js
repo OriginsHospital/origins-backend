@@ -319,9 +319,165 @@ SELECT
 FROM ScanReports
 ORDER BY reportDate DESC;
 `;
+
+/** Prescriptions with line items or notes for patient (isSpouse=0) or spouse (isSpouse=1), consultation and treatment. */
+const getPrescriptionsByDateQuery = `
+SELECT * FROM (
+  SELECT
+    caa.id AS appointmentId,
+    'Consultation' AS appointmentType,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = caa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = caa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    caa.branchId,
+    0 AS isSpouse,
+    'Patient' AS subjectLabel
+  FROM consultation_appointments_associations caa
+  INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+  INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  WHERE DATE(caa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
+    AND (
+      EXISTS (
+        SELECT 1 FROM consultation_appointment_notes_associations cana
+        WHERE cana.appointmentId = caa.id AND cana.isSpouse = 0
+          AND cana.notes IS NOT NULL AND TRIM(cana.notes) <> ''
+      )
+      OR EXISTS (
+        SELECT 1 FROM consultation_appointment_line_bills_associations calba
+        WHERE calba.appointmentId = caa.id AND calba.isSpouse = 0
+      )
+    )
+  UNION ALL
+  SELECT
+    caa.id AS appointmentId,
+    'Consultation' AS appointmentType,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = caa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = caa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    caa.branchId,
+    1 AS isSpouse,
+    'Spouse' AS subjectLabel
+  FROM consultation_appointments_associations caa
+  INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+  INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  WHERE DATE(caa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
+    AND (
+      EXISTS (
+        SELECT 1 FROM consultation_appointment_notes_associations cana
+        WHERE cana.appointmentId = caa.id AND cana.isSpouse = 1
+          AND cana.notes IS NOT NULL AND TRIM(cana.notes) <> ''
+      )
+      OR EXISTS (
+        SELECT 1 FROM consultation_appointment_line_bills_associations calba
+        WHERE calba.appointmentId = caa.id AND calba.isSpouse = 1
+      )
+    )
+  UNION ALL
+  SELECT
+    taa.id AS appointmentId,
+    'Treatment' AS appointmentType,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    taa.branchId,
+    0 AS isSpouse,
+    'Patient' AS subjectLabel
+  FROM treatment_appointments_associations taa
+  INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
+  INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
+    AND (
+      EXISTS (
+        SELECT 1 FROM treatment_appointment_notes_associations tana
+        WHERE tana.appointmentId = taa.id AND tana.isSpouse = 0
+          AND tana.notes IS NOT NULL AND TRIM(tana.notes) <> ''
+      )
+      OR EXISTS (
+        SELECT 1 FROM treatment_appointment_line_bills_associations talba
+        WHERE talba.appointmentId = taa.id AND talba.isSpouse = 0
+      )
+    )
+  UNION ALL
+  SELECT
+    taa.id AS appointmentId,
+    'Treatment' AS appointmentType,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    taa.branchId,
+    1 AS isSpouse,
+    'Spouse' AS subjectLabel
+  FROM treatment_appointments_associations taa
+  INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
+  INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
+    AND (
+      EXISTS (
+        SELECT 1 FROM treatment_appointment_notes_associations tana
+        WHERE tana.appointmentId = taa.id AND tana.isSpouse = 1
+          AND tana.notes IS NOT NULL AND TRIM(tana.notes) <> ''
+      )
+      OR EXISTS (
+        SELECT 1 FROM treatment_appointment_line_bills_associations talba
+        WHERE talba.appointmentId = taa.id AND talba.isSpouse = 1
+      )
+    )
+) AS prescription_rows
+ORDER BY patientName ASC, appointmentType ASC, appointmentId ASC, isSpouse ASC
+`;
+
 module.exports = {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
   getScanHeaderInformation,
-  getScanReportsQuery
+  getScanReportsQuery,
+  getPrescriptionsByDateQuery
 };

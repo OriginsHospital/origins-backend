@@ -18,6 +18,15 @@ class ScanController {
     });
   }
 
+  async getPrescriptionsByDateHandler() {
+    const data = await this._service.getPrescriptionsByDateService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getScanReportsHandler() {
     const data = await this._service.getScanReportsService();
     this._response.status(200).send({
