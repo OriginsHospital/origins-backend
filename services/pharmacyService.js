@@ -584,7 +584,8 @@ class PharmacyService {
           mrpPerTablet: item.mrpPerTablet,
           expiryDate: item.expiryDate,
           initialUsedQuantity: item?.initialUsedQuantity,
-          batchNo: item?.batchNo
+          batchNo: item?.batchNo,
+          nonPurchaseReason: item?.nonPurchaseReason || null
         };
       });
       console.log("itemDetailedInfo", entry);
