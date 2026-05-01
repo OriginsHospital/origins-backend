@@ -654,18 +654,37 @@ SELECT * FROM (
     calba.prescribedQuantity AS prescribedQuantity,
     COALESCE(calba.purchaseQuantity, 0) AS purchasedQuantity,
     calba.status AS paymentStatus,
-    (
-      SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
-      FROM stockmanagement.pharmacy_purchase_details_temp ppdt
-      JOIN JSON_TABLE(
-        ppdt.purchaseDetails,
-        '$[*]' COLUMNS (
-          nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
-        )
-      ) jt
-      WHERE ppdt.refId = calba.id
-        AND ppdt.type = 'Consultation'
-      LIMIT 1
+    COALESCE(
+      (
+        SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
+        FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+        JOIN JSON_TABLE(
+          ppdt.purchaseDetails,
+          '$[*]' COLUMNS (
+            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+          )
+        ) jt
+        WHERE ppdt.refId = calba.id
+          AND ppdt.type = 'Consultation'
+        LIMIT 1
+      ),
+      (
+        SELECT odt.nonPurchaseReason
+        FROM defaultdb.order_details_master odm
+        JOIN JSON_TABLE(
+          odm.orderDetails,
+          '$[*]' COLUMNS (
+            refId INT PATH '$.refId',
+            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+          )
+        ) odt
+          ON odt.refId = calba.id
+        WHERE odm.productType = 'PHARMACY'
+          AND odm.type = 'Consultation'
+          AND NULLIF(TRIM(odt.nonPurchaseReason), '') IS NOT NULL
+        ORDER BY odm.id DESC
+        LIMIT 1
+      )
     ) AS nonPurchaseReason,
     calba.id AS lineBillId
   FROM consultation_appointment_line_bills_associations calba
@@ -691,18 +710,37 @@ SELECT * FROM (
     talba.prescribedQuantity AS prescribedQuantity,
     COALESCE(talba.purchaseQuantity, 0) AS purchasedQuantity,
     talba.status AS paymentStatus,
-    (
-      SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
-      FROM stockmanagement.pharmacy_purchase_details_temp ppdt
-      JOIN JSON_TABLE(
-        ppdt.purchaseDetails,
-        '$[*]' COLUMNS (
-          nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
-        )
-      ) jt
-      WHERE ppdt.refId = talba.id
-        AND ppdt.type = 'Treatment'
-      LIMIT 1
+    COALESCE(
+      (
+        SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
+        FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+        JOIN JSON_TABLE(
+          ppdt.purchaseDetails,
+          '$[*]' COLUMNS (
+            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+          )
+        ) jt
+        WHERE ppdt.refId = talba.id
+          AND ppdt.type = 'Treatment'
+        LIMIT 1
+      ),
+      (
+        SELECT odt.nonPurchaseReason
+        FROM defaultdb.treatment_orders_master tom
+        JOIN JSON_TABLE(
+          tom.orderDetails,
+          '$[*]' COLUMNS (
+            refId INT PATH '$.refId',
+            nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+          )
+        ) odt
+          ON odt.refId = talba.id
+        WHERE tom.productType = 'PHARMACY'
+          AND tom.type = 'Treatment'
+          AND NULLIF(TRIM(odt.nonPurchaseReason), '') IS NOT NULL
+        ORDER BY tom.id DESC
+        LIMIT 1
+      )
     ) AS nonPurchaseReason,
     talba.id AS lineBillId
   FROM treatment_appointment_line_bills_associations talba
