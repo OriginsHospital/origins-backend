@@ -10,7 +10,8 @@ const {
   formFTemplateByPatientIdQuery,
   prescriptionHistoryByTreatmentCycleIdFollicular,
   paymentHistoryByVisitId,
-  getNotesHistoryByVisitIdQuery
+  getNotesHistoryByVisitIdQuery,
+  getPatientPharmacyHistoryQuery
 } = require("../queries/patient_history_queries");
 const MySqlConnection = require("../connections/mysql_connection");
 const { Sequelize } = require("sequelize");
@@ -485,6 +486,31 @@ class PatientHistoryService {
     }
 
     throw new createError.NotFound("Payment record not found");
+  }
+
+  async getPatientPharmacyHistoryService() {
+    const { patientId } = this._request.params;
+    if (!patientId || lodash.isEmpty(String(patientId).trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replaceAll("{params}", "patientId")
+      );
+    }
+
+    const rows = await this.mySqlConnection
+      .query(getPatientPharmacyHistoryQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          patientId: patientId
+        }
+      })
+      .catch(err => {
+        console.log("Error while fetching patient pharmacy history", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Array.isArray(rows) ? rows : [];
   }
 }
 

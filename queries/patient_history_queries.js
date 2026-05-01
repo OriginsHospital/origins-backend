@@ -615,6 +615,57 @@ FROM (
 ORDER BY appointmentDate ASC;
 `;
 
+const getPatientPharmacyHistoryQuery = `
+SELECT * FROM (
+  SELECT 
+    pva.id AS visitId,
+    DATE_FORMAT(pva.visitDate, '%Y-%m-%d') AS visitDate,
+    caa.id AS appointmentId,
+    DATE_FORMAT(caa.appointmentDate, '%Y-%m-%d') AS appointmentDate,
+    'Consultation' AS appointmentType,
+    (SELECT u.fullName FROM users u WHERE u.id = caa.consultationDoctorId) AS doctorName,
+    pm.itemName AS medicineName,
+    calba.prescribedQuantity AS prescribedQuantity,
+    COALESCE(calba.purchaseQuantity, 0) AS purchasedQuantity,
+    calba.status AS paymentStatus,
+    calba.id AS lineBillId
+  FROM consultation_appointment_line_bills_associations calba
+  INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+  INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+  INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+  INNER JOIN patient_master pmt ON pmt.id = pva.patientId
+  LEFT JOIN stockmanagement.item_master pm ON pm.id = calba.billTypeValue AND calba.billTypeId = 3
+  WHERE pmt.patientId = :patientId
+    AND calba.billTypeId = 3
+    AND calba.isSpouse = 0
+
+  UNION ALL
+
+  SELECT 
+    pva.id AS visitId,
+    DATE_FORMAT(pva.visitDate, '%Y-%m-%d') AS visitDate,
+    taa.id AS appointmentId,
+    DATE_FORMAT(taa.appointmentDate, '%Y-%m-%d') AS appointmentDate,
+    'Treatment' AS appointmentType,
+    (SELECT u.fullName FROM users u WHERE u.id = taa.consultationDoctorId) AS doctorName,
+    pm.itemName AS medicineName,
+    talba.prescribedQuantity AS prescribedQuantity,
+    COALESCE(talba.purchaseQuantity, 0) AS purchasedQuantity,
+    talba.status AS paymentStatus,
+    talba.id AS lineBillId
+  FROM treatment_appointment_line_bills_associations talba
+  INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+  INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+  INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+  INNER JOIN patient_master pmt ON pmt.id = pva.patientId
+  LEFT JOIN stockmanagement.item_master pm ON pm.id = talba.billTypeValue AND talba.billTypeId = 3
+  WHERE pmt.patientId = :patientId
+    AND talba.billTypeId = 3
+    AND talba.isSpouse = 0
+) AS pharmacy_history
+ORDER BY visitDate DESC, appointmentDate DESC, medicineName ASC;
+`;
+
 module.exports = {
   visitHistoryQuery,
   embryologyHistoryQuery,
@@ -625,5 +676,6 @@ module.exports = {
   formFTemplateByPatientIdQuery,
   prescriptionHistoryByTreatmentCycleIdFollicular,
   paymentHistoryByVisitId,
-  getNotesHistoryByVisitIdQuery
+  getNotesHistoryByVisitIdQuery,
+  getPatientPharmacyHistoryQuery
 };

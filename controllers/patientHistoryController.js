@@ -151,6 +151,15 @@ class PatientHistoryController {
       data: data
     });
   }
+
+  async getPatientPharmacyHistoryHandler() {
+    const data = await this._service.getPatientPharmacyHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data
+    });
+  }
 }
 
 module.exports = PatientHistoryController;

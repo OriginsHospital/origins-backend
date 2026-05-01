@@ -486,6 +486,11 @@ WITH BillDetails AS (
 	                    WHEN lb.billTypeId = 3 THEN lb.prescriptionDays
                         ELSE NULL
                     END,
+                    'purchaseQuantity', 
+                    CASE 
+                        WHEN lb.billTypeId = 3 THEN lb.purchaseQuantity
+                        ELSE NULL
+                    END,
                     'refId', 
                     CASE 
                         WHEN lb.billTypeId = 1 THEN lb.id 
@@ -586,6 +591,11 @@ WITH BillDetails AS (
                     'prescriptionDays', 
                     CASE 
 	                    WHEN lb.billTypeId = 3 THEN lb.prescriptionDays
+                        ELSE NULL
+                    END,
+                    'purchaseQuantity', 
+                    CASE 
+                        WHEN lb.billTypeId = 3 THEN lb.purchaseQuantity
                         ELSE NULL
                     END,
                     'refId', 

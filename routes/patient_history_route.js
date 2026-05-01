@@ -21,6 +21,13 @@ class PatientHistoryRoute {
     );
 
     this._route.get(
+      "/pharmacyHistory/:patientId",
+      checkActiveSession,
+      tokenVerified,
+      this.getPatientPharmacyHistoryRoute
+    );
+
+    this._route.get(
       "/embryology/:visitId",
       checkActiveSession,
       tokenVerified,
@@ -111,6 +118,11 @@ class PatientHistoryRoute {
   getPatientVisitHistoryRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientHistoryController(req, res, next);
     await controllerObj.getPatientVisitHistoryController();
+  });
+
+  getPatientPharmacyHistoryRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientHistoryController(req, res, next);
+    await controllerObj.getPatientPharmacyHistoryHandler();
   });
 
   getPatientEmbryologyHistoryRoute = asyncHandler(async (req, res, next) => {
