@@ -2642,30 +2642,64 @@ class AppointmentsPaymentService extends BaseService {
       updateType == "END_OITI"
     ) {
       /*
-        1. UpdateEntry in the Trigger TimeStamps
+        1. Update end fields on treatment_timestamps.
+        If no row exists (e.g. legacy data with day1 set but no timestamp row),
+        insert one so getTreatmentStatus reflects END_* correctly.
       */
-      await TriggerTimeStampsMaster.update(
-        {
+      const endFields = {
+        endedReason: endedReason,
+        endDate: moment()
+          .tz("Asia/Kolkata")
+          .format("YYYY-MM-DD HH:mm:ss"),
+        endedBy: this._request?.userDetails?.id
+      };
+
+      const [affectedRows] = await TriggerTimeStampsMaster.update(endFields, {
+        where: {
           visitId: visitId,
-          endedReason: endedReason,
-          endDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
-          endedBy: this._request?.userDetails?.id
+          treatmentType: treatmentType
         },
-        {
+        transaction: transaction
+      }).catch(err => {
+        console.log("Error while updating record in timestamps master", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (affectedRows === 0) {
+        const existing = await TriggerTimeStampsMaster.findOne({
           where: {
             visitId: visitId,
             treatmentType: treatmentType
           },
           transaction: transaction
+        }).catch(err => {
+          console.log("Error while finding treatment_timestamps row", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+        if (!existing) {
+          await TriggerTimeStampsMaster.create(
+            {
+              visitId: visitId,
+              treatmentType: treatmentType,
+              ...endFields
+            },
+            { transaction: transaction }
+          ).catch(err => {
+            console.log(
+              "Error while creating end treatment timestamps row",
+              err
+            );
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
         }
-      ).catch(err => {
-        console.log("Error while adding record in timestamps master", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
+      }
     } else if (updateType == "END_FET") {
       /*
         1. UpdateEntry in the Trigger TimeStamps

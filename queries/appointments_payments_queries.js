@@ -411,7 +411,7 @@ const getTreatmentStatusQuery = `
 SELECT JSON_OBJECT(
     'START_ICSI', 
     CASE 
-        WHEN :treatmentType IN (4, 5) THEN 
+        WHEN :treatmentType IN (4, 5, 6, 7) THEN 
             CASE WHEN vpa.day1Date IS NULL THEN 0 ELSE 1 END
         ELSE -1 
     END,
@@ -446,7 +446,7 @@ SELECT JSON_OBJECT(
     END,
     'END_ICSI', 
     CASE 
-        WHEN :treatmentType IN (4, 5) THEN 
+        WHEN :treatmentType IN (4, 5, 6, 7) THEN 
         	CASE WHEN tt.endDate IS NULL THEN 0 ELSE 1 END
         ELSE -1 
     END,
