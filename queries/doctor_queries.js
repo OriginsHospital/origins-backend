@@ -18,8 +18,6 @@ WITH appointments as (
     SELECT
         caa.id as appointmentId,
         caa.consultationId,
-        pva.id as visit_id,
-        vtm.name as visitType,
         CASE 
 	        WHEN arm.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 	        ELSE pga.name
@@ -102,8 +100,6 @@ WITH appointments as (
         vca.id = caa.consultationId
     INNER JOIN patient_visits_association pva ON
         pva.id = vca.visitId
-    LEFT JOIN visit_type_master vtm ON
-        pva.visitType = vtm.id
     INNER JOIN patient_master pm ON
         pm.id = pva.patientId
     LEFT JOIN patient_guardian_associations pga 
@@ -116,8 +112,6 @@ WITH appointments as (
     SELECT
         taa.id as appointmentId,
         null as consultationId,
-        pva.id as visit_id,
-        vtm.name as visitType,
         CASE 
 	        WHEN arm.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 	        ELSE pga.name
@@ -198,8 +192,6 @@ WITH appointments as (
         vtca.id = taa.treatmentCycleId
     INNER JOIN patient_visits_association pva ON
         pva.id = vtca.visitId
-    LEFT JOIN visit_type_master vtm ON
-        pva.visitType = vtm.id
     INNER JOIN patient_master pm ON
         pm.id = pva.patientId
     LEFT JOIN patient_guardian_associations pga 
