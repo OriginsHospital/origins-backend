@@ -18,6 +18,11 @@ const UsersModel = MySqlConnection._instance.define(
       type: Sequelize.STRING(100),
       allowNull: false
     },
+    aadhaarNo: {
+      type: Sequelize.STRING(12),
+      allowNull: true,
+      unique: true
+    },
     password: {
       type: Sequelize.STRING(200),
       allowNull: false

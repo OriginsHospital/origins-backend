@@ -30,6 +30,7 @@ module.exports = {
   UNAUTHORIZED_ACCESS: "Token Invalid/Unauthorized Access",
   EMAIL_TAKEN: "Email Already Taken",
   USERNAME_TAKEN: "User Name already Taken",
+  AADHAAR_TAKEN: "Aadhaar Number already Taken",
   PHONE_TAKEN: "Phone Associated With Another Account",
   USER_LOGGED_OUT_SUCCESS: "User Logged Out Successfully",
   SESSION_DOESNOT_EXISTS: "Session Not Found",

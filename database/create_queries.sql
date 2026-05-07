@@ -29,6 +29,7 @@ CREATE TABLE users(
 	id int auto_increment,
 	fullName varchar(100) not null,
 	email varchar(100) not null,
+	aadhaarNo VARCHAR(12) UNIQUE,
 	password varchar(200) not null,
 	roleId int not null,
 	userName varchar(100) not null,

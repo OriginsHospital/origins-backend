@@ -37,6 +37,37 @@ class AuthService {
     this._next = next;
   }
 
+  isValidAadhaar(aadhaarNo) {
+    const d = [
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+      [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+      [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+      [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+      [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+      [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+      [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+      [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+      [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+    ];
+    const p = [
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+      [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+      [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+      [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+      [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+      [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+      [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+    ];
+    let checksum = 0;
+    const reversed = aadhaarNo.split("").reverse();
+    for (let i = 0; i < reversed.length; i += 1) {
+      checksum = d[checksum][p[i % 8][parseInt(reversed[i], 10)]];
+    }
+    return checksum === 0;
+  }
+
   async loginEmailService() {
     this._request.body = await authLoginEmailSchema.validateAsync(
       this._request.body
@@ -127,7 +158,11 @@ class AuthService {
     this._request.body = await authSendOtpSchema.validateAsync(
       this._request.body
     );
-    const { email, userName, fullName } = this._request.body;
+    const { email, userName, fullName, aadhaarNo } = this._request.body;
+
+    if (!this.isValidAadhaar(aadhaarNo)) {
+      throw new createError.BadRequest("Invalid Aadhaar Number");
+    }
 
     const emailExist = await UserModel.findOne({
       where: {
@@ -145,6 +180,15 @@ class AuthService {
     });
     if (userNameExist) {
       throw new createError.Conflict(constants.USERNAME_TAKEN);
+    }
+
+    const aadhaarExists = await UserModel.findOne({
+      where: {
+        aadhaarNo: aadhaarNo
+      }
+    });
+    if (aadhaarExists) {
+      throw new createError.Conflict(constants.AADHAAR_TAKEN);
     }
 
     const min = 100000;
@@ -169,7 +213,11 @@ class AuthService {
     this._request.body = await authVerifyOtpSchema.validateAsync(
       this._request.body
     );
-    const { email, otp, userName, branches } = this._request.body;
+    const { email, otp, userName, branches, aadhaarNo } = this._request.body;
+
+    if (!this.isValidAadhaar(aadhaarNo)) {
+      throw new createError.BadRequest("Invalid Aadhaar Number");
+    }
 
     const isExists = await RedisConnection._instance
       .GET(`otp:${email}`)
@@ -195,6 +243,7 @@ class AuthService {
     return await this.mysqlConnection.transaction(async t => {
       const newUser = {
         email: email,
+        aadhaarNo: aadhaarNo,
         password: hashedPassword,
         isAdminVerified: 0,
         isEmailVerified: 1,
@@ -203,10 +252,23 @@ class AuthService {
         fullName: this._request.body.fullName
       };
 
+      const existingAadhaar = await UserModel.findOne({
+        where: {
+          aadhaarNo: aadhaarNo
+        },
+        transaction: t
+      });
+      if (existingAadhaar) {
+        throw new createError.Conflict(constants.AADHAAR_TAKEN);
+      }
+
       const data = await UserModel.create(newUser, {
         transaction: t
       }).catch(err => {
         console.log("Error while creating new user", err.message);
+        if (err?.name === "SequelizeUniqueConstraintError") {
+          throw new createError.Conflict(constants.AADHAAR_TAKEN);
+        }
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );

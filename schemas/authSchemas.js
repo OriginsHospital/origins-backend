@@ -31,6 +31,12 @@ const authSendOtpSchema = Joi.object({
   fullName: Joi.string()
     .max(100)
     .required(),
+  aadhaarNo: Joi.string()
+    .pattern(/^\d{12}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Aadhaar Number must be exactly 12 digits"
+    }),
   password: Joi.string()
     .min(8)
     .max(200)
@@ -69,6 +75,12 @@ const authVerifyOtpSchema = Joi.object({
   userName: Joi.string()
     .max(100)
     .required(),
+  aadhaarNo: Joi.string()
+    .pattern(/^\d{12}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Aadhaar Number must be exactly 12 digits"
+    }),
   branches: Joi.array().required(),
   otp: Joi.number()
     .integer()
