@@ -23,7 +23,10 @@ const {
   verifyGrnItemLineBranchQuery,
   deleteGrnItemLinesForItemBranchQuery,
   getGrnStockLinesForItemBranchQuery,
-  reassignGrnStockItemIdForBranchQuery
+  reassignGrnStockItemIdForBranchQuery,
+  getGrnTransferPreviewByIdQuery,
+  getGrnItemStockLinesForTransferQuery,
+  getGrnBranchTransferHistoryQuery
 } = require("../queries/pharmacy_queries");
 const {
   createTaxCategorySchema,
@@ -40,7 +43,9 @@ const {
   returnGrnItemsSchema,
   saveGrnPaymentsSchema,
   updateGrnStockReportLineSchema,
-  updateGrnStockReportItemSummarySchema
+  updateGrnStockReportItemSummarySchema,
+  grnBranchTransferSchema,
+  grnBranchTransferPreviewSchema
 } = require("../schemas/pharmacySchema");
 const InventoryTypeMasterModel = require("../models/Master/InventoryTypeMasterModel");
 const SupplierMasterModel = require("../models/Master/SupplierMasterModel");
@@ -54,6 +59,8 @@ const ItemsMasterModel = require("../models/Master/ItemMaster");
 const PharmacyPurchaseDetailsTemp = require("../models/Order/pharmacyPurchaseDetailsTemp");
 const GrnItemsReturnModel = require("../models/Master/GrnItemsReturnsModel");
 const GrnPaymentsMasterModel = require("../models/Master/grnPaymentsMaster");
+const BranchMasterModel = require("../models/Master/branchMaster");
+const GrnBranchTransferMasterModel = require("../models/Master/grnBranchTransferMaster");
 const moment = require("moment-timezone");
 class PharmacyService {
   constructor(request, response, next) {
@@ -1379,6 +1386,263 @@ class PharmacyService {
     });
 
     return Constants.SUCCESS;
+  }
+
+  async getGrnBranchTransferPreviewService() {
+    const { grnId } = await grnBranchTransferPreviewSchema.validateAsync(
+      this._request.query
+    );
+    const currentUserBranchIds = this._request.userDetails.branchDetails.map(
+      branch => branch.id
+    );
+
+    const rows = await this.stocksqlConnection
+      .query(getGrnTransferPreviewByIdQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { grnId }
+      })
+      .catch(err => {
+        console.log("Error while fetching grn transfer preview", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (lodash.isEmpty(rows)) {
+      throw new createError.NotFound("GRN details not found.");
+    }
+
+    const sourceBranchId = Number(rows[0].sourceBranchId);
+    if (!currentUserBranchIds.includes(sourceBranchId)) {
+      throw new createError.Forbidden(
+        "You do not have access to this source branch."
+      );
+    }
+
+    return {
+      grnId: Number(rows[0].grnId),
+      grnNo: rows[0].grnNo,
+      sourceBranchId,
+      sourceBranchName: rows[0].sourceBranchName,
+      sourceBranchCode: rows[0].sourceBranchCode,
+      invoiceNumber: rows[0].invoiceNumber,
+      items: rows.map(r => ({
+        itemId: Number(r.itemId),
+        itemName: r.itemName,
+        availableQuantity: Number(r.availableQuantity || 0)
+      }))
+    };
+  }
+
+  async createGrnBranchTransferService() {
+    const payload = await grnBranchTransferSchema.validateAsync(
+      this._request.body
+    );
+    const transferByUserId = this._request?.userDetails?.id;
+    const currentUserBranchIds = this._request.userDetails.branchDetails.map(
+      branch => branch.id
+    );
+
+    return await this.stocksqlConnection.transaction(async t => {
+      const sourceGrn = await GrnDetailsMasterModel.findOne({
+        where: { id: payload.grnId },
+        transaction: t
+      });
+      if (!sourceGrn) {
+        throw new createError.NotFound("Source GRN not found.");
+      }
+
+      const sourceBranchId = Number(sourceGrn.branchId);
+      if (!currentUserBranchIds.includes(sourceBranchId)) {
+        throw new createError.Forbidden(
+          "You do not have access to this source branch."
+        );
+      }
+
+      if (sourceBranchId === Number(payload.destinationBranchId)) {
+        throw new createError.BadRequest(
+          "Source and destination branches cannot be the same."
+        );
+      }
+
+      const destinationBranch = await BranchMasterModel.findOne({
+        where: { id: payload.destinationBranchId, isActive: 1 }
+      }).catch(err => {
+        console.log("Error while fetching destination branch", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      if (!destinationBranch) {
+        throw new createError.BadRequest("Destination branch not found.");
+      }
+
+      const stockLines = await this.stocksqlConnection
+        .query(getGrnItemStockLinesForTransferQuery, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            grnId: payload.grnId,
+            itemId: payload.itemId
+          },
+          transaction: t
+        })
+        .catch(err => {
+          console.log("Error while fetching source grn stock lines", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      if (lodash.isEmpty(stockLines)) {
+        throw new createError.BadRequest(
+          "Requested medicine is not available in this GRN."
+        );
+      }
+
+      const availableQuantity = stockLines.reduce(
+        (sum, row) => sum + Number(row.totalQuantity || 0),
+        0
+      );
+      if (availableQuantity < payload.quantity) {
+        throw new createError.BadRequest(
+          `Insufficient stock. Available: ${availableQuantity}, requested: ${payload.quantity}`
+        );
+      }
+
+      const destinationPrefix = (destinationBranch.branchCode || "BRN")
+        .toString()
+        .trim()
+        .toUpperCase()
+        .slice(0, 3);
+      const transferInvoiceNumber = `${destinationPrefix}-${sourceGrn.invoiceNumber}`;
+
+      const transferGrn = await GrnDetailsMasterModel.create(
+        {
+          branchId: payload.destinationBranchId,
+          date: moment().format("YYYY-MM-DD"),
+          supplierId: sourceGrn.supplierId,
+          supplierEmail: sourceGrn.supplierEmail,
+          supplierAddress: sourceGrn.supplierAddress,
+          supplierGstNumber: sourceGrn.supplierGstNumber,
+          invoiceNumber: transferInvoiceNumber
+        },
+        { transaction: t }
+      ).catch(err => {
+        console.log("Error while creating transfer grn master", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      await GrnDetailsMasterModel.update(
+        { grnNo: String(transferGrn.id) },
+        { where: { id: transferGrn.id }, transaction: t }
+      );
+
+      let remaining = Number(payload.quantity);
+      const destinationRows = [];
+
+      for (const row of stockLines) {
+        if (remaining <= 0) {
+          break;
+        }
+        const lineAvailable = Number(row.totalQuantity || 0);
+        if (lineAvailable <= 0) {
+          continue;
+        }
+        const moved = Math.min(lineAvailable, remaining);
+        remaining -= moved;
+
+        await GrnItemsAssociationsModel.update(
+          { totalQuantity: lineAvailable - moved },
+          { where: { id: row.id }, transaction: t }
+        );
+
+        destinationRows.push({
+          grnId: transferGrn.id,
+          itemId: row.itemId,
+          batchNo: row.batchNo,
+          expiryDate: row.expiryDate,
+          pack: row.pack,
+          quantity: row.quantity,
+          freeQuantity: row.freeQuantity,
+          intialQuantity: moved,
+          totalQuantity: moved,
+          mrp: row.mrp,
+          rate: row.rate,
+          mrpPerTablet: row.mrpPerTablet,
+          ratePerTablet: row.ratePerTablet,
+          discountPercentage: row.discountPercentage,
+          taxPercentage: row.taxPercentage,
+          discountAmount: row.discountAmount,
+          taxAmount: row.taxAmount,
+          amount: row.amount,
+          isReturned: 0
+        });
+      }
+
+      if (remaining > 0) {
+        throw new createError.BadRequest(
+          "Unable to complete transfer due to stock mismatch."
+        );
+      }
+
+      await GrnItemsAssociationsModel.bulkCreate(destinationRows, {
+        transaction: t
+      }).catch(err => {
+        console.log("Error while creating destination grn item rows", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      await GrnBranchTransferMasterModel.create(
+        {
+          sourceGrnId: payload.grnId,
+          transferGrnId: transferGrn.id,
+          sourceBranchId,
+          destinationBranchId: payload.destinationBranchId,
+          itemId: payload.itemId,
+          transferredQuantity: payload.quantity,
+          transferDate: moment().format("YYYY-MM-DD HH:mm:ss"),
+          transferInvoiceNumber,
+          transferredBy: transferByUserId
+        },
+        { transaction: t }
+      ).catch(err => {
+        console.log("Error while saving grn transfer log", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return {
+        transferGrnId: transferGrn.id,
+        transferInvoiceNumber
+      };
+    });
+  }
+
+  async getGrnBranchTransferHistoryService() {
+    const currentUserBranchIds = this._request.userDetails.branchDetails.map(
+      branch => String(branch.id)
+    );
+    const rows = await this.stocksqlConnection
+      .query(getGrnBranchTransferHistoryQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { branchId: currentUserBranchIds }
+      })
+      .catch(err => {
+        console.log("Error while fetching grn transfer history", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return rows.map(r => ({
+      ...r,
+      transferredQuantity: Number(r.transferredQuantity || 0)
+    }));
   }
 }
 

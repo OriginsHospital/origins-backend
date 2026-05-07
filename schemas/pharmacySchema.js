@@ -283,6 +283,28 @@ const updateGrnStockReportItemSummarySchema = Joi.object({
     .optional()
 });
 
+const grnBranchTransferSchema = Joi.object({
+  grnId: Joi.number()
+    .integer()
+    .required(),
+  itemId: Joi.number()
+    .integer()
+    .required(),
+  quantity: Joi.number()
+    .integer()
+    .min(1)
+    .required(),
+  destinationBranchId: Joi.number()
+    .integer()
+    .required()
+});
+
+const grnBranchTransferPreviewSchema = Joi.object({
+  grnId: Joi.number()
+    .integer()
+    .required()
+});
+
 module.exports = {
   createTaxCategorySchema,
   editTaxCategorySchema,
@@ -298,5 +320,7 @@ module.exports = {
   returnGrnItemsSchema,
   saveGrnPaymentsSchema,
   updateGrnStockReportLineSchema,
-  updateGrnStockReportItemSummarySchema
+  updateGrnStockReportItemSummarySchema,
+  grnBranchTransferSchema,
+  grnBranchTransferPreviewSchema
 };

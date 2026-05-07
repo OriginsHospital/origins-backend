@@ -198,6 +198,24 @@ class PharmacyRoute {
       requireGrnStockReportAdmin,
       this.updateGrnStockReportItemSummaryHandler
     );
+    this._route.get(
+      "/grnBranchTransfer/preview",
+      checkActiveSession,
+      tokenVerified,
+      this.getGrnBranchTransferPreviewHandler
+    );
+    this._route.post(
+      "/grnBranchTransfer",
+      checkActiveSession,
+      tokenVerified,
+      this.createGrnBranchTransferHandler
+    );
+    this._route.get(
+      "/grnBranchTransfer/history",
+      checkActiveSession,
+      tokenVerified,
+      this.getGrnBranchTransferHistoryHandler
+    );
   }
 
   getTaxCategory = asyncHandler(async (req, res, next) => {
@@ -338,6 +356,21 @@ class PharmacyRoute {
   updateGrnStockReportItemSummaryHandler = asyncHandler(async (req, res, next) => {
     const controllerObj = new PharmacyController(req, res, next);
     await controllerObj.updateGrnStockReportItemSummaryHandler();
+  });
+
+  getGrnBranchTransferPreviewHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.getGrnBranchTransferPreviewHandler();
+  });
+
+  createGrnBranchTransferHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.createGrnBranchTransferHandler();
+  });
+
+  getGrnBranchTransferHistoryHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.getGrnBranchTransferHistoryHandler();
   });
 }
 

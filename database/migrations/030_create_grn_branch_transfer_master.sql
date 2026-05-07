@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS stockmanagement.grn_branch_transfer_master (
+  id INT NOT NULL AUTO_INCREMENT,
+  sourceGrnId INT NOT NULL,
+  transferGrnId INT NOT NULL,
+  sourceBranchId INT NOT NULL,
+  destinationBranchId INT NOT NULL,
+  itemId INT NOT NULL,
+  transferredQuantity BIGINT NOT NULL,
+  transferDate DATETIME NOT NULL,
+  transferInvoiceNumber VARCHAR(120) NOT NULL,
+  transferredBy INT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_grn_branch_transfer_source_grn (sourceGrnId),
+  KEY idx_grn_branch_transfer_transfer_grn (transferGrnId),
+  KEY idx_grn_branch_transfer_source_branch (sourceBranchId),
+  KEY idx_grn_branch_transfer_destination_branch (destinationBranchId),
+  KEY idx_grn_branch_transfer_item (itemId),
+  KEY idx_grn_branch_transfer_transferred_by (transferredBy)
+);

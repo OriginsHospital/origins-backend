@@ -265,6 +265,33 @@ class PharmacyController {
       data: data
     });
   }
+
+  async getGrnBranchTransferPreviewHandler() {
+    const data = await this._service.getGrnBranchTransferPreviewService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async createGrnBranchTransferHandler() {
+    const data = await this._service.createGrnBranchTransferService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getGrnBranchTransferHistoryHandler() {
+    const data = await this._service.getGrnBranchTransferHistoryService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = PharmacyController;

@@ -378,6 +378,81 @@ const reassignGrnStockItemIdForBranchQuery = `
   WHERE gia.itemId = :oldItemId AND gm.branchId = :branchId AND gia.isReturned = 0
 `;
 
+const getGrnTransferPreviewByIdQuery = `
+  SELECT
+    gm.id AS grnId,
+    gm.grnNo,
+    gm.branchId AS sourceBranchId,
+    gm.invoiceNumber,
+    bm.name AS sourceBranchName,
+    bm.branchCode AS sourceBranchCode,
+    gia.itemId,
+    im.itemName,
+    SUM(gia.totalQuantity) AS availableQuantity
+  FROM stockmanagement.grn_master gm
+  INNER JOIN stockmanagement.grn_items_associations gia ON gia.grnId = gm.id
+  INNER JOIN stockmanagement.item_master im ON im.id = gia.itemId
+  INNER JOIN defaultdb.branch_master bm ON bm.id = gm.branchId
+  WHERE gm.id = :grnId AND gia.isReturned = 0
+  GROUP BY gm.id, gm.grnNo, gm.branchId, gm.invoiceNumber, bm.name, bm.branchCode, gia.itemId, im.itemName
+  ORDER BY im.itemName;
+`;
+
+const getGrnItemStockLinesForTransferQuery = `
+  SELECT
+    gia.id,
+    gia.grnId,
+    gia.itemId,
+    gia.batchNo,
+    gia.expiryDate,
+    gia.pack,
+    gia.quantity,
+    gia.freeQuantity,
+    gia.mrp,
+    gia.rate,
+    gia.mrpPerTablet,
+    gia.ratePerTablet,
+    gia.discountPercentage,
+    gia.taxPercentage,
+    gia.discountAmount,
+    gia.taxAmount,
+    gia.amount,
+    gia.totalQuantity
+  FROM stockmanagement.grn_items_associations gia
+  WHERE gia.grnId = :grnId
+    AND gia.itemId = :itemId
+    AND gia.isReturned = 0
+    AND gia.totalQuantity > 0
+  ORDER BY gia.expiryDate ASC, gia.id ASC;
+`;
+
+const getGrnBranchTransferHistoryQuery = `
+  SELECT
+    gbtm.id,
+    gbtm.sourceGrnId,
+    gbtm.transferGrnId,
+    gbtm.transferInvoiceNumber,
+    gbtm.transferredQuantity,
+    gbtm.transferDate,
+    gbtm.sourceBranchId,
+    src.name AS sourceBranchName,
+    src.branchCode AS sourceBranchCode,
+    gbtm.destinationBranchId,
+    dst.name AS destinationBranchName,
+    dst.branchCode AS destinationBranchCode,
+    gbtm.itemId,
+    im.itemName,
+    gbtm.transferredBy,
+    u.fullName AS transferredByName
+  FROM stockmanagement.grn_branch_transfer_master gbtm
+  INNER JOIN defaultdb.branch_master src ON src.id = gbtm.sourceBranchId
+  INNER JOIN defaultdb.branch_master dst ON dst.id = gbtm.destinationBranchId
+  INNER JOIN stockmanagement.item_master im ON im.id = gbtm.itemId
+  LEFT JOIN defaultdb.users u ON u.id = gbtm.transferredBy
+  WHERE gbtm.sourceBranchId IN (:branchId) OR gbtm.destinationBranchId IN (:branchId)
+  ORDER BY gbtm.transferDate DESC, gbtm.id DESC;
+`;
+
 module.exports = {
   getTaxCategoryQuery,
   getInventoryTypeQuery,
@@ -396,5 +471,8 @@ module.exports = {
   verifyGrnItemLineBranchQuery,
   deleteGrnItemLinesForItemBranchQuery,
   getGrnStockLinesForItemBranchQuery,
-  reassignGrnStockItemIdForBranchQuery
+  reassignGrnStockItemIdForBranchQuery,
+  getGrnTransferPreviewByIdQuery,
+  getGrnItemStockLinesForTransferQuery,
+  getGrnBranchTransferHistoryQuery
 };
