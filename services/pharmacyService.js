@@ -1514,7 +1514,24 @@ class PharmacyService {
         .trim()
         .toUpperCase()
         .slice(0, 3);
-      const transferInvoiceNumber = `${destinationPrefix}-${sourceGrn.invoiceNumber}`;
+      const sourceInvoiceNumber =
+        (sourceGrn.invoiceNumber || "").toString().trim() ||
+        `INV${String(sourceGrn.id).padStart(5, "0")}`;
+      const invoiceBase = `${destinationPrefix}-${sourceInvoiceNumber}`;
+      let transferInvoiceNumber = invoiceBase;
+      let invoiceSuffix = 1;
+
+      while (true) {
+        const existingInvoice = await GrnDetailsMasterModel.findOne({
+          where: { invoiceNumber: transferInvoiceNumber },
+          transaction: t
+        });
+        if (!existingInvoice) {
+          break;
+        }
+        transferInvoiceNumber = `${invoiceBase}-${invoiceSuffix}`;
+        invoiceSuffix += 1;
+      }
 
       const transferGrn = await GrnDetailsMasterModel.create(
         {
@@ -1534,10 +1551,20 @@ class PharmacyService {
         );
       });
 
-      await GrnDetailsMasterModel.update(
+      const [updatedRows] = await GrnDetailsMasterModel.update(
         { grnNo: String(transferGrn.id) },
         { where: { id: transferGrn.id }, transaction: t }
-      );
+      ).catch(err => {
+        console.log("Error while updating transfer GRN number", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      if (!updatedRows) {
+        throw new createError.InternalServerError(
+          "Failed to update transfer GRN number."
+        );
+      }
 
       let remaining = Number(payload.quantity);
       const destinationRows = [];
@@ -1616,9 +1643,20 @@ class PharmacyService {
         );
       });
 
+      const persistedTransferGrn = await GrnDetailsMasterModel.findOne({
+        where: { id: transferGrn.id },
+        transaction: t
+      });
+      if (!persistedTransferGrn) {
+        throw new createError.InternalServerError(
+          "Transfer GRN not persisted."
+        );
+      }
+
       return {
-        transferGrnId: transferGrn.id,
-        transferInvoiceNumber
+        transferGrnId: persistedTransferGrn.id,
+        transferGrnNo: persistedTransferGrn.grnNo,
+        transferInvoiceNumber: persistedTransferGrn.invoiceNumber
       };
     });
   }
