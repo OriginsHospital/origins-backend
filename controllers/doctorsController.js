@@ -35,6 +35,17 @@ class DoctorsController {
     });
   }
 
+  async updateDoctorActiveStatusHandler() {
+    const data = await this._service.updateDoctorActiveStatusService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async createLineBillsAndNotesForAppointmentHandler() {
     const data = await this._service.createLineBillsAndNotesForAppointmentService(
       this._request

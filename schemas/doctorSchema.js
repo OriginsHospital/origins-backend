@@ -71,10 +71,18 @@ const setIsCompletedTrueSchema = Joi.object({
   appointmentId: Joi.number().required()
 });
 
+const updateDoctorActiveStatusSchema = Joi.object({
+  doctorId: Joi.number().required(),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .required()
+});
+
 module.exports = {
   createDoctorAvailabilitySchema,
   deleteDoctorAvailabilitySchema,
   saveLabTestsPharmacyNotesSchema,
   shiftChangeRequestSchema,
-  setIsCompletedTrueSchema
+  setIsCompletedTrueSchema,
+  updateDoctorActiveStatusSchema
 };

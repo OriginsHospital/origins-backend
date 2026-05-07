@@ -6,7 +6,8 @@ const { isActiveQuery } = require("../queries/visit_queries");
 require("../schemas/visitSchema");
 const {
   shiftChangeRequestSchema,
-  setIsCompletedTrueSchema
+  setIsCompletedTrueSchema,
+  updateDoctorActiveStatusSchema
 } = require("../schemas/doctorSchema");
 const {
   createDoctorAvailabilitySchema,
@@ -45,6 +46,15 @@ class DoctorsService {
     this._response = response;
     this._next = next;
     this.mysqlConnection = MySqlConnection._instance;
+  }
+
+  assertDoctorStatusEditorAccess() {
+    const email = (this._request?.userDetails?.email || "")
+      .trim()
+      .toLowerCase();
+    if (email !== Constants.DOCTOR_STATUS_EDITOR_EMAIL.toLowerCase()) {
+      throw new createError.Forbidden(Constants.DOCTOR_STATUS_EDIT_FORBIDDEN);
+    }
   }
 
   async createDoctorAvailabiltyService() {
@@ -116,6 +126,26 @@ class DoctorsService {
       });
 
     return data;
+  }
+
+  async updateDoctorActiveStatusService() {
+    this.assertDoctorStatusEditorAccess();
+    const payload = await updateDoctorActiveStatusSchema.validateAsync(
+      this._request.body
+    );
+    const [updatedRows] = await ConsultancyDoctorMasterModel.update(
+      { isActive: payload.isActive },
+      { where: { userId: payload.doctorId } }
+    ).catch(err => {
+      console.log("Error while updating doctor active status", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+    if (!updatedRows) {
+      throw new createError.BadRequest("Doctor shift details not found");
+    }
+    return Constants.SUCCESS;
   }
 
   async createLineBillsAndNotesForAppointmentService() {

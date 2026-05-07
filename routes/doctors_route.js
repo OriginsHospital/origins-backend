@@ -26,6 +26,12 @@ class DoctorsRoute {
       this.getAvailabilityDoctorRoute
     );
     this._route.post(
+      "/updateDoctorActiveStatus",
+      checkActiveSession,
+      tokenVerified,
+      this.updateDoctorActiveStatusRoute
+    );
+    this._route.post(
       "/createLineBillsAndNotesForAppointment",
       checkActiveSession,
       tokenVerified,
@@ -107,6 +113,11 @@ class DoctorsRoute {
   getAvailabilityDoctorRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new DoctorsController(req, res, next);
     await controllerObj.getAvailabilityDoctorHandler();
+  });
+
+  updateDoctorActiveStatusRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new DoctorsController(req, res, next);
+    await controllerObj.updateDoctorActiveStatusHandler();
   });
 
   createLineBillsAndNotesForAppointmentRoute = asyncHandler(

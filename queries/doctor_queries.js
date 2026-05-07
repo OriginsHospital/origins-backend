@@ -2,6 +2,7 @@ const getDoctorsAvailabiltyListQuery = `SELECT DISTINCT
     cdm.id,
     cdm.userId as doctorId,
     cdm.name as doctorName,
+    cdm.isActive as isActive,
     TIME_FORMAT(cdm.shiftFrom, '%H:%i') AS shiftFrom,
     TIME_FORMAT(cdm.shiftTo, '%H:%i') AS shiftTo
 FROM

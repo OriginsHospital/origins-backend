@@ -187,6 +187,9 @@ module.exports = {
   ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL: "nikhilsuvva77@gmail.com",
   ADVANCE_PAYMENT_EDIT_FORBIDDEN:
     "You are not authorized to modify advance payment records",
+  DOCTOR_STATUS_EDITOR_EMAIL: "nikhilsuvva@gmail.com",
+  DOCTOR_STATUS_EDIT_FORBIDDEN:
+    "You are not authorized to change doctor active status",
   REVENUE_NEW_ENTRY_EDIT_FORBIDDEN:
     "You are not authorized to modify revenue report entries"
 };

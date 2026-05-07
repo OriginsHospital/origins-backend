@@ -9,6 +9,7 @@ INNER JOIN user_branch_association uba on
 	uba.userId = cdm.userId
 where
 	uba.branchId in (:branchId)
+	and cdm.isActive = 1
 	and uba.userId not in (
 	select
 		bsm.doctorId
@@ -29,6 +30,7 @@ from
 	consultation_doctor_master cdm
 where
 	cdm.userId = :doctorId
+	and cdm.isActive = 1
 UNION
 select
 	bsm.timeStart,

@@ -26,6 +26,11 @@ const ConsultancyDoctorMasterModel = MySqlConnection._instance.define(
     shiftTo: {
       type: Sequelize.DataTypes.TIME,
       allowNull: false
+    },
+    isActive: {
+      type: Sequelize.DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 1
     }
   },
   {
