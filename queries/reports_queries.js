@@ -1017,6 +1017,7 @@ itemInformation AS (
                     JSON_OBJECT(
                         'grnItemAssociationId', gia.id,
                         'grnId', gia.grnId,
+                        'invoiceNumber', gm.invoiceNumber,
                         'batchNo', gia.batchNo,
                         'supplierName', (SELECT sm.supplier FROM stockmanagement.supplier_master sm WHERE sm.id = gm.supplierId),
                         'availableQuantity', gia.totalQuantity,
