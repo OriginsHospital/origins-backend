@@ -1195,14 +1195,7 @@ class AppointmentsPaymentService extends BaseService {
         throw new createError.BadRequest(Constants.UNAUTHORIZED_WITHOUT_VITALS);
       }
 
-      // Check pending amount and role-based restrictions
-      // If patient has pending amount, only Admin can move to Doctor
-      // If patient has no pending amount, Admin, Receptionist, and Frontdesk can move
-      const hasPendingAmount = await this.checkPatientPendingAmount(
-        payload?.visitId,
-        payload?.isPackageExists
-      );
-
+      // Role-based restriction only (pending amount does not block Doctor stage move)
       const userRoleId = this._request.userDetails?.roleDetails?.id;
       const userRoleName = this._request.userDetails?.roleDetails?.name?.toLowerCase();
 
@@ -1214,20 +1207,10 @@ class AppointmentsPaymentService extends BaseService {
       const isFrontdesk =
         userRoleName === "frontdesk" || userRoleName === "front desk";
 
-      if (hasPendingAmount) {
-        // Patient has pending amount - only Admin can move
-        if (!isAdmin) {
-          throw new createError.BadRequest(
-            "Only Admin can move patients with pending amounts to Doctor stage"
-          );
-        }
-      } else {
-        // Patient has no pending amount - Admin, Receptionist, and Frontdesk can move
-        if (!isAdmin && !isReceptionist && !isFrontdesk) {
-          throw new createError.BadRequest(
-            "Only Admin, Receptionist, and Frontdesk users can move patients without pending amounts to Doctor stage"
-          );
-        }
+      if (!isAdmin && !isReceptionist && !isFrontdesk) {
+        throw new createError.BadRequest(
+          "Only Admin, Receptionist, and Frontdesk users can move patients to Doctor stage"
+        );
       }
     }
 
