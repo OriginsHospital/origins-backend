@@ -377,10 +377,29 @@ class AppointmentsPaymentService extends BaseService {
       await Promise.all(
         data.map(async each => {
           if (each?.isPackageExists == 1) {
-            let pendingAmountDetails = await this.getPendingPaymentAmountForPackageService(
-              each?.visitId
+            const stageWisePending = await this.getPackageStageWisePending(
+              each?.visitId,
+              each?.patientAutoId
             );
-            each["pendingAmountDetails"] = pendingAmountDetails || null;
+            each["pendingAmountDetails"] = stageWisePending || [];
+            const totalPackagePending = (stageWisePending || []).reduce(
+              (sum, stage) => sum + Number(stage.effectivePendingAmount || 0),
+              0
+            );
+            const currentPendingStage = (stageWisePending || []).find(
+              stage => stage.isCurrent
+            );
+            each["packagePaymentSummary"] = {
+              totalPendingAmount: totalPackagePending,
+              currentStage: currentPendingStage
+                ? {
+                    displayName: currentPendingStage.displayName,
+                    pendingAmount: currentPendingStage.effectivePendingAmount,
+                    dueDate: currentPendingStage.mileStoneStartedDate,
+                    isDue: currentPendingStage.isDue
+                  }
+                : null
+            };
           } else {
             let pendingAmountDetails = await this.getPendingPaymentWithoutPackageService(
               each?.visitId
@@ -1133,15 +1152,13 @@ class AppointmentsPaymentService extends BaseService {
     return Number(data?.[0]?.paidAmount || 0);
   }
 
-  async getPackageDoctorRestrictionStatus(visitId, patientAutoId) {
-    const hasPackageMilestones = await this.getPendingPaymentAmountForPackageService(
+  async getPackageStageWisePending(visitId, patientAutoId) {
+    const milestones = await this.getPendingPaymentAmountForPackageService(
       visitId
     );
 
-    if (lodash.isEmpty(hasPackageMilestones)) {
-      return {
-        isRestricted: false
-      };
+    if (lodash.isEmpty(milestones)) {
+      return [];
     }
 
     const packageStageOrder = [
@@ -1157,10 +1174,7 @@ class AppointmentsPaymentService extends BaseService {
       "UPTPOSITIVE_AMOUNT"
     ];
 
-    const milestoneByProductType = lodash.keyBy(
-      hasPackageMilestones,
-      "productTypeEnum"
-    );
+    const milestoneByProductType = lodash.keyBy(milestones, "productTypeEnum");
     const orderedMilestones = packageStageOrder
       .map(productType => milestoneByProductType[productType])
       .filter(Boolean);
@@ -1173,16 +1187,21 @@ class AppointmentsPaymentService extends BaseService {
     const today = moment()
       .tz("Asia/Kolkata")
       .startOf("day");
+    let firstPendingAssigned = false;
 
-    for (const milestone of orderedMilestones) {
+    return orderedMilestones.map((milestone, index) => {
       const milestoneAmount = Number(milestone.totalAmount || 0);
-      if (milestoneAmount <= 0) {
-        continue;
+      const allocatedAmount =
+        milestoneAmount > 0
+          ? Math.min(remainingPaidAmount, milestoneAmount)
+          : 0;
+      if (milestoneAmount > 0) {
+        remainingPaidAmount -= allocatedAmount;
       }
-
-      const coveredAmount = Math.min(remainingPaidAmount, milestoneAmount);
-      const pendingAmount = milestoneAmount - coveredAmount;
-      remainingPaidAmount -= coveredAmount;
+      const effectivePendingAmount = Math.max(
+        milestoneAmount - allocatedAmount,
+        0
+      );
 
       const milestoneDate = milestone.mileStoneStartedDate;
       const hasValidDate = milestoneDate && milestoneDate !== "NA";
@@ -1193,18 +1212,59 @@ class AppointmentsPaymentService extends BaseService {
           .startOf("day")
           .isSameOrBefore(today);
 
-      if (pendingAmount > 0 && isDue) {
-        return {
-          isRestricted: true,
-          displayName: milestone.displayName,
-          pendingAmount,
-          dueDate: milestoneDate
-        };
+      let status = "PENDING";
+      if (milestoneAmount === 0) {
+        status = "NA";
+      } else if (effectivePendingAmount === 0) {
+        status = "PAID";
+      } else if (allocatedAmount > 0) {
+        status = "PARTIAL";
       }
+
+      const isCurrent =
+        !firstPendingAssigned &&
+        effectivePendingAmount > 0 &&
+        milestoneAmount > 0;
+      if (isCurrent) {
+        firstPendingAssigned = true;
+      }
+
+      return {
+        order: index + 1,
+        productTypeEnum: milestone.productTypeEnum,
+        displayName: milestone.displayName,
+        mileStoneStartedDate: milestone.mileStoneStartedDate,
+        totalAmount: milestoneAmount,
+        totalPaid: Number(milestone.totalPaid || 0),
+        pending_amount: Number(milestone.pending_amount || 0),
+        allocatedAmount,
+        effectivePendingAmount,
+        status,
+        isDue,
+        isCurrent,
+        isRestrictionTrigger: effectivePendingAmount > 0 && isDue && isCurrent
+      };
+    });
+  }
+
+  async getPackageDoctorRestrictionStatus(visitId, patientAutoId) {
+    const stages = await this.getPackageStageWisePending(
+      visitId,
+      patientAutoId
+    );
+    const blockingStage = stages.find(stage => stage.isRestrictionTrigger);
+
+    if (!blockingStage) {
+      return {
+        isRestricted: false
+      };
     }
 
     return {
-      isRestricted: false
+      isRestricted: true,
+      displayName: blockingStage.displayName,
+      pendingAmount: blockingStage.effectivePendingAmount,
+      dueDate: blockingStage.mileStoneStartedDate
     };
   }
 
