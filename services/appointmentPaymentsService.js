@@ -841,13 +841,19 @@ class AppointmentsPaymentService extends BaseService {
   }
 
   async checkForStagePermission(isPrev, isNext) {
+    const roleId = this._request.userDetails?.roleDetails?.id;
+    const roleName = (
+      this._request.userDetails?.roleDetails?.name || ""
+    ).toLowerCase();
+    const isRegionalManager = roleName.includes("regional manager");
+
     if (isPrev) {
       // Only Admin and Center manager Can move
-      return [1, 7].includes(this._request.userDetails?.roleDetails?.id);
+      return [1, 7].includes(roleId) || isRegionalManager;
     }
     if (isNext) {
       // Only Admin, Center Manager and Receptionist Can move
-      return [1, 6, 7].includes(this._request.userDetails?.roleDetails?.id);
+      return [1, 6, 7].includes(roleId) || isRegionalManager;
     }
   }
 
@@ -1053,6 +1059,155 @@ class AppointmentsPaymentService extends BaseService {
     return lodash.sortBy(data, "mileStoneStartedDate");
   }
 
+  isPackageRestrictionOverrideAllowed() {
+    const userRoleId = this._request.userDetails?.roleDetails?.id;
+    const userRoleName = (
+      this._request.userDetails?.roleDetails?.name || ""
+    ).toLowerCase();
+
+    return (
+      userRoleId === 1 ||
+      userRoleId === 7 ||
+      userRoleName.includes("admin") ||
+      userRoleName.includes("central manager") ||
+      userRoleName.includes("center manager") ||
+      userRoleName.includes("regional manager")
+    );
+  }
+
+  async getPackageAdvancePaidAmount(patientAutoId) {
+    const data = await this.mysqlConnection
+      .query(
+        `
+        SELECT COALESCE(SUM(CAST(opom.paidOrderAmountBeforeDiscount AS DECIMAL(12,2))), 0) as paidAmount
+        FROM other_payment_orders_master opom
+        INNER JOIN patient_other_payment_associations popa ON popa.id = opom.refId
+        WHERE popa.patientId = :patientAutoId AND opom.paymentStatus = 'PAID'
+        `,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            patientAutoId
+          }
+        }
+      )
+      .catch(err => {
+        console.log("Error while getting patient advance payment amount", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Number(data?.[0]?.paidAmount || 0);
+  }
+
+  async getPackageMilestonePaidAmount(visitId) {
+    const packageProductTypes = treatmentConstants[
+      "PACKAGE_AMOUNT_PRODUCT_TYPE_MAPPING"
+    ].map(mapping => mapping.productEnum);
+
+    const data = await this.mysqlConnection
+      .query(
+        `
+        SELECT COALESCE(SUM(CAST(tom.paidOrderAmountBeforeDiscount AS DECIMAL(12,2))), 0) as paidAmount
+        FROM treatment_orders_master tom
+        WHERE tom.visitId = :visitId
+          AND tom.paymentStatus = 'PAID'
+          AND tom.productType IN (:packageProductTypes)
+        `,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            visitId,
+            packageProductTypes
+          }
+        }
+      )
+      .catch(err => {
+        console.log("Error while getting package milestone paid amount", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Number(data?.[0]?.paidAmount || 0);
+  }
+
+  async getPackageDoctorRestrictionStatus(visitId, patientAutoId) {
+    const hasPackageMilestones = await this.getPendingPaymentAmountForPackageService(
+      visitId
+    );
+
+    if (lodash.isEmpty(hasPackageMilestones)) {
+      return {
+        isRestricted: false
+      };
+    }
+
+    const packageStageOrder = [
+      "REGISTRATION_FEE",
+      "DONOR_BOOKING_AMOUNT",
+      "DAY1_AMOUNT",
+      "PICKUP_AMOUNT",
+      "DAY5FREEZING_AMOUNT",
+      "HYTEROSCOPY_AMOUNT",
+      "ERA_AMOUNT",
+      "FET_AMOUNT",
+      "PGTA_AMOUNT",
+      "UPTPOSITIVE_AMOUNT"
+    ];
+
+    const milestoneByProductType = lodash.keyBy(
+      hasPackageMilestones,
+      "productTypeEnum"
+    );
+    const orderedMilestones = packageStageOrder
+      .map(productType => milestoneByProductType[productType])
+      .filter(Boolean);
+
+    const totalPaid =
+      (await this.getPackageMilestonePaidAmount(visitId)) +
+      (await this.getPackageAdvancePaidAmount(patientAutoId));
+
+    let remainingPaidAmount = totalPaid;
+    const today = moment()
+      .tz("Asia/Kolkata")
+      .startOf("day");
+
+    for (const milestone of orderedMilestones) {
+      const milestoneAmount = Number(milestone.totalAmount || 0);
+      if (milestoneAmount <= 0) {
+        continue;
+      }
+
+      const coveredAmount = Math.min(remainingPaidAmount, milestoneAmount);
+      const pendingAmount = milestoneAmount - coveredAmount;
+      remainingPaidAmount -= coveredAmount;
+
+      const milestoneDate = milestone.mileStoneStartedDate;
+      const hasValidDate = milestoneDate && milestoneDate !== "NA";
+      const isDue =
+        hasValidDate &&
+        moment(milestoneDate)
+          .tz("Asia/Kolkata")
+          .startOf("day")
+          .isSameOrBefore(today);
+
+      if (pendingAmount > 0 && isDue) {
+        return {
+          isRestricted: true,
+          displayName: milestone.displayName,
+          pendingAmount,
+          dueDate: milestoneDate
+        };
+      }
+    }
+
+    return {
+      isRestricted: false
+    };
+  }
+
   // Removed Due to Milstone Changes
   async checkInPaymentRestriction(
     isPrev,
@@ -1195,22 +1350,25 @@ class AppointmentsPaymentService extends BaseService {
         throw new createError.BadRequest(Constants.UNAUTHORIZED_WITHOUT_VITALS);
       }
 
-      // Role-based restriction only (pending amount does not block Doctor stage move)
-      const userRoleId = this._request.userDetails?.roleDetails?.id;
-      const userRoleName = this._request.userDetails?.roleDetails?.name?.toLowerCase();
+      const hasPackage =
+        payload.isPackageExists === true ||
+        payload.isPackageExists === 1 ||
+        payload.isPackageExists === "1";
 
-      // Check if user is Admin (ID: 1)
-      const isAdmin = userRoleId === 1;
-
-      // Check if user is Receptionist (ID: 6) or Frontdesk (by name)
-      const isReceptionist = userRoleId === 6;
-      const isFrontdesk =
-        userRoleName === "frontdesk" || userRoleName === "front desk";
-
-      if (!isAdmin && !isReceptionist && !isFrontdesk) {
-        throw new createError.BadRequest(
-          "Only Admin, Receptionist, and Frontdesk users can move patients to Doctor stage"
+      if (hasPackage) {
+        const restrictionStatus = await this.getPackageDoctorRestrictionStatus(
+          payload?.visitId,
+          existingPatient.dataValues.id
         );
+
+        if (
+          restrictionStatus.isRestricted &&
+          !this.isPackageRestrictionOverrideAllowed()
+        ) {
+          throw new createError.BadRequest(
+            `Package payment pending for ${restrictionStatus.displayName}. Pending amount ${restrictionStatus.pendingAmount}. Only Admin, Central Manager, or Regional Manager can move this appointment.`
+          );
+        }
       }
     }
 
