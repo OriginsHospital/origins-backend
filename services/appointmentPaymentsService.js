@@ -377,29 +377,10 @@ class AppointmentsPaymentService extends BaseService {
       await Promise.all(
         data.map(async each => {
           if (each?.isPackageExists == 1) {
-            const stageWisePending = await this.getPackageStageWisePending(
-              each?.visitId,
-              each?.patientAutoId
+            let pendingAmountDetails = await this.getPendingPaymentAmountForPackageService(
+              each?.visitId
             );
-            each["pendingAmountDetails"] = stageWisePending || [];
-            const totalPackagePending = (stageWisePending || []).reduce(
-              (sum, stage) => sum + Number(stage.effectivePendingAmount || 0),
-              0
-            );
-            const currentPendingStage = (stageWisePending || []).find(
-              stage => stage.isCurrent
-            );
-            each["packagePaymentSummary"] = {
-              totalPendingAmount: totalPackagePending,
-              currentStage: currentPendingStage
-                ? {
-                    displayName: currentPendingStage.displayName,
-                    pendingAmount: currentPendingStage.effectivePendingAmount,
-                    dueDate: currentPendingStage.mileStoneStartedDate,
-                    isDue: currentPendingStage.isDue
-                  }
-                : null
-            };
+            each["pendingAmountDetails"] = pendingAmountDetails || null;
           } else {
             let pendingAmountDetails = await this.getPendingPaymentWithoutPackageService(
               each?.visitId
@@ -860,19 +841,13 @@ class AppointmentsPaymentService extends BaseService {
   }
 
   async checkForStagePermission(isPrev, isNext) {
-    const roleId = this._request.userDetails?.roleDetails?.id;
-    const roleName = (
-      this._request.userDetails?.roleDetails?.name || ""
-    ).toLowerCase();
-    const isRegionalManager = roleName.includes("regional manager");
-
     if (isPrev) {
       // Only Admin and Center manager Can move
-      return [1, 7].includes(roleId) || isRegionalManager;
+      return [1, 7].includes(this._request.userDetails?.roleDetails?.id);
     }
     if (isNext) {
       // Only Admin, Center Manager and Receptionist Can move
-      return [1, 6, 7].includes(roleId) || isRegionalManager;
+      return [1, 6, 7].includes(this._request.userDetails?.roleDetails?.id);
     }
   }
 
@@ -1078,196 +1053,6 @@ class AppointmentsPaymentService extends BaseService {
     return lodash.sortBy(data, "mileStoneStartedDate");
   }
 
-  isPackageRestrictionOverrideAllowed() {
-    const userRoleId = this._request.userDetails?.roleDetails?.id;
-    const userRoleName = (
-      this._request.userDetails?.roleDetails?.name || ""
-    ).toLowerCase();
-
-    return (
-      userRoleId === 1 ||
-      userRoleId === 7 ||
-      userRoleName.includes("admin") ||
-      userRoleName.includes("central manager") ||
-      userRoleName.includes("center manager") ||
-      userRoleName.includes("regional manager")
-    );
-  }
-
-  async getPackageAdvancePaidAmount(patientAutoId) {
-    const data = await this.mysqlConnection
-      .query(
-        `
-        SELECT COALESCE(SUM(CAST(opom.paidOrderAmountBeforeDiscount AS DECIMAL(12,2))), 0) as paidAmount
-        FROM other_payment_orders_master opom
-        INNER JOIN patient_other_payment_associations popa ON popa.id = opom.refId
-        WHERE popa.patientId = :patientAutoId AND opom.paymentStatus = 'PAID'
-        `,
-        {
-          type: Sequelize.QueryTypes.SELECT,
-          replacements: {
-            patientAutoId
-          }
-        }
-      )
-      .catch(err => {
-        console.log("Error while getting patient advance payment amount", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-    return Number(data?.[0]?.paidAmount || 0);
-  }
-
-  async getPackageMilestonePaidAmount(visitId) {
-    const packageProductTypes = treatmentConstants[
-      "PACKAGE_AMOUNT_PRODUCT_TYPE_MAPPING"
-    ].map(mapping => mapping.productEnum);
-
-    const data = await this.mysqlConnection
-      .query(
-        `
-        SELECT COALESCE(SUM(CAST(tom.paidOrderAmountBeforeDiscount AS DECIMAL(12,2))), 0) as paidAmount
-        FROM treatment_orders_master tom
-        WHERE tom.visitId = :visitId
-          AND tom.paymentStatus = 'PAID'
-          AND tom.productType IN (:packageProductTypes)
-        `,
-        {
-          type: Sequelize.QueryTypes.SELECT,
-          replacements: {
-            visitId,
-            packageProductTypes
-          }
-        }
-      )
-      .catch(err => {
-        console.log("Error while getting package milestone paid amount", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-    return Number(data?.[0]?.paidAmount || 0);
-  }
-
-  async getPackageStageWisePending(visitId, patientAutoId) {
-    const milestones = await this.getPendingPaymentAmountForPackageService(
-      visitId
-    );
-
-    if (lodash.isEmpty(milestones)) {
-      return [];
-    }
-
-    const packageStageOrder = [
-      "REGISTRATION_FEE",
-      "DONOR_BOOKING_AMOUNT",
-      "DAY1_AMOUNT",
-      "PICKUP_AMOUNT",
-      "DAY5FREEZING_AMOUNT",
-      "HYTEROSCOPY_AMOUNT",
-      "ERA_AMOUNT",
-      "FET_AMOUNT",
-      "PGTA_AMOUNT",
-      "UPTPOSITIVE_AMOUNT"
-    ];
-
-    const milestoneByProductType = lodash.keyBy(milestones, "productTypeEnum");
-    const orderedMilestones = packageStageOrder
-      .map(productType => milestoneByProductType[productType])
-      .filter(Boolean);
-
-    const totalPaid =
-      (await this.getPackageMilestonePaidAmount(visitId)) +
-      (await this.getPackageAdvancePaidAmount(patientAutoId));
-
-    let remainingPaidAmount = totalPaid;
-    const today = moment()
-      .tz("Asia/Kolkata")
-      .startOf("day");
-    let firstPendingAssigned = false;
-
-    return orderedMilestones.map((milestone, index) => {
-      const milestoneAmount = Number(milestone.totalAmount || 0);
-      const allocatedAmount =
-        milestoneAmount > 0
-          ? Math.min(remainingPaidAmount, milestoneAmount)
-          : 0;
-      if (milestoneAmount > 0) {
-        remainingPaidAmount -= allocatedAmount;
-      }
-      const effectivePendingAmount = Math.max(
-        milestoneAmount - allocatedAmount,
-        0
-      );
-
-      const milestoneDate = milestone.mileStoneStartedDate;
-      const hasValidDate = milestoneDate && milestoneDate !== "NA";
-      const isDue =
-        hasValidDate &&
-        moment(milestoneDate)
-          .tz("Asia/Kolkata")
-          .startOf("day")
-          .isSameOrBefore(today);
-
-      let status = "PENDING";
-      if (milestoneAmount === 0) {
-        status = "NA";
-      } else if (effectivePendingAmount === 0) {
-        status = "PAID";
-      } else if (allocatedAmount > 0) {
-        status = "PARTIAL";
-      }
-
-      const isCurrent =
-        !firstPendingAssigned &&
-        effectivePendingAmount > 0 &&
-        milestoneAmount > 0;
-      if (isCurrent) {
-        firstPendingAssigned = true;
-      }
-
-      return {
-        order: index + 1,
-        productTypeEnum: milestone.productTypeEnum,
-        displayName: milestone.displayName,
-        mileStoneStartedDate: milestone.mileStoneStartedDate,
-        totalAmount: milestoneAmount,
-        totalPaid: Number(milestone.totalPaid || 0),
-        pending_amount: Number(milestone.pending_amount || 0),
-        allocatedAmount,
-        effectivePendingAmount,
-        status,
-        isDue,
-        isCurrent,
-        isRestrictionTrigger: effectivePendingAmount > 0 && isDue && isCurrent
-      };
-    });
-  }
-
-  async getPackageDoctorRestrictionStatus(visitId, patientAutoId) {
-    const stages = await this.getPackageStageWisePending(
-      visitId,
-      patientAutoId
-    );
-    const blockingStage = stages.find(stage => stage.isRestrictionTrigger);
-
-    if (!blockingStage) {
-      return {
-        isRestricted: false
-      };
-    }
-
-    return {
-      isRestricted: true,
-      displayName: blockingStage.displayName,
-      pendingAmount: blockingStage.effectivePendingAmount,
-      dueDate: blockingStage.mileStoneStartedDate
-    };
-  }
-
   // Removed Due to Milstone Changes
   async checkInPaymentRestriction(
     isPrev,
@@ -1410,25 +1195,22 @@ class AppointmentsPaymentService extends BaseService {
         throw new createError.BadRequest(Constants.UNAUTHORIZED_WITHOUT_VITALS);
       }
 
-      const hasPackage =
-        payload.isPackageExists === true ||
-        payload.isPackageExists === 1 ||
-        payload.isPackageExists === "1";
+      // Role-based restriction only (pending amount does not block Doctor stage move)
+      const userRoleId = this._request.userDetails?.roleDetails?.id;
+      const userRoleName = this._request.userDetails?.roleDetails?.name?.toLowerCase();
 
-      if (hasPackage) {
-        const restrictionStatus = await this.getPackageDoctorRestrictionStatus(
-          payload?.visitId,
-          existingPatient.dataValues.id
+      // Check if user is Admin (ID: 1)
+      const isAdmin = userRoleId === 1;
+
+      // Check if user is Receptionist (ID: 6) or Frontdesk (by name)
+      const isReceptionist = userRoleId === 6;
+      const isFrontdesk =
+        userRoleName === "frontdesk" || userRoleName === "front desk";
+
+      if (!isAdmin && !isReceptionist && !isFrontdesk) {
+        throw new createError.BadRequest(
+          "Only Admin, Receptionist, and Frontdesk users can move patients to Doctor stage"
         );
-
-        if (
-          restrictionStatus.isRestricted &&
-          !this.isPackageRestrictionOverrideAllowed()
-        ) {
-          throw new createError.BadRequest(
-            `Package payment pending for ${restrictionStatus.displayName}. Pending amount ${restrictionStatus.pendingAmount}. Only Admin, Central Manager, or Regional Manager can move this appointment.`
-          );
-        }
       }
     }
 
