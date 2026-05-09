@@ -102,19 +102,19 @@ module.exports = {
       columnName: "pickUpAmount",
       dateColumn: "pickUpDate",
       productEnum: "PICKUP_AMOUNT",
-      displayName: "PickUp"
-    },
-    {
-      columnName: "hysteroscopyAmount",
-      dateColumn: "hysteroscopyDate",
-      productEnum: "HYTEROSCOPY_AMOUNT",
-      displayName: "Hysteroscropy"
+      displayName: "Trigger"
     },
     {
       columnName: "day5FreezingAmount",
       dateColumn: "day5FreezingDate",
       productEnum: "DAY5FREEZING_AMOUNT",
       displayName: "Day 5 Freezing"
+    },
+    {
+      columnName: "hysteroscopyAmount",
+      dateColumn: "hysteroscopyDate",
+      productEnum: "HYTEROSCOPY_AMOUNT",
+      displayName: "Hysteroscopy"
     },
     {
       columnName: "fetAmount",
