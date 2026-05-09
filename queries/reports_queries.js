@@ -1262,7 +1262,7 @@ FROM (
   INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
   INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
   INNER JOIN patient_master pm ON pm.id = pva.patientId
-  LEFT JOIN branch_master bm ON bm.id = pm.branchId
+  LEFT JOIN branch_master bm ON bm.id = caa.branchId
   INNER JOIN stockmanagement.item_master im ON im.id = calba.billTypeValue
   LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
   LEFT JOIN (
@@ -1278,7 +1278,7 @@ FROM (
   WHERE
     calba.billTypeId = 3
     AND calba.status = 'PAID'
-    AND (:branchId IS NULL OR pm.branchId = :branchId)
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
     AND EXISTS (
       SELECT 1
       FROM order_details_master odm
@@ -1311,7 +1311,7 @@ FROM (
   INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
   INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
   INNER JOIN patient_master pm ON pm.id = pva.patientId
-  LEFT JOIN branch_master bm ON bm.id = pm.branchId
+  LEFT JOIN branch_master bm ON bm.id = taa.branchId
   INNER JOIN stockmanagement.item_master im ON im.id = talba.billTypeValue
   LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = im.id
   LEFT JOIN (
@@ -1327,7 +1327,7 @@ FROM (
   WHERE
     talba.billTypeId = 3
     AND talba.status = 'PAID'
-    AND (:branchId IS NULL OR pm.branchId = :branchId)
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
     AND EXISTS (
       SELECT 1
       FROM order_details_master odm
@@ -1362,7 +1362,7 @@ SELECT * FROM (
     INNER JOIN visit_consultations_associations vca ON vca.visitId = pva.id 
     INNER JOIN consultation_appointments_associations caa ON caa.consultationId = vca.id
     INNER JOIN appointment_reason_master arm ON caa.appointmentReasonId = arm.id
-    INNER JOIN branch_master bm ON bm.id = pm.branchId 
+    INNER JOIN branch_master bm ON bm.id = caa.branchId 
     WHERE caa.noShow = 1
 
     UNION 
@@ -1382,7 +1382,7 @@ SELECT * FROM (
     INNER JOIN visit_treatment_cycles_associations vtca ON vtca.visitId = pva.id 
     INNER JOIN treatment_appointments_associations taa ON taa.treatmentCycleId = vtca.id
     INNER JOIN appointment_reason_master arm ON taa.appointmentReasonId = arm.id
-    INNER JOIN branch_master bm ON bm.id = pm.branchId 
+    INNER JOIN branch_master bm ON bm.id = taa.branchId 
     WHERE taa.noShow = 1
 ) AS combined_results
 ORDER BY appointmentDate DESC;

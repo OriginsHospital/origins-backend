@@ -174,8 +174,6 @@ with appointments as (
 		pm.id = pva.patientId
 	LEFT JOIN patient_guardian_associations pga 
 		ON pga.patientId = pm.id
-	INNER JOIN branch_master bm on
-		pm.branchId = bm.id
 	WHERE
 		caa.appointmentDate = :date
 	UNION
@@ -259,6 +257,7 @@ select * from appointments WHERE (:branchId IS NULL OR branchId = :branchId) ord
 const getAppointmentByConsultationId = `
 select
 caa.id as consultationId,
+caa.branchId as branchId,
 caa.appointmentDate as appointmentDate ,
 (
 	select
@@ -280,6 +279,7 @@ caa.consultationId = :id;
 const getAppointmentByTreatmentId = `
 select
 	taa.id as appointmentId,
+	taa.branchId as branchId,
 	taa.appointmentDate as appointmentDate ,
 	TIME_FORMAT(taa.timeStart, '%H:%i') as timeStart ,
 	TIME_FORMAT(taa.timeEnd, '%H:%i') as timeEnd,
@@ -661,7 +661,17 @@ INNER JOIN patient_master pm on
 INNER JOIN appointment_reason_master arm on
 	arm.visit_type = pva.type
 LEFT JOIN appointment_charges_branch_association acba on 
-	acba.branchId  = pm.branchId and acba.appointmentReasonId  = arm.id 
+	acba.branchId = COALESCE(
+		(
+			SELECT caa_sub.branchId
+			FROM consultation_appointments_associations caa_sub
+			WHERE caa_sub.consultationId = vca.id
+			ORDER BY caa_sub.appointmentDate DESC, caa_sub.id DESC
+			LIMIT 1
+		),
+		pm.branchId
+	)
+	and acba.appointmentReasonId  = arm.id 
 WHERE
 	vca.id = :id
 	and arm.isOther !=1
@@ -681,7 +691,17 @@ INNER JOIN patient_master pm on
 INNER JOIN appointment_reason_master arm on
 	arm.visit_type = pva.type
 LEFT JOIN appointment_charges_branch_association acba on 
-	acba.branchId  = pm.branchId and acba.appointmentReasonId  = arm.id 
+	acba.branchId = COALESCE(
+		(
+			SELECT taa_sub.branchId
+			FROM treatment_appointments_associations taa_sub
+			WHERE taa_sub.treatmentCycleId = vtca.id
+			ORDER BY taa_sub.appointmentDate DESC, taa_sub.id DESC
+			LIMIT 1
+		),
+		pm.branchId
+	)
+	and acba.appointmentReasonId  = arm.id 
 WHERE
 	vtca.id = :id
 	and arm.isOther !=1
