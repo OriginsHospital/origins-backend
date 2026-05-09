@@ -624,18 +624,53 @@ where vtca.visitId = :visitId
 `;
 const checkForPatientPaymentPending = `
 WITH milestoneAmounts as (
-	SELECT amount, productTypeEnum, dateColumn, mileStoneStartedDate, displayName FROM (
+	SELECT sequence, amount, productTypeEnum, dateColumn, mileStoneStartedDate, displayName FROM (
 		{unionQuery}
 	) availableMileStones
 ),
 totalPayments as (
-	SELECT 
-		tom.productType,
-		COALESCE(SUM(paidOrderAmountBeforeDiscount),0) AS totalPaid
-	FROM treatment_orders_master tom 
-	WHERE tom.visitId = :visitId and tom.paymentStatus = 'PAID' GROUP BY productType
+	SELECT
+		packagePayments.productType,
+		COALESCE(SUM(packagePayments.totalPaid), 0) AS totalPaid
+	FROM (
+		SELECT 
+			tom.productType,
+			COALESCE(SUM(tom.paidOrderAmountBeforeDiscount), 0) AS totalPaid
+		FROM treatment_orders_master tom 
+		WHERE tom.visitId = :visitId and tom.paymentStatus = 'PAID'
+		GROUP BY tom.productType
+		UNION ALL
+		SELECT
+			CASE
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%registration fee%' THEN 'REGISTRATION_FEE'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%donor booking%' THEN 'DONOR_BOOKING_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%d1%' OR LOWER(popa.appointmentReason) LIKE 'ivf package%day 1%' THEN 'DAY1_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%trigger%' THEN 'PICKUP_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%middle%' OR LOWER(popa.appointmentReason) LIKE 'ivf package%day 5%' OR LOWER(popa.appointmentReason) LIKE 'ivf package%day5%' THEN 'DAY5FREEZING_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%hysteroscopy%' THEN 'HYTEROSCOPY_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%era%' THEN 'ERA_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%fet%' THEN 'FET_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%pgt%' THEN 'PGTA_AMOUNT'
+				WHEN LOWER(popa.appointmentReason) LIKE 'ivf package%upt%' THEN 'UPTPOSITIVE_AMOUNT'
+				ELSE NULL
+			END AS productType,
+			COALESCE(SUM(opom.paidOrderAmountBeforeDiscount), 0) AS totalPaid
+		FROM patient_other_payment_associations popa
+		INNER JOIN other_payment_orders_master opom ON opom.refId = popa.id
+		WHERE popa.patientId = (
+			SELECT pva.patientId
+			FROM patient_visits_association pva
+			WHERE pva.id = :visitId
+		)
+			AND opom.paymentStatus = 'PAID'
+			AND LOWER(popa.appointmentReason) LIKE 'ivf package%'
+		GROUP BY productType
+	) packagePayments
+	WHERE packagePayments.productType IS NOT NULL
+	GROUP BY packagePayments.productType
 )
 SELECT 
+	milestoneAmounts.sequence,
 	milestoneAmounts.amount as totalAmount, 
 	milestoneAmounts.productTypeEnum, 
 	milestoneAmounts.dateColumn,

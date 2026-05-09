@@ -117,16 +117,16 @@ module.exports = {
       displayName: "Hysteroscopy"
     },
     {
-      columnName: "fetAmount",
-      dateColumn: "fetDate",
-      productEnum: "FET_AMOUNT",
-      displayName: "FET"
-    },
-    {
       columnName: "eraAmount",
       dateColumn: "eraDate",
       productEnum: "ERA_AMOUNT",
       displayName: "ERA"
+    },
+    {
+      columnName: "fetAmount",
+      dateColumn: "fetDate",
+      productEnum: "FET_AMOUNT",
+      displayName: "FET"
     },
     {
       columnName: "pgtaAmount",

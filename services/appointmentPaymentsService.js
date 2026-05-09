@@ -841,41 +841,23 @@ class AppointmentsPaymentService extends BaseService {
   }
 
   async checkForStagePermission(isPrev, isNext) {
-    const userRoleId = this._request.userDetails?.roleDetails?.id;
-    const userRoleName =
-      this._request.userDetails?.roleDetails?.name?.toLowerCase() || "";
-
     if (isPrev) {
-      // Only Admin and management roles can move appointments backwards.
-      return this.isPackageOverrideRole(userRoleId, userRoleName);
+      // Only Admin, Center/Central Manager and Regional Manager can move backward.
+      return this.isPackagePaymentOverrideRole();
     }
     if (isNext) {
-      // Admin, managers, reception and frontdesk can move appointments forward.
-      return this.isAppointmentForwardMover(userRoleId, userRoleName);
+      // Admin, managers, receptionist and frontdesk can move forward.
+      const roleName = (
+        this._request.userDetails?.roleDetails?.name || ""
+      ).toLowerCase();
+      return (
+        this.isPackagePaymentOverrideRole() ||
+        this._request.userDetails?.roleDetails?.id === 6 ||
+        roleName === "receptionist" ||
+        roleName === "frontdesk" ||
+        roleName === "front desk"
+      );
     }
-  }
-
-  isPackageOverrideRole(userRoleId, userRoleName = "") {
-    const normalizedRoleName = userRoleName.toLowerCase();
-    return (
-      [1, 7].includes(userRoleId) ||
-      normalizedRoleName === "admin" ||
-      normalizedRoleName === "center manager" ||
-      normalizedRoleName === "centre manager" ||
-      normalizedRoleName === "central manager" ||
-      normalizedRoleName === "regional manager"
-    );
-  }
-
-  isAppointmentForwardMover(userRoleId, userRoleName = "") {
-    const normalizedRoleName = userRoleName.toLowerCase();
-    return (
-      [1, 6, 7].includes(userRoleId) ||
-      this.isPackageOverrideRole(userRoleId, normalizedRoleName) ||
-      normalizedRoleName === "receptionist" ||
-      normalizedRoleName === "frontdesk" ||
-      normalizedRoleName === "front desk"
-    );
   }
 
   // Check if patient has pending amount
@@ -923,6 +905,40 @@ class AppointmentsPaymentService extends BaseService {
       // If there's an error, allow the operation (fail open)
       return false;
     }
+  }
+
+  isPackagePaymentOverrideRole() {
+    const roleId = this._request.userDetails?.roleDetails?.id;
+    const roleName = (
+      this._request.userDetails?.roleDetails?.name || ""
+    ).toLowerCase();
+
+    return (
+      [1, 7].includes(roleId) ||
+      roleName.includes("admin") ||
+      roleName.includes("center manager") ||
+      roleName.includes("central manager") ||
+      roleName.includes("regional manager")
+    );
+  }
+
+  getOverduePackageMilestones(packagePaymentDetails) {
+    const today = moment()
+      .tz("Asia/Kolkata")
+      .startOf("day");
+
+    return (packagePaymentDetails || []).filter(item => {
+      const pendingAmount = parseFloat(item?.pending_amount || 0);
+      const milestoneDate = item?.mileStoneStartedDate;
+
+      if (pendingAmount <= 0 || !milestoneDate || milestoneDate === "NA") {
+        return false;
+      }
+
+      return moment(milestoneDate)
+        .startOf("day")
+        .isSameOrBefore(today);
+    });
   }
 
   async checkForVitals(appointmentId, type, patientTypeId, visitId) {
@@ -1044,16 +1060,10 @@ class AppointmentsPaymentService extends BaseService {
   async getPendingPaymentAmountForPackageService(visitId) {
     const COLUMN_PACKAGE_MAPPING =
       treatmentConstants["PACKAGE_AMOUNT_PRODUCT_TYPE_MAPPING"];
-    const PRODUCT_SORT_ORDER = COLUMN_PACKAGE_MAPPING.reduce(
-      (acc, mapping, index) => {
-        acc[mapping.productEnum] = index;
-        return acc;
-      },
-      {}
-    );
     const validDropDownQuery = COLUMN_PACKAGE_MAPPING.map(
-      mapping =>
+      (mapping, index) =>
         `SELECT 
+        ${index + 1} AS sequence,
         ${mapping.columnName} AS amount, 
         '${mapping.productEnum}' AS productTypeEnum,
         '${mapping.dateColumn}' AS dateColumn,
@@ -1084,86 +1094,7 @@ class AppointmentsPaymentService extends BaseService {
     if (lodash.isEmpty(data)) {
       return [];
     }
-
-    const advancePaymentData = await this.mysqlConnection
-      .query(
-        `SELECT 
-          COALESCE(SUM(opom.paidOrderAmountBeforeDiscount), 0) AS totalAdvancePaid
-        FROM other_payment_orders_master opom
-        INNER JOIN patient_other_payment_associations popa ON popa.id = opom.refId
-        INNER JOIN patient_visits_association pva ON pva.patientId = popa.patientId
-        WHERE pva.id = :visitId
-          AND opom.paymentStatus = 'PAID'
-          AND LOWER(popa.appointmentReason) LIKE 'ivf package%'`,
-        {
-          type: Sequelize.QueryTypes.SELECT,
-          replacements: { visitId }
-        }
-      )
-      .catch(err => {
-        console.log("Error while getting package advance payment status", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-    let remainingAdvancePaid = parseFloat(
-      advancePaymentData?.[0]?.totalAdvancePaid || 0
-    );
-
-    return lodash
-      .sortBy(data, item => PRODUCT_SORT_ORDER[item.productTypeEnum] ?? 999)
-      .map(item => {
-        const totalAmount = parseFloat(item.totalAmount || 0);
-        const directMilestonePaid = parseFloat(item.totalPaid || 0);
-        const payableAfterDirectPaid = Math.max(
-          totalAmount - directMilestonePaid,
-          0
-        );
-        const advanceApplied = Math.min(
-          remainingAdvancePaid,
-          payableAfterDirectPaid
-        );
-        remainingAdvancePaid -= advanceApplied;
-        const totalPaid = Math.min(
-          totalAmount,
-          directMilestonePaid + advanceApplied
-        );
-        const pendingAmount = Math.max(totalAmount - totalPaid, 0);
-
-        return {
-          ...item,
-          totalAmount,
-          totalPaid,
-          milestonePaidAmount: directMilestonePaid,
-          advancePaidAmount: advanceApplied,
-          pending_amount: pendingAmount
-        };
-      });
-  }
-
-  async getOverduePackageMilestone(visitId) {
-    const paymentDetails = await this.getPendingPaymentAmountForPackageService(
-      visitId
-    );
-    const today = moment()
-      .tz("Asia/Kolkata")
-      .startOf("day");
-
-    return paymentDetails.find(item => {
-      const pendingAmount = parseFloat(item.pending_amount || 0);
-      if (
-        pendingAmount <= 0 ||
-        !item.mileStoneStartedDate ||
-        item.mileStoneStartedDate === "NA"
-      ) {
-        return false;
-      }
-
-      return moment(item.mileStoneStartedDate)
-        .startOf("day")
-        .isSameOrBefore(today);
-    });
+    return lodash.sortBy(data, "sequence");
   }
 
   // Removed Due to Milstone Changes
@@ -1308,33 +1239,54 @@ class AppointmentsPaymentService extends BaseService {
         throw new createError.BadRequest(Constants.UNAUTHORIZED_WITHOUT_VITALS);
       }
 
-      const hasPackage =
-        payload?.isPackageExists === true ||
-        payload?.isPackageExists === 1 ||
-        payload?.isPackageExists === "1";
+      // Role-based restriction for moving from vitals to doctor.
       const userRoleId = this._request.userDetails?.roleDetails?.id;
-      const userRoleName =
-        this._request.userDetails?.roleDetails?.name?.toLowerCase() || "";
-      const overduePackageMilestone = hasPackage
-        ? await this.getOverduePackageMilestone(payload?.visitId)
-        : null;
+      const userRoleName = this._request.userDetails?.roleDetails?.name?.toLowerCase();
 
-      if (
-        overduePackageMilestone &&
-        !this.isPackageOverrideRole(userRoleId, userRoleName)
-      ) {
+      // Check if user is Admin (ID: 1)
+      const isAdmin = userRoleId === 1;
+
+      // Check if user is Receptionist (ID: 6) or Frontdesk (by name)
+      const isReceptionist = userRoleId === 6;
+      const isFrontdesk =
+        userRoleName === "frontdesk" || userRoleName === "front desk";
+      const isManager =
+        userRoleId === 7 ||
+        userRoleName.includes("center manager") ||
+        userRoleName.includes("central manager") ||
+        userRoleName.includes("regional manager");
+
+      if (!isAdmin && !isReceptionist && !isFrontdesk && !isManager) {
         throw new createError.BadRequest(
-          `Package payment overdue for ${overduePackageMilestone.displayName}. Pending amount: ${overduePackageMilestone.pending_amount}`
+          "Only Admin, Receptionist, Frontdesk, and Manager users can move patients to Doctor stage"
         );
       }
 
       if (
-        !overduePackageMilestone &&
-        !this.isAppointmentForwardMover(userRoleId, userRoleName)
+        payload?.isPackageExists === true ||
+        payload?.isPackageExists === 1 ||
+        payload?.isPackageExists === "1"
       ) {
-        throw new createError.BadRequest(
-          "Only Admin, Receptionist, Frontdesk and management users can move patients to Doctor stage"
+        const packagePaymentDetails = await this.getPendingPaymentAmountForPackageService(
+          payload?.visitId
         );
+        const overdueMilestones = this.getOverduePackageMilestones(
+          packagePaymentDetails
+        );
+
+        if (
+          !lodash.isEmpty(overdueMilestones) &&
+          !this.isPackagePaymentOverrideRole()
+        ) {
+          const firstOverdueMilestone = overdueMilestones[0];
+          const pendingAmount = Number(
+            firstOverdueMilestone?.pending_amount || 0
+          ).toFixed(2);
+
+          throw new createError.BadRequest(
+            `${firstOverdueMilestone?.displayName} package amount is overdue. Pending amount: Rs ${pendingAmount}. Only Admin, Central Manager, or Regional Manager can move this appointment.`
+          );
+        }
       }
     }
 
