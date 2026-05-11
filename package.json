@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start:dev": "nodemon index.js",
-    "migrate:teams": "node database/migrations/run_teams_migration.js"
+    "migrate:teams": "node database/migrations/run_teams_migration.js",
+    "oneoff:fix-icsi-day1-nambur-prathibha": "node scripts/oneoff_fix_icsi_day1_nambur_prathibha.js"
   },
   "husky": {
     "hooks": {
