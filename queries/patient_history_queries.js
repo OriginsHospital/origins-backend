@@ -187,6 +187,7 @@ const treatmentHistoryByVisitId = `
     JSON_ARRAYAGG(
         JSON_OBJECT(
             'treatmentCycleId', info.treatmentCycleId,
+            'treatmentTimestampId', info.treatmentTimestampId,
             'treatmentType', info.treatmentType,
             'treatmentDate', info.treatmentCycleDate,
             'closeCancelReason', COALESCE(
@@ -227,6 +228,7 @@ FROM (
         vtca.id AS treatmentCycleId,
         (select name from treatment_type_master ttm  where ttm.id = vtca.treatmentTypeId) as treatmentType,
         DATE_FORMAT(vtca.createdAt, '%Y-%m-%d') AS treatmentCycleDate,
+        tt.id AS treatmentTimestampId,
         tt.endedReason,
         tt.fetEndedReason,
         tt.eraEndedReason
