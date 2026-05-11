@@ -189,6 +189,11 @@ const treatmentHistoryByVisitId = `
             'treatmentCycleId', info.treatmentCycleId,
             'treatmentType', info.treatmentType,
             'treatmentDate', info.treatmentCycleDate,
+            'closeCancelReason', COALESCE(
+                NULLIF(TRIM(info.endedReason), ''),
+                NULLIF(TRIM(info.fetEndedReason), ''),
+                NULLIF(TRIM(info.eraEndedReason), '')
+            ),
             'appointmentDetails', (
                 SELECT JSON_ARRAYAGG(
                     JSON_OBJECT(
@@ -221,8 +226,14 @@ FROM (
     SELECT 
         vtca.id AS treatmentCycleId,
         (select name from treatment_type_master ttm  where ttm.id = vtca.treatmentTypeId) as treatmentType,
-        DATE_FORMAT(vtca.createdAt, '%Y-%m-%d') AS treatmentCycleDate
+        DATE_FORMAT(vtca.createdAt, '%Y-%m-%d') AS treatmentCycleDate,
+        tt.endedReason,
+        tt.fetEndedReason,
+        tt.eraEndedReason
     FROM visit_treatment_cycles_associations vtca
+    LEFT JOIN treatment_timestamps tt
+        ON tt.visitId = vtca.visitId
+        AND tt.treatmentType = vtca.treatmentTypeId
     WHERE vtca.visitId = :visitId
     ORDER BY vtca.createdAt DESC
 ) info;
