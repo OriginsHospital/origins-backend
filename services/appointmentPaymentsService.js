@@ -3196,6 +3196,8 @@ class AppointmentsPaymentService extends BaseService {
       type,
       date,
       doctorId,
+      timeStart,
+      timeEnd,
       treatmentCycleId,
       appointmentReasonId,
       hasAnyFuturePrescription,
@@ -3216,95 +3218,6 @@ class AppointmentsPaymentService extends BaseService {
     }
 
     return await this.mysqlConnection.transaction(async t => {
-      //find available slots of doctor by date
-      const data = await this.mysqlConnection
-        .query(consultationAvailableSlotsQuery, {
-          type: Sequelize.QueryTypes.SELECT,
-          replacements: {
-            doctorId: doctorId,
-            date: date
-          },
-          transaction: t
-        })
-        .catch(err => {
-          console.log("Error while fetching consultation doctor details", err);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
-
-      const blockSlots = [];
-      const shiftSlots = [];
-      const bookedSlots = [];
-
-      data.map(entry => {
-        if (entry.type == "BLOCK") {
-          // Generate blocked 15 minutes slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = parseInt(entry.timeStart.split(":")[1]);
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-          const blockSlot = [
-            [0, startHour * 60 + startMinute],
-            [endHour * 60 + endMinute, 1440]
-          ];
-          blockSlots.push(
-            timeSlotGenerator.getTimeSlots(
-              blockSlot,
-              true,
-              "quarter",
-              true,
-              true
-            )
-          );
-        } else if (entry.type == "BOOKED") {
-          // Add 15 minutes appointments slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = entry.timeStart.split(":")[1];
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = entry.timeEnd.split(":")[1];
-          bookedSlots.push(
-            `${startHour}:${startMinute} - ${endHour}:${endMinute}`
-          );
-        } else {
-          // Generate shift 15 minutes slots
-          const startHour = parseInt(entry.timeStart.split(":")[0]);
-          const startMinute = parseInt(entry.timeStart.split(":")[1]);
-          const endHour = parseInt(entry.timeEnd.split(":")[0]);
-          const endMinute = parseInt(entry.timeEnd.split(":")[1]);
-          const blockSlot = [
-            [0, startHour * 60 + startMinute],
-            [endHour * 60 + endMinute, 1440]
-          ];
-          shiftSlots.push(
-            timeSlotGenerator.getTimeSlots(
-              blockSlot,
-              true,
-              "quarter",
-              true,
-              true
-            )
-          );
-        }
-      });
-
-      const totalSlots = await this.generateTimeSlots(shiftSlots);
-      const unavailableSlots = await this.generateTimeSlots(blockSlots);
-
-      unavailableSlots.push(...bookedSlots);
-
-      // available slots
-      const availableSlots = lodash.difference(totalSlots, unavailableSlots);
-
-      if (availableSlots.length < 1) {
-        throw new createError.BadRequest(
-          "No available slots for given doctor on this date"
-        );
-      }
-      const firstAvailableSlot = availableSlots[0];
-      const [timeStart, timeEnd] = firstAvailableSlot.split(" - ");
-
-      //got all data so creating a treatment
       const payload = {
         date,
         doctorId,

@@ -156,6 +156,12 @@ const treatmentBookReviewAppointmentSchema = Joi.object({
   doctorId: Joi.number()
     .integer()
     .required(),
+  timeStart: Joi.string()
+    .max(10)
+    .required(),
+  timeEnd: Joi.string()
+    .max(10)
+    .required(),
   treatmentCycleId: Joi.number()
     .integer()
     .required(),
