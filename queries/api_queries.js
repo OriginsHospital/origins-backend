@@ -2,35 +2,76 @@ const getStateQuery = `SELECT id,name FROM state_master`;
 const getCitiesQuery = `SELECT id, name FROM city_master where stateId=:stateId`;
 
 const getBillTypeValuesQuery = `
-SELECT id, name, amount FROM lab_test_master WHERE :billTypeId = 1 
+SELECT id, name, amount, NULL AS quantity FROM lab_test_master WHERE :billTypeId = 1 
 UNION ALL
-SELECT id, name, amount FROM scan_master WHERE :billTypeId = 2
+SELECT id, name, amount, NULL AS quantity FROM scan_master WHERE :billTypeId = 2
 UNION ALL
-SELECT im.id, im.itemName, COALESCE(ipm.price,0) FROM stockmanagement.item_master im 
-LEFT JOIN stockmanagement.item_price_master ipm ON im.id = ipm.itemId WHERE :billTypeId = 3 and im.isActive = 1
+SELECT
+  im.id,
+  im.itemName AS name,
+  COALESCE(ipm.price, 0) AS amount,
+  COALESCE((
+    SELECT IFNULL(SUM(
+      CASE
+        WHEN CAST(NOW() AS DATE) < gia.expiryDate THEN gia.totalQuantity
+        ELSE 0
+      END
+    ), 0)
+    FROM stockmanagement.grn_items_associations gia
+    INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+    WHERE gia.itemId = im.id
+      AND gia.isReturned = 0
+  ), 0) AS quantity
+FROM stockmanagement.item_master im
+LEFT JOIN stockmanagement.item_price_master ipm ON im.id = ipm.itemId
+WHERE :billTypeId = 3 AND im.isActive = 1
 UNION ALL
-select em.id, em.name, em.amount from embryology_master em where :billTypeId = 4
+SELECT id, name, amount, NULL AS quantity FROM embryology_master WHERE :billTypeId = 4
 `;
 
 const getBillTypeValuesByBranchQuery = `
-SELECT ltm.id, ltm.name, ltmba.amount FROM lab_test_master ltm  
+SELECT ltm.id, ltm.name, ltmba.amount, NULL AS quantity FROM lab_test_master ltm  
 INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id
 WHERE :billTypeId = 1 and ltmba.branchId = :branchId and ltmba.isActive = 1
 UNION ALL
-SELECT sm.id, sm.name, smba.amount FROM scan_master sm  
+SELECT sm.id, sm.name, smba.amount, NULL AS quantity FROM scan_master sm  
 INNER JOIN scan_master_branch_association smba ON smba.scanId  = sm.id
 WHERE :billTypeId = 2 and smba.branchId = :branchId and smba.isActive = 1
 UNION ALL
-SELECT im.id, im.itemName as name, 0 as amount FROM stockmanagement.item_master im WHERE im.isActive  = 1 AND :billTypeId = 3 AND EXISTS (
-	select 
-		* 
-	from stockmanagement.grn_items_associations gia  INNER JOIN stockmanagement.grn_master gm on gm.id = gia.grnId
-	where gia.itemId  = im.id and gia.isReturned  = 0 and gm.branchId  IN (:branchId) and gia.totalQuantity  > 0  and CAST(NOW() AS DATE) < gia.expiryDate
-)
+SELECT
+  im.id,
+  im.itemName AS name,
+  0 AS amount,
+  COALESCE((
+    SELECT IFNULL(SUM(
+      CASE
+        WHEN CAST(NOW() AS DATE) < gia.expiryDate THEN gia.totalQuantity
+        ELSE 0
+      END
+    ), 0)
+    FROM stockmanagement.grn_items_associations gia
+    INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+    WHERE gia.itemId = im.id
+      AND gia.isReturned = 0
+      AND gm.branchId IN (:branchId)
+  ), 0) AS quantity
+FROM stockmanagement.item_master im
+WHERE im.isActive = 1
+  AND :billTypeId = 3
+  AND EXISTS (
+    SELECT 1
+    FROM stockmanagement.grn_items_associations gia
+    INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+    WHERE gia.itemId = im.id
+      AND gia.isReturned = 0
+      AND gm.branchId IN (:branchId)
+      AND gia.totalQuantity > 0
+      AND CAST(NOW() AS DATE) < gia.expiryDate
+  )
 UNION ALL
-select em.id, em.name, emba.amount from embryology_master em 
+SELECT em.id, em.name, emba.amount, NULL AS quantity FROM embryology_master em 
 INNER JOIN embryology_master_branch_association emba ON emba.embryologyId  = em.id
-where :billTypeId = 4 and emba.branchId = :branchId and emba.isActive = 1
+WHERE :billTypeId = 4 AND emba.branchId = :branchId AND emba.isActive = 1
 `;
 
 const getDropdownInfo = `
