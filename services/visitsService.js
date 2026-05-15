@@ -684,10 +684,10 @@ class VisitsService {
 
   async getDonarInformationService() {
     /* donorStatus to show buttons in UI
-      0 -> Pay Donor 
-      1 -> Create Donor
-      2 -> start Donor Trigger
-      3 -> View Donor
+      0 -> Pay Donor
+      1 -> Create Donor (no donor row, or required documents missing)
+      2 -> Start Donor Trigger (donor complete, trigger not started)
+      3 -> View Donor (donor trigger started)
     */
 
     const data = await this.mysqlConnection

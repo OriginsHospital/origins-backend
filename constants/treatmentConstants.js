@@ -69,12 +69,14 @@ module.exports = {
       6: [
         "ICSI_CONSENTS_EXISTS",
         "TRIGGER_NOT_STARTED",
-        "DONOR_PAYMENT_NOT_COMPLETED"
+        "DONOR_PAYMENT_NOT_COMPLETED",
+        "DONOR_DOCUMENTS_COMPLETE"
       ], // ICSI Donor Oocyte + Self Sperm
       7: [
         "ICSI_CONSENTS_EXISTS",
         "TRIGGER_NOT_STARTED",
-        "DONOR_PAYMENT_NOT_COMPLETED"
+        "DONOR_PAYMENT_NOT_COMPLETED",
+        "DONOR_DOCUMENTS_COMPLETE"
       ] // ICSI Donor Oocyte + Donor Sperm
     },
     updates: "START_DONOR_TRIGGER"

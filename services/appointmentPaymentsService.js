@@ -92,6 +92,7 @@ const AppointmentReasonMaster = require("../models/Master/appointmentReasonMaste
 const AppointmentChargesBranchAssociation = require("../models/Associations/appointmentChargesBranchAssocitation");
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
+const VisitDonarsAssociation = require("../models/Associations/visitDonarsAssociation");
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -1651,6 +1652,39 @@ class AppointmentsPaymentService extends BaseService {
 
       if (donorPaymentDetails[0]?.donorBookingCheck === 0) {
         throw new createError.BadRequest(Constants.DONAR_PAYMENT_NOT_DONE);
+      }
+    } else if (validationType == "DONOR_DOCUMENTS_COMPLETE") {
+      const donorRecord = await VisitDonarsAssociation.findOne({
+        where: { visitId }
+      });
+
+      if (!donorRecord) {
+        throw new createError.BadRequest(Constants.DONAR_NOT_FOUND);
+      }
+
+      const requiredDonorDocuments = [
+        "kyc",
+        "marriageCertificate",
+        "birthCertificate",
+        "aadhaar",
+        "donarPhotoUrl",
+        "donarSignatureUrl",
+        "form24b",
+        "insuranceCertificate",
+        "spouseAadharCard",
+        "artBankCertificate",
+        "anaesthesiaConsent",
+        "form13"
+      ];
+
+      const hasMissingDocument = requiredDonorDocuments.some(
+        field => !donorRecord[field]
+      );
+
+      if (hasMissingDocument) {
+        throw new createError.BadRequest(
+          "All donor documents must be uploaded before starting donor trigger."
+        );
       }
     } else if (validationType == "HYSTEROSCOPY_NOT_STARTED") {
       const existingHysteroscopy = await TriggerTimeStampsMaster.findOne({
