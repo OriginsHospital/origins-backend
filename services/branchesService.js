@@ -18,8 +18,8 @@ class BranchesService {
     });
     branchesList = branchesList.map(role => role.dataValues);
     return branchesList.map(branch => {
-      const { id, name } = branch;
-      return { id, name };
+      const { id, name, branchCode } = branch;
+      return { id, name, branchCode: branchCode || null };
     });
   }
 }
