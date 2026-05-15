@@ -106,7 +106,7 @@ WITH appointments as (
     LEFT JOIN patient_guardian_associations pga 
 		ON pga.patientId = pm.id
     WHERE
-        caa.consultationDoctorId = :doctorId
+        caa.consultationDoctorId IN (:doctorIds)
         AND caa.appointmentDate = :date
         AND caa.noShow = 0
     UNION ALL
@@ -198,11 +198,11 @@ WITH appointments as (
     LEFT JOIN patient_guardian_associations pga 
 		ON pga.patientId = pm.id
     WHERE
-        taa.consultationDoctorId = :doctorId
+        taa.consultationDoctorId IN (:doctorIds)
         AND taa.appointmentDate = :date
         AND taa.noShow = 0
     )
-    select * from appointments where stage IN ('Doctor', 'Seen', 'Done') order by isCompleted ASC ,timeStart ASC ;
+    select * from appointments where stage IN ('Booked', 'Arrived', 'Scan', 'Doctor', 'Seen', 'Done') order by isCompleted ASC ,timeStart ASC ;
 `;
 
 const getAppointsmentsByPatientQuery = `
@@ -306,7 +306,7 @@ WITH appointments as (
     WHERE
         pm.id = :patientId
     )
-    select * from appointments where stage = 'Doctor' or stage = 'Seen' or stage = 'Done' order by CAST(appointmentDate as DATE) DESC, timeStart DESC;
+    select * from appointments where stage IN ('Booked', 'Arrived', 'Scan', 'Doctor', 'Seen', 'Done') order by CAST(appointmentDate as DATE) DESC, timeStart DESC;
 `;
 
 const getConsulationHistoryByPatientId = `
