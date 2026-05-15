@@ -395,7 +395,7 @@ WITH patientInfo AS (
 	select pm.id, pm.patientId , pm.aadhaarNo, pm.addressLine1, pm.addressLine2 ,
     pm.dateOfBirth , pm.firstName , pm.lastName , pm.gender , 
     pm.mobileNo , pm.photoPath , pm.pincode , pm.maritalStatus , pm.patientTypeId,
-    (select id from patient_visits_association pva where pva.patientId = pm.Id and pva.isActive = 1) as activeVisitId,
+    (select pva.id from patient_visits_association pva where pva.patientId = pm.Id and pva.isActive = 1 ORDER BY pva.id DESC LIMIT 1) as activeVisitId,
     (
     CASE 
         WHEN EXISTS (
@@ -411,9 +411,11 @@ WITH patientInfo AS (
     CONCAT(COALESCE((select rtm.name from referral_type_master rtm  where rtm.id = pm.referralId),''), COALESCE(CONCAT(' - ',pm.referralName),'')) as referralType,
     (select u.fullName from users u where u.id = pm.updatedBy) as updatedBy,
     COALESCE(pm.bloodGroup,'N/A') as bloodGroup,
-    COALESCE(pga.bloodGroup,'N/A') as spouseBloodGroup
+    COALESCE(
+        (SELECT pga.bloodGroup FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+        'N/A'
+    ) as spouseBloodGroup
     from patient_master pm 
-    LEFT JOIN patient_guardian_associations pga on pm.id = pga.patientId
     where pm.patientId  = :patientId
 )
 select 
@@ -428,6 +430,8 @@ CASE
 					'isConsentRequired', (select ttm.isConsentsExists from treatment_type_master ttm where ttm.id = vtca.treatmentTypeId)
 				) from visit_treatment_cycles_associations vtca 
 				WHERE vtca.visitId = pInfo.activeVisitId
+				ORDER BY vtca.createdAt DESC, vtca.id DESC
+				LIMIT 1
 			)
 	ELSE null
 END as treatmentDetails,
@@ -437,6 +441,7 @@ CASE
                 select vtca.id 
                 from visit_treatment_cycles_associations vtca 
                 WHERE vtca.visitId = pInfo.activeVisitId
+                ORDER BY vtca.createdAt DESC, vtca.id DESC
                 LIMIT 1
             )
         ELSE null
