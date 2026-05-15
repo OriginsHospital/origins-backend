@@ -390,22 +390,6 @@ class DoctorsService {
     }
   }
 
-  async resolveDoctorIdsForLoggedInUser() {
-    const userId = this._request?.userDetails?.id;
-    if (!userId) {
-      return [];
-    }
-    const doctorRecord = await ConsultancyDoctorMasterModel.findOne({
-      where: { userId },
-      attributes: ["id", "userId"]
-    }).catch(() => null);
-    const doctorIds = [userId];
-    if (doctorRecord?.id && !doctorIds.includes(doctorRecord.id)) {
-      doctorIds.push(doctorRecord.id);
-    }
-    return doctorIds;
-  }
-
   async getAppointmentsByDateService() {
     const { date } = this._request.params;
     if (lodash.isEmpty(date.trim())) {
@@ -413,27 +397,13 @@ class DoctorsService {
         Constants.PARAMS_ERROR.replace("{params}", "date")
       );
     }
-    const normalizedDate = moment(date.trim(), [
-      "YYYY-MM-DD",
-      "YYYY-M-D",
-      "YYYY-MM-D",
-      "YYYY-M-DD"
-    ]).format("YYYY-MM-DD");
-    if (!moment(normalizedDate, "YYYY-MM-DD", true).isValid()) {
-      throw new createError.BadRequest(
-        Constants.PARAMS_ERROR.replace("{params}", "date")
-      );
-    }
-    const doctorIds = await this.resolveDoctorIdsForLoggedInUser();
-    if (lodash.isEmpty(doctorIds)) {
-      return [];
-    }
+    const doctorId = this._request?.userDetails?.id;
     const data = await this.mysqlConnection
       .query(getAppointsmentsByDateQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
-          doctorIds,
-          date: normalizedDate
+          doctorId: doctorId,
+          date: date
         }
       })
       .catch(err => {
