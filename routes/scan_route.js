@@ -18,6 +18,7 @@ class ScanRoute {
   async intializeRoutes() {
     this._route.get( "/getScansByDate/:appointmentDate", checkActiveSession, tokenVerified, this.getScansByDate );
     this._route.get( "/getPrescriptionsByDate/:appointmentDate", checkActiveSession, tokenVerified, this.getPrescriptionsByDate );
+    this._route.get( "/getOpuSheetsByDate/:appointmentDate", checkActiveSession, tokenVerified, this.getOpuSheetsByDate );
     this._route.get( "/getScanReports", checkActiveSession, tokenVerified, this.getScanReports );
     this._route.get( "/getScanTemplate/:id", checkActiveSession, tokenVerified, this.getScanTemplateById );
     this._route.post( "/saveScanResult", checkActiveSession, tokenVerified, this.saveScanResult );
@@ -38,6 +39,11 @@ class ScanRoute {
   getPrescriptionsByDate = asyncHandler(async (req, res, next) => {
     const controllerObj = new ScanController(req, res, next);
     await controllerObj.getPrescriptionsByDateHandler();
+  });
+
+  getOpuSheetsByDate = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.getOpuSheetsByDateHandler();
   });
 
   getScanReports = asyncHandler(async (req, res, next) => {

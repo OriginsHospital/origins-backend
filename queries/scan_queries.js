@@ -474,10 +474,37 @@ SELECT * FROM (
 ORDER BY patientName ASC, appointmentType ASC, appointmentId ASC, isSpouse ASC
 `;
 
+const getOpuSheetsByDateQuery = `
+SELECT
+  taa.id AS appointmentId,
+  taa.treatmentCycleId,
+  'Treatment' AS appointmentType,
+  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+  COALESCE(
+    (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+    ''
+  ) AS appointmentReason,
+  COALESCE(
+    (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+    ''
+  ) AS doctorName,
+  taa.branchId,
+  TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
+  TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd
+FROM treatment_appointments_associations taa
+INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+INNER JOIN patient_master pm ON pm.id = pva.patientId
+WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+  AND (:branchId IS NULL OR taa.branchId = :branchId)
+ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
+`;
+
 module.exports = {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
   getScanHeaderInformation,
   getScanReportsQuery,
-  getPrescriptionsByDateQuery
+  getPrescriptionsByDateQuery,
+  getOpuSheetsByDateQuery
 };
