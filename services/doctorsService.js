@@ -392,7 +392,17 @@ class DoctorsService {
 
   async getAppointmentsByDateService() {
     const { date } = this._request.params;
-    if (lodash.isEmpty(date.trim())) {
+    if (lodash.isEmpty(date?.trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "date")
+      );
+    }
+    const normalizedDate = moment(
+      date,
+      ["YYYY-MM-DD", "YYYY-M-D", "YYYY-MM-D", "YYYY-M-DD"],
+      true
+    );
+    if (!normalizedDate.isValid()) {
       throw new createError.BadRequest(
         Constants.PARAMS_ERROR.replace("{params}", "date")
       );
@@ -403,12 +413,12 @@ class DoctorsService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           doctorId: doctorId,
-          date: date
+          date: normalizedDate.format("YYYY-MM-DD")
         }
       })
       .catch(err => {
         console.log("Error while getting doctor appointments", err);
-        throw createError.InternalServerError(
+        throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });

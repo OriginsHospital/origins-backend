@@ -28,8 +28,9 @@ WITH appointments as (
 	        ELSE pga.name
 	    END AS firstName,
         (SELECT vda.donarName FROM visit_donars_associations vda WHERE vda.visitId = vca.visitId LIMIT 1) AS donorName,
-        (SELECT vtca.id from visit_treatment_cycles_associations vtca WHERE vtca.visitId IN 
-                (SELECT id from patient_visits_association pva where pva.patientId = pm.Id and pva.isActive = 1)
+        (SELECT vtca.id FROM visit_treatment_cycles_associations vtca
+            WHERE vtca.visitId = vca.visitId
+            LIMIT 1
         ) as treatmentCycleId,
         pm.photoPath,
         pm.patientId,
