@@ -721,6 +721,18 @@ class VisitsService {
     });
   }
 
+  resolveDonorFileS3Key(fileUrl, visitId, fileType) {
+    if (fileUrl && typeof fileUrl === "string") {
+      if (fileUrl.includes(".com/")) {
+        return fileUrl.split(".com/")[1].split("?")[0];
+      }
+      if (fileUrl.startsWith("visits/")) {
+        return fileUrl.split("?")[0];
+      }
+    }
+    return `visits/${visitId}/${fileType}`;
+  }
+
   async uploadDonarFile(visitId, type, file, transaction) {
     try {
       const key = `visits/${visitId}/${type}`;
@@ -909,48 +921,43 @@ class VisitsService {
   }
 
   async deleteDonorFileService() {
-    const updatedByUserId = this._request?.userDetails?.id;
     const validatedData = await deleteDonorFileSchema.validateAsync(
       this._request.body
     );
 
     const { id, visitId, fileType } = validatedData;
 
-    let key = `visits/${visitId}/${fileType}`;
-
     return await this.mysqlConnection.transaction(async t => {
-      try {
-        const existingDonar = await VisitDonarsAssociation.findOne({
-          where: { visitId },
-          transaction: t
-        });
+      const existingDonar = await VisitDonarsAssociation.findOne({
+        where: { id, visitId },
+        transaction: t
+      });
 
-        if (!existingDonar) {
-          throw new createError.NotFound(Constants.DONAR_NOT_FOUND);
-        }
-
-        // Delete the file from S3
-        const deleteParams = {
-          Bucket: this.bucketName,
-          Key: key
-        };
-        await this.s3.deleteObject(deleteParams).promise();
-        console.log("File deleted successfully from S3");
-
-        existingDonar[fileType] = null;
-
-        await existingDonar.update(
-          { [fileType]: null, updatedBy: updatedByUserId },
-          { transaction: t }
-        );
-
-        return existingDonar;
-      } catch (error) {
-        console.error("Error in delete donor file :", error);
-        throw createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
+      if (!existingDonar) {
+        throw new createError.NotFound(Constants.DONAR_NOT_FOUND);
       }
+
+      const fileUrl = existingDonar[fileType];
+      if (!fileUrl) {
+        throw new createError.BadRequest("Document not found for this donor.");
+      }
+
+      const key = this.resolveDonorFileS3Key(fileUrl, visitId, fileType);
+      const deleteParams = {
+        Bucket: this.bucketName,
+        Key: key
+      };
+
+      try {
+        await this.s3.deleteObject(deleteParams).promise();
+        console.log(`Donor file deleted from S3: ${key}`);
+      } catch (s3Error) {
+        console.error("S3 delete warning (donor file):", s3Error.message);
+      }
+
+      await existingDonar.update({ [fileType]: null }, { transaction: t });
+
+      return existingDonar;
     });
   }
 
