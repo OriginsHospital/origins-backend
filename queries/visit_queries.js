@@ -27,14 +27,15 @@ SELECT
                     WHERE vda.visitId = pva.id 
                     LIMIT 1
                 ) THEN 1 -- Donor Not Created
-                -- If donor exists, check treatment trigger
+                -- If donor exists, check donor trigger (not ICSI start alone)
                 WHEN NOT EXISTS (
                     SELECT 1 
                     FROM treatment_timestamps tt 
                     WHERE tt.visitId = pva.id 
+                    AND (tt.triggerStartDate IS NOT NULL OR tt.triggerStartedBy IS NOT NULL)
                     LIMIT 1
-                ) THEN 2 -- Donor Created but treatment not triggered
-                ELSE 3 -- Treatment Triggered
+                ) THEN 2 -- Donor Created but donor trigger not started
+                ELSE 3 -- Donor trigger started
             END
         
         -- Condition 2: If donorBookingAmount is 0 or NULL
@@ -47,14 +48,15 @@ SELECT
                     WHERE vda.visitId = pva.id 
                     LIMIT 1
                 ) THEN 1 -- Donor Not Created
-                -- If donor exists, check treatment trigger
+                -- If donor exists, check donor trigger (not ICSI start alone)
                 WHEN NOT EXISTS (
                     SELECT 1 
                     FROM treatment_timestamps tt 
                     WHERE tt.visitId = pva.id 
+                    AND (tt.triggerStartDate IS NOT NULL OR tt.triggerStartedBy IS NOT NULL)
                     LIMIT 1
-                ) THEN 2 -- Donor Created but treatment not triggered
-                ELSE 3 -- Treatment Triggered
+                ) THEN 2 -- Donor Created but donor trigger not started
+                ELSE 3 -- Donor trigger started
             END
     END AS donorStatus
 
