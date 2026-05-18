@@ -1320,6 +1320,22 @@ class PaymentService extends BaseService {
     return { parsedOrderDetails: parsed, byRefId };
   }
 
+  getOrderDiscountMultiplier(orderRow) {
+    const totalOrderAmount = Number(orderRow?.totalOrderAmount || 0);
+    const paidOrderAmount = Number(orderRow?.paidOrderAmount || 0);
+    const discountAmount = Number(orderRow?.discountAmount || 0);
+    if (totalOrderAmount <= 0) {
+      return 1;
+    }
+    if (paidOrderAmount > 0 && paidOrderAmount <= totalOrderAmount) {
+      return paidOrderAmount / totalOrderAmount;
+    }
+    if (discountAmount > 0 && discountAmount < totalOrderAmount) {
+      return (totalOrderAmount - discountAmount) / totalOrderAmount;
+    }
+    return 1;
+  }
+
   normalizePharmacyReturnRecord(row) {
     let parsedReturnDetails = null;
     try {
@@ -1431,6 +1447,7 @@ class PaymentService extends BaseService {
     const lineBillByRefId = new Map(
       lineBillRows.map(row => [Number(row.id), row.dataValues || row])
     );
+    const discountMultiplier = this.getOrderDiscountMultiplier(orderDetails);
 
     let computedTotalAmount = 0;
     const branchByRefId = new Map();
@@ -1608,9 +1625,9 @@ class PaymentService extends BaseService {
         const grnId = Number(row.grnId);
         const returnQty = Number(row.returnQuantity || 0);
         const purchaseInfo = purchaseByGrnId.get(grnId);
-        const unitPrice = Number(
-          purchaseInfo?.mrpPerTablet ?? fallbackUnitPrice ?? 0
-        );
+        const unitPrice =
+          Number(purchaseInfo?.mrpPerTablet ?? fallbackUnitPrice ?? 0) *
+          discountMultiplier;
         lineCost += unitPrice * returnQty;
       }
       computedTotalAmount += lineCost;
@@ -1618,7 +1635,11 @@ class PaymentService extends BaseService {
 
     const roundedInputAmount = Number(Number(totalAmount).toFixed(2));
     const roundedComputedAmount = Number(computedTotalAmount.toFixed(2));
-    if (roundedInputAmount !== roundedComputedAmount) {
+    // Client total is indicative; server-computed refund must match what was paid.
+    if (
+      roundedInputAmount > 0 &&
+      Math.abs(roundedInputAmount - roundedComputedAmount) > 0.05
+    ) {
       throw new createError.BadRequest(Constants.PAYABLE_AMOUNT_WRONG);
     }
 
