@@ -408,6 +408,9 @@ const saveHysteroscopySchema = Joi.object({
     .allow(null, ""),
   consultantName: Joi.string()
     .max(255)
+    .allow(null, ""),
+  finalDiagnosisAfterOperation: Joi.string()
+    .max(255)
     .allow(null, "")
 });
 

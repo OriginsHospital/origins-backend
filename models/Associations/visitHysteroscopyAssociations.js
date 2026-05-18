@@ -117,6 +117,10 @@ const VisitHysteroscopyAssociations = MySqlConnection._instance.define(
     consultantName: {
       type: Sequelize.DataTypes.STRING(255),
       allowNull: true
+    },
+    finalDiagnosisAfterOperation: {
+      type: Sequelize.DataTypes.STRING(255),
+      allowNull: true
     }
   },
   {
