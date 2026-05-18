@@ -1250,6 +1250,37 @@ class PaymentService extends BaseService {
       }
     }
 
+    if (orderInformation?.purchasedItems && orderDetails?.orderDetails) {
+      const { byRefId } = this.buildOrderDetailsMap(orderDetails.orderDetails);
+      let purchasedItems = orderInformation.purchasedItems;
+      if (typeof purchasedItems === "string") {
+        try {
+          purchasedItems = JSON.parse(purchasedItems);
+        } catch (err) {
+          purchasedItems = [];
+        }
+      }
+      if (Array.isArray(purchasedItems)) {
+        orderInformation.purchasedItems = purchasedItems.map(item => {
+          const refId = Number(item?.refId);
+          const raw = byRefId.get(refId);
+          const hasPurchaseDetails =
+            Array.isArray(item?.purchaseDetails) &&
+            item.purchaseDetails.length > 0;
+          const rawPurchaseDetails = Array.isArray(raw?.purchaseDetails)
+            ? raw.purchaseDetails
+            : [];
+          if (!hasPurchaseDetails && rawPurchaseDetails.length > 0) {
+            return {
+              ...item,
+              purchaseDetails: rawPurchaseDetails
+            };
+          }
+          return item;
+        });
+      }
+    }
+
     let itemReturnHistory = await this.stockMySqlConnection
       .query(
         `SELECT id, orderId, returnDetails, returnedDate, totalAmount
@@ -1488,28 +1519,64 @@ class PaymentService extends BaseService {
           }
         }
 
+        // Order may retain GRN ids while usedQuantity is zeroed in stored JSON.
+        if (remainingQty > 0 && normalizedReturnInfo.length === 0) {
+          const maxReturnable = Math.max(0, purchasedQty - alreadyReturned);
+          let assignQty = Math.min(remainingQty, maxReturnable);
+          for (const pd of purchaseDetails) {
+            if (assignQty <= 0) break;
+            const grnId = Number(pd.grnId);
+            if (!grnId) continue;
+            normalizedReturnInfo.push({
+              grnId,
+              returnQuantity: assignQty
+            });
+            assignQty = 0;
+          }
+          remainingQty =
+            requestedQty -
+            normalizedReturnInfo.reduce(
+              (sum, row) => sum + Number(row.returnQuantity || 0),
+              0
+            );
+        }
+
         // Legacy fallback: if orderDetails does not retain purchase split,
         // map to any active GRN line for this item in the same branch.
         if (remainingQty > 0 && normalizedReturnInfo.length === 0) {
           const branchId = branchByRefId.get(refId);
           if (branchId) {
-            const fallbackGrnRows = await this.stockMySqlConnection.query(
-              `SELECT gia.grnId
+            const fallbackGrnQuery = `SELECT gia.grnId
                FROM stockmanagement.grn_items_associations gia
                INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
                WHERE gm.branchId = :branchId
                  AND gia.itemId = :itemId
-                 AND IFNULL(gia.isReturned, 0) = 0
+                 {returnedFilter}
                ORDER BY gia.expiryDate ASC, gia.id ASC
-               LIMIT 1`,
+               LIMIT 1`;
+            const replacements = {
+              branchId: Number(branchId),
+              itemId: Number(itemId)
+            };
+            let fallbackGrnRows = await this.stockMySqlConnection.query(
+              fallbackGrnQuery.replace(
+                "{returnedFilter}",
+                "AND IFNULL(gia.isReturned, 0) = 0"
+              ),
               {
                 type: Sequelize.QueryTypes.SELECT,
-                replacements: {
-                  branchId: Number(branchId),
-                  itemId: Number(itemId)
-                }
+                replacements
               }
             );
+            if (!fallbackGrnRows?.length) {
+              fallbackGrnRows = await this.stockMySqlConnection.query(
+                fallbackGrnQuery.replace("{returnedFilter}", ""),
+                {
+                  type: Sequelize.QueryTypes.SELECT,
+                  replacements
+                }
+              );
+            }
             if (fallbackGrnRows?.length > 0) {
               normalizedReturnInfo.push({
                 grnId: Number(fallbackGrnRows[0].grnId),
@@ -1571,22 +1638,37 @@ class PaymentService extends BaseService {
           const grnId = Number(row.grnId);
 
           // Validate GRN belongs to the same branch and item exists in GRN stock rows.
-          const eligibleRows = await this.stockMySqlConnection.query(
-            `SELECT gia.id
+          const eligibleGrnQuery = `SELECT gia.id
              FROM stockmanagement.grn_items_associations gia
              INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
              WHERE gia.grnId = :grnId
                AND gia.itemId = :itemId
                AND gm.branchId = :branchId
-               AND IFNULL(gia.isReturned, 0) = 0
+               {returnedFilter}
              ORDER BY gia.id DESC
-             LIMIT 1`,
+             LIMIT 1`;
+          const grnQueryReplacements = { grnId, itemId, branchId };
+          let eligibleRows = await this.stockMySqlConnection.query(
+            eligibleGrnQuery.replace(
+              "{returnedFilter}",
+              "AND IFNULL(gia.isReturned, 0) = 0"
+            ),
             {
               type: Sequelize.QueryTypes.SELECT,
-              replacements: { grnId, itemId, branchId },
+              replacements: grnQueryReplacements,
               transaction: stockTransaction
             }
           );
+          if (!eligibleRows?.length) {
+            eligibleRows = await this.stockMySqlConnection.query(
+              eligibleGrnQuery.replace("{returnedFilter}", ""),
+              {
+                type: Sequelize.QueryTypes.SELECT,
+                replacements: grnQueryReplacements,
+                transaction: stockTransaction
+              }
+            );
+          }
 
           if (!eligibleRows?.length) {
             throw new createError.BadRequest(

@@ -344,9 +344,11 @@ SELECT
                 JSON_ARRAYAGG(
                     JSON_OBJECT(
                         'expiryDate', subTable.expiryDate,
-                        'grnId', gm.id,
+                        'grnId', subTable.grnId,
                         'mrpPerTablet', subTable.mrpPerTablet,
                         'usedQuantity', subTable.usedQuantity,
+                        'initialUsedQuantity', subTable.initialUsedQuantity,
+                        'returnedQuantity', subTable.returnedQuantity,
                         'batchNo', gia.batchNo
                     )
                 ) AS purchaseDetails
@@ -367,10 +369,11 @@ SELECT
             ) AS subTable
             INNER JOIN consultation_appointment_line_bills_associations calba 
                 ON calba.id = subTable.refId
-            INNER JOIN stockmanagement.grn_master gm 
+            LEFT JOIN stockmanagement.grn_master gm 
                 ON gm.id = subTable.grnId
-            INNER JOIN stockmanagement.grn_items_associations gia 
+            LEFT JOIN stockmanagement.grn_items_associations gia 
                 ON gia.grnId = gm.id AND gia.itemId = calba.billTypeValue
+            WHERE subTable.grnId IS NOT NULL
             GROUP BY subTable.refId
         ) AS purchaseTable 
         ON purchaseTable.refId = refTable.refId
@@ -443,9 +446,11 @@ SELECT
                 JSON_ARRAYAGG(
                     JSON_OBJECT(
                         'expiryDate', subTable.expiryDate,
-                        'grnId', gm.id,
+                        'grnId', subTable.grnId,
                         'mrpPerTablet', subTable.mrpPerTablet,
                         'usedQuantity', subTable.usedQuantity,
+                        'initialUsedQuantity', subTable.initialUsedQuantity,
+                        'returnedQuantity', subTable.returnedQuantity,
                         'batchNo', gia.batchNo
                     )
                 ) AS purchaseDetails
@@ -466,10 +471,11 @@ SELECT
             ) AS subTable
             INNER JOIN treatment_appointment_line_bills_associations talba 
                 ON talba.id = subTable.refId
-            INNER JOIN stockmanagement.grn_master gm 
+            LEFT JOIN stockmanagement.grn_master gm 
                 ON gm.id = subTable.grnId
-            INNER JOIN stockmanagement.grn_items_associations gia 
+            LEFT JOIN stockmanagement.grn_items_associations gia 
                 ON gia.grnId = gm.id AND gia.itemId = talba.billTypeValue
+            WHERE subTable.grnId IS NOT NULL
             GROUP BY subTable.refId
         ) AS purchaseTable 
         ON purchaseTable.refId = refTable.refId
