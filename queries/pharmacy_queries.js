@@ -306,6 +306,16 @@ const reduceQuantityQuery = `
 	END
 ) and grnId = :grnId
 `;
+
+const restoreQuantityQuery = `
+	UPDATE stockmanagement.grn_items_associations SET totalQuantity  = totalQuantity  + :restoreQuantity
+	WHERE itemId = (
+	CASE 
+		WHEN :type  = 'Consultation' THEN (select billTypeValue from defaultdb.consultation_appointment_line_bills_associations calba where calba.id = :id)
+		WHEN :type  =  'Treatment' THEN (select billTypeValue from defaultdb.treatment_appointment_line_bills_associations talba where talba.id = :id )
+	END
+) and grnId = :grnId
+`;
 const geneatePaymentBreakUpDetailsQuery = `
 	select
 	ppdt.*,
@@ -462,6 +472,7 @@ module.exports = {
   getGrnListQuery,
   pharmacyPurchaseAndStockReductionQuery,
   reduceQuantityQuery,
+  restoreQuantityQuery,
   geneatePaymentBreakUpDetailsQuery,
   grnItemsReturnHistoryQuery,
   getGrnItemsQuery,

@@ -14,6 +14,7 @@ const {
   getGrnListQuery,
   pharmacyPurchaseAndStockReductionQuery,
   reduceQuantityQuery,
+  restoreQuantityQuery,
   geneatePaymentBreakUpDetailsQuery,
   grnItemsReturnHistoryQuery,
   getGrnItemsQuery,
@@ -461,6 +462,51 @@ class PharmacyService {
     purchaseQuantity,
     itemPurchaseInformation
   ) {
+    const existingTemp = await PharmacyPurchaseDetailsTemp.findOne({
+      where: { refId: id }
+    });
+
+    if (purchaseQuantity === 0 && existingTemp?.purchaseDetails) {
+      let oldPurchaseDetails = [];
+      try {
+        oldPurchaseDetails = JSON.parse(existingTemp.purchaseDetails);
+      } catch (err) {
+        oldPurchaseDetails = [];
+      }
+      if (!Array.isArray(oldPurchaseDetails)) {
+        oldPurchaseDetails = [];
+      }
+
+      const stockRestore = oldPurchaseDetails
+        .filter(data => data?.grnId)
+        .map(data => {
+          const usedQty = Number(
+            data.initialUsedQuantity ?? data.usedQuantity ?? 0
+          );
+          const returnedQty = Number(data.returnedQuantity ?? 0);
+          const restoreQuantity = usedQty - returnedQty;
+          if (restoreQuantity <= 0) {
+            return Promise.resolve();
+          }
+          return this.mysqlConnection
+            .query(restoreQuantityQuery, {
+              replacements: {
+                id,
+                restoreQuantity,
+                type,
+                grnId: data.grnId
+              }
+            })
+            .catch(err => {
+              console.log("error while restoring stock quantity", err);
+              throw new createError.InternalServerError(
+                Constants.SOMETHING_ERROR_OCCURRED
+              );
+            });
+        });
+      await Promise.all(stockRestore);
+    }
+
     const insertPayload = {
       refId: id,
       purchaseDetails: JSON.stringify(itemPurchaseInformation),
