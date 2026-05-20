@@ -550,6 +550,7 @@ from
 	-- Consultation Payments - Pharmacy, Lab, Scans, Embryology
 	select
 		odm.id,
+		'ORDER_DETAILS' as paymentSource,
 		odm.paymentMode,
 		odm.appointmentId,
 		odm.type,
@@ -576,6 +577,7 @@ UNION ALL
 	-- Treatment Payments - Pharmacy, Lab, Scans, Embryology
 	select
 		odm.id,
+		'ORDER_DETAILS' as paymentSource,
 		odm.paymentMode,
 		odm.appointmentId,
 		odm.type,
@@ -602,6 +604,7 @@ UNION ALL
 	-- Treatment Payments - MileStones
 	select
 		tom.id,
+		'TREATMENT_ORDER' as paymentSource,
 		tom.paymentMode,
 		NULL as appointmentId,
 		tom.type,

@@ -22,6 +22,11 @@ const {
 const patientScanFormFAssociations = require("../models/Associations/patientScanFormFAssociation");
 const OrderDetailsMasterModel = require("../models/Master/OrderDetailsMasterModel");
 const TreatmentOrdersMaster = require("../models/Order/treatmentOrdersMaster");
+const treatmentConstants = require("../constants/treatmentConstants");
+
+const MILESTONE_PRODUCT_TYPES = treatmentConstants.PACKAGE_AMOUNT_PRODUCT_TYPE_MAPPING.map(
+  mapping => mapping.productEnum
+);
 
 class PatientHistoryService {
   constructor(request, response, next) {
@@ -29,6 +34,89 @@ class PatientHistoryService {
     this._response = response;
     this._next = next;
     this.mySqlConnection = MySqlConnection._instance;
+  }
+
+  async resolvePaymentRecordForMutation(paymentId) {
+    const preferredSource = String(
+      this._request.query?.source || this._request.body?.source || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const treatmentOrder = await TreatmentOrdersMaster.findByPk(paymentId);
+    const orderDetail = await OrderDetailsMasterModel.findByPk(paymentId);
+
+    if (preferredSource === "TREATMENT_ORDER") {
+      if (!treatmentOrder) {
+        throw new createError.NotFound("Payment record not found");
+      }
+      return { record: treatmentOrder, source: "TREATMENT_ORDER" };
+    }
+
+    if (preferredSource === "ORDER_DETAILS") {
+      if (!orderDetail) {
+        throw new createError.NotFound("Payment record not found");
+      }
+      return { record: orderDetail, source: "ORDER_DETAILS" };
+    }
+
+    if (treatmentOrder && orderDetail) {
+      if (MILESTONE_PRODUCT_TYPES.includes(treatmentOrder.productType)) {
+        return { record: treatmentOrder, source: "TREATMENT_ORDER" };
+      }
+      return { record: orderDetail, source: "ORDER_DETAILS" };
+    }
+
+    if (treatmentOrder) {
+      return { record: treatmentOrder, source: "TREATMENT_ORDER" };
+    }
+
+    if (orderDetail) {
+      return { record: orderDetail, source: "ORDER_DETAILS" };
+    }
+
+    throw new createError.NotFound("Payment record not found");
+  }
+
+  buildTreatmentOrderUpdateData(existingOrder, body) {
+    const {
+      totalOrderAmount,
+      discountAmount,
+      paidOrderAmount,
+      paymentMode,
+      productType,
+      orderDate
+    } = body;
+    const updateData = {};
+
+    if (totalOrderAmount !== undefined) {
+      updateData.totalOrderAmount = totalOrderAmount;
+    }
+    if (discountAmount !== undefined) {
+      updateData.discountAmount = discountAmount;
+    }
+    if (paidOrderAmount !== undefined) {
+      updateData.paidOrderAmount = paidOrderAmount;
+      const discountValue =
+        discountAmount !== undefined
+          ? parseFloat(discountAmount) || 0
+          : parseFloat(existingOrder.discountAmount) || 0;
+      const paidValue = parseFloat(paidOrderAmount) || 0;
+      updateData.paidOrderAmountBeforeDiscount = String(
+        paidValue + discountValue
+      );
+    }
+    if (paymentMode !== undefined) {
+      updateData.paymentMode = paymentMode;
+    }
+    if (productType !== undefined) {
+      updateData.productType = productType;
+    }
+    if (orderDate !== undefined) {
+      updateData.orderDate = orderDate;
+    }
+
+    return updateData;
   }
 
   async getPatientVisitHistoryService() {
@@ -365,37 +453,46 @@ class PatientHistoryService {
   // Update payment record
   async updatePaymentHistoryService() {
     const { paymentId } = this._request.params;
-    const {
-      totalOrderAmount,
-      discountAmount,
-      paidOrderAmount,
-      paymentMode,
-      productType,
-      orderDate
-    } = this._request.body;
 
     if (!paymentId) {
       throw new createError.BadRequest("Payment ID is required");
     }
 
-    // First, determine which table this payment belongs to
-    // Check if it exists in order_details_master
-    const orderDetail = await OrderDetailsMasterModel.findByPk(paymentId);
+    const { record, source } = await this.resolvePaymentRecordForMutation(
+      paymentId
+    );
 
-    if (orderDetail) {
-      // Update in order_details_master
+    if (source === "ORDER_DETAILS") {
       const updateData = {};
-      if (totalOrderAmount !== undefined)
-        updateData.totalOrderAmount = totalOrderAmount;
-      if (discountAmount !== undefined)
-        updateData.discountAmount = discountAmount;
-      if (paidOrderAmount !== undefined)
-        updateData.paidOrderAmount = paidOrderAmount;
-      if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
-      if (productType !== undefined) updateData.productType = productType;
-      if (orderDate !== undefined) updateData.orderDate = orderDate;
+      const {
+        totalOrderAmount,
+        discountAmount,
+        paidOrderAmount,
+        paymentMode,
+        productType,
+        orderDate
+      } = this._request.body;
 
-      await orderDetail.update(updateData).catch(err => {
+      if (totalOrderAmount !== undefined) {
+        updateData.totalOrderAmount = totalOrderAmount;
+      }
+      if (discountAmount !== undefined) {
+        updateData.discountAmount = discountAmount;
+      }
+      if (paidOrderAmount !== undefined) {
+        updateData.paidOrderAmount = paidOrderAmount;
+      }
+      if (paymentMode !== undefined) {
+        updateData.paymentMode = paymentMode;
+      }
+      if (productType !== undefined) {
+        updateData.productType = productType;
+      }
+      if (orderDate !== undefined) {
+        updateData.orderDate = orderDate;
+      }
+
+      await record.update(updateData).catch(err => {
         console.log(
           "Error while updating payment in order_details_master",
           err
@@ -405,39 +502,25 @@ class PatientHistoryService {
         );
       });
 
-      return orderDetail;
+      return record;
     }
 
-    // Check if it exists in treatment_orders_master
-    const treatmentOrder = await TreatmentOrdersMaster.findByPk(paymentId);
+    const updateData = this.buildTreatmentOrderUpdateData(
+      record,
+      this._request.body
+    );
 
-    if (treatmentOrder) {
-      // Update in treatment_orders_master
-      const updateData = {};
-      if (totalOrderAmount !== undefined)
-        updateData.totalOrderAmount = totalOrderAmount;
-      if (discountAmount !== undefined)
-        updateData.discountAmount = discountAmount;
-      if (paidOrderAmount !== undefined)
-        updateData.paidOrderAmount = paidOrderAmount;
-      if (paymentMode !== undefined) updateData.paymentMode = paymentMode;
-      if (productType !== undefined) updateData.productType = productType;
-      if (orderDate !== undefined) updateData.orderDate = orderDate;
+    await record.update(updateData).catch(err => {
+      console.log(
+        "Error while updating payment in treatment_orders_master",
+        err
+      );
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
 
-      await treatmentOrder.update(updateData).catch(err => {
-        console.log(
-          "Error while updating payment in treatment_orders_master",
-          err
-        );
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-      return treatmentOrder;
-    }
-
-    throw new createError.NotFound("Payment record not found");
+    return record;
   }
 
   // Delete payment record
@@ -448,44 +531,30 @@ class PatientHistoryService {
       throw new createError.BadRequest("Payment ID is required");
     }
 
-    // First, determine which table this payment belongs to
-    // Check if it exists in order_details_master
-    const orderDetail = await OrderDetailsMasterModel.findByPk(paymentId);
+    const { record, source } = await this.resolvePaymentRecordForMutation(
+      paymentId
+    );
 
-    if (orderDetail) {
-      // Delete from order_details_master
-      await orderDetail.destroy().catch(err => {
-        console.log(
-          "Error while deleting payment from order_details_master",
-          err
-        );
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
+    await record.destroy().catch(err => {
+      console.log(
+        `Error while deleting payment from ${
+          source === "TREATMENT_ORDER"
+            ? "treatment_orders_master"
+            : "order_details_master"
+        }`,
+        err
+      );
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
 
-      return { message: "Payment record deleted successfully" };
-    }
-
-    // Check if it exists in treatment_orders_master
-    const treatmentOrder = await TreatmentOrdersMaster.findByPk(paymentId);
-
-    if (treatmentOrder) {
-      // Delete from treatment_orders_master
-      await treatmentOrder.destroy().catch(err => {
-        console.log(
-          "Error while deleting payment from treatment_orders_master",
-          err
-        );
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
-      return { message: "Payment record deleted successfully" };
-    }
-
-    throw new createError.NotFound("Payment record not found");
+    return {
+      message: "Payment record deleted successfully",
+      source,
+      productType: record.productType || null,
+      visitId: record.visitId || null
+    };
   }
 
   async getPatientPharmacyHistoryService() {
