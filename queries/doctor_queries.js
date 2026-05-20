@@ -778,7 +778,23 @@ patientLabTestsLatest AS (
 				'appointmentReason', appointmentReason,
 				'billTypeValue', billTypeValue,
                 'billTypeId', billTypeId,
-				'labTestName', (SELECT name FROM lab_test_master ltm WHERE ltm.id = billTypeValue)
+				'labTestName', (SELECT name FROM lab_test_master ltm WHERE ltm.id = billTypeValue),
+				'hasReport', (
+					SELECT IF(
+						EXISTS (
+							SELECT 1
+							FROM lab_test_results ltr
+							WHERE ltr.appointmentId = patientLabTestsList.appointmentId
+								AND ltr.type = patientLabTestsList.type
+								AND ltr.labTestId = patientLabTestsList.billTypeValue
+								AND COALESCE(ltr.isSpouse, 0) = 0
+								AND ltr.labTestResult IS NOT NULL
+								AND TRIM(ltr.labTestResult) <> ''
+						),
+						1,
+						0
+					)
+				)
 			) 
 		) AS labTestsList
 	FROM patientLabTestsList 
