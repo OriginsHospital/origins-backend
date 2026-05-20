@@ -11,6 +11,7 @@ const {
   donorPaymentCheckQuery
 } = require("../queries/visit_queries");
 const patientVisitsAssociation = require("../models/Associations/patientVisitsAssociation");
+const { assertPackageEditAllowed } = require("../constants/packageEditAccess");
 const {
   createVisitSchema,
   editVisitSchema,
@@ -486,6 +487,8 @@ class VisitsService {
   }
 
   async editPackageService() {
+    assertPackageEditAllowed(this._request);
+
     const validatedPackageData = await editPackageSchema.validateAsync(
       this._request.body
     );

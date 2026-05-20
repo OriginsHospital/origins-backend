@@ -192,5 +192,6 @@ module.exports = {
   DOCTOR_STATUS_EDIT_FORBIDDEN:
     "You are not authorized to change doctor active status",
   REVENUE_NEW_ENTRY_EDIT_FORBIDDEN:
-    "You are not authorized to modify revenue report entries"
+    "You are not authorized to modify revenue report entries",
+  PACKAGE_EDIT_FORBIDDEN: "You are not authorized to edit patient packages"
 };
