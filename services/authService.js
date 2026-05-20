@@ -27,6 +27,7 @@ const {
 } = require("../queries/auth_queries");
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
+const { enrichUserWithAllBranches } = require("../constants/allBranchesAccess");
 class AuthService {
   constructor(request, response, next) {
     this.jwtObject = new JwtHelper();
@@ -487,7 +488,11 @@ class AuthService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
-    return data.length > 0 ? data[0] : [];
+    const userInfo = data.length > 0 ? data[0] : [];
+    if (lodash.isEmpty(userInfo)) {
+      return userInfo;
+    }
+    return enrichUserWithAllBranches(userInfo);
   }
 
   async rejectUserService() {

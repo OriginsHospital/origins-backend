@@ -7,6 +7,10 @@ const {
 } = require("../schemas/authSchemas");
 const { asyncHandler } = require("./errorHandlers");
 const JwtHelper = require("../utils/jwtUtils");
+const {
+  hasAllBranchesAccess,
+  getAllBranchesDetails
+} = require("../constants/allBranchesAccess");
 
 const sessionExists = (req, res, next) => {
   if (req.session.userId) {
@@ -100,6 +104,9 @@ const tokenVerified = asyncHandler(async (req, res, next) => {
     );
   }
   req.userDetails = JSON.parse(userDecodedData.aud);
+  if (hasAllBranchesAccess(req.userDetails?.email)) {
+    req.userDetails.branchDetails = await getAllBranchesDetails();
+  }
   next();
 });
 
