@@ -1107,7 +1107,7 @@ class VisitsService {
             file,
             hysteroscopyId
           );
-          await VisitHysteroscopyReferenceImages.create(
+          const createdImage = await VisitHysteroscopyReferenceImages.create(
             {
               hysteroscopyId,
               imageUrl,
@@ -1125,7 +1125,11 @@ class VisitsService {
             );
           });
 
-          uploadedImages.push({ imageUrl, imageKey });
+          uploadedImages.push({
+            id: createdImage.id,
+            imageUrl,
+            imageKey
+          });
         }
       }
 
