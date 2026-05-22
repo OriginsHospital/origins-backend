@@ -238,12 +238,26 @@ class ReportsService {
   }
 
   async getStockExpiryService() {
+    const { branchId, reportType, nearExpireDays } = this._request.query;
+    const parsedNearExpireDays = Number.parseInt(nearExpireDays, 10);
+    const replacements = {
+      branchId:
+        branchId != null && String(branchId).trim() !== ""
+          ? Number.parseInt(branchId, 10)
+          : null,
+      reportType: reportType ? String(reportType).trim() : null,
+      nearExpireDays: Number.isFinite(parsedNearExpireDays)
+        ? parsedNearExpireDays
+        : 90
+    };
+
     return await this.mySqlConnection
       .query(stockExpiryReportQuery, {
+        replacements,
         type: Sequelize.QueryTypes.SELECT
       })
       .catch(err => {
-        console.log("Error while fetching prescribed Purchase Report", err);
+        console.log("Error while fetching stock expiry report", err);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );

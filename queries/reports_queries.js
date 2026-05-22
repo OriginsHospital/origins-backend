@@ -277,40 +277,54 @@ const prescribedPurchaseReportQuery = `
 `;
 
 const stockExpiryReportQuery = `
-    with expiryDuration as (
-	select gia.id, DATEDIFF(gia.expiryDate, CAST(NOW() as DATE)) as duration from stockmanagement.grn_items_associations gia 
+    WITH expiryDuration AS (
+        SELECT gia.id, DATEDIFF(gia.expiryDate, CAST(NOW() AS DATE)) AS duration
+        FROM stockmanagement.grn_items_associations gia
     )
-    select (select im.itemName from stockmanagement.item_master im where im.id = gia.itemId) as itemName,
-    gia.batchNo, 
-    (select gia.totalQuantity * gia.ratePerTablet) as rate,
-    gia.ratePerTablet ,
-    gia.expiryDate,
-    gm.grnNo,
-    gia.totalQuantity  as totalStockLeft,
-    (
-        CASE 
-            WHEN ed.duration < 0 THEN 'NA'
-            ELSE ed.duration
-        END
-        
-    ) as daysToExpire,
-    (
-        CASE 
-            WHEN ed.duration <0 THEN ABS(ed.duration)
-            ELSE 'NA'
-        END	
-    ) as daysSinceExpire,
-    	(
-   		CASE
-   			WHEN ed.duration < 7  THEN '1'
-   			ELSE 0
-   		END
-   	) as showRedFlag
-    from 
-    stockmanagement.grn_items_associations gia 
-    INNER JOIN expiryDuration ed on ed.id = gia.id
-    INNER JOIN stockmanagement.grn_master gm on gm.id = gia.grnId
-    order by gia.expiryDate ASC;
+    SELECT
+        (SELECT im.itemName FROM stockmanagement.item_master im WHERE im.id = gia.itemId) AS itemName,
+        gia.batchNo,
+        (gia.totalQuantity * gia.ratePerTablet) AS rate,
+        gia.ratePerTablet,
+        gia.expiryDate,
+        gm.grnNo,
+        gm.branchId,
+        (SELECT bm.name FROM defaultdb.branch_master bm WHERE bm.id = gm.branchId) AS branchName,
+        gia.totalQuantity AS totalStockLeft,
+        (
+            CASE
+                WHEN ed.duration < 0 THEN 'NA'
+                ELSE ed.duration
+            END
+        ) AS daysToExpire,
+        (
+            CASE
+                WHEN ed.duration < 0 THEN ABS(ed.duration)
+                ELSE 'NA'
+            END
+        ) AS daysSinceExpire,
+        (
+            CASE
+                WHEN ed.duration < 7 THEN '1'
+                ELSE 0
+            END
+        ) AS showRedFlag,
+        ed.duration AS daysUntilExpiry
+    FROM stockmanagement.grn_items_associations gia
+    INNER JOIN expiryDuration ed ON ed.id = gia.id
+    INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+    WHERE gia.totalQuantity > 0
+        AND (:branchId IS NULL OR gm.branchId = :branchId)
+        AND (
+            :reportType IS NULL
+            OR :reportType = ''
+            OR (:reportType = 'expired' AND ed.duration < 0)
+            OR (:reportType = 'nearExpire' AND ed.duration >= 0 AND ed.duration <= :nearExpireDays)
+        )
+    ORDER BY
+        CASE WHEN :reportType = 'nearExpire' THEN ed.duration END ASC,
+        CASE WHEN :reportType = 'expired' THEN ed.duration END DESC,
+        gia.expiryDate ASC;
 `;
 
 const salesReportQuery = `
