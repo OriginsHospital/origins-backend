@@ -22,6 +22,9 @@ const TicketsModel = require("../models/Master/ticketsMaster");
 const TicketCommentsModel = require("../models/Master/ticketCommentsModel");
 const TicketActivityLogsModel = require("../models/Master/ticketActivityLogsModel");
 const TicketTagsModel = require("../models/Master/ticketTagsModel");
+const {
+  isTicketingGlobalViewer
+} = require("../constants/ticketingGlobalViewers");
 
 class TicketsService {
   constructor(request, response, next) {
@@ -30,6 +33,7 @@ class TicketsService {
     this._next = next;
     this.mysqlConnection = MySqlConnection._instance;
     this.currentUserId = this._request?.userDetails?.id;
+    this.currentUserEmail = this._request?.userDetails?.email;
     this.currentUserRole = this._request?.userDetails?.roleDetails?.name;
   }
 
@@ -38,9 +42,15 @@ class TicketsService {
     return this.currentUserRole?.toLowerCase() === "admin";
   }
 
+  canViewAllTickets() {
+    return isTicketingGlobalViewer(this.currentUserEmail);
+  }
+
   // Check if user can access ticket (user-level security: only creator or assignee)
   canAccessTicket(ticket) {
-    // All users (including admins) can only access tickets they created or are assigned to
+    if (this.canViewAllTickets()) {
+      return true;
+    }
     return (
       ticket.assigned_to === this.currentUserId ||
       ticket.created_by === this.currentUserId ||
@@ -341,16 +351,17 @@ class TicketsService {
     } = validatedQuery;
     const offset = (page - 1) * limit;
 
-    // User-based filtering: ALL users can only see tickets they created or are assigned to
-    // This ensures user-level security - users only see tickets relevant to them
-    let userIdFilter = this.currentUserId;
-    let finalAssignedTo = null; // Ignore assignedTo filter to enforce user-level security
+    const viewAllTickets = this.canViewAllTickets();
+    // Global viewers see every ticket; others only see tickets they created or are assigned to
+    let userIdFilter = viewAllTickets ? null : this.currentUserId;
+    let finalAssignedTo = viewAllTickets ? assignedTo || null : null;
 
     console.log("Getting tickets with filters:", {
       status: status || null,
       priority: priority || null,
       assignedTo: finalAssignedTo || null,
       userId: userIdFilter,
+      viewAllTickets,
       search: search || null,
       page,
       limit,
@@ -461,12 +472,7 @@ class TicketsService {
 
     const ticket = result[0];
 
-    // User-level security: Users can only view tickets they created or are assigned to
-    // Handle both snake_case (from raw query) and camelCase (from model) field names
-    const createdBy = ticket.created_by || ticket.createdBy;
-    const assignedTo = ticket.assigned_to || ticket.assignedTo;
-
-    if (createdBy !== this.currentUserId && assignedTo !== this.currentUserId) {
+    if (!this.canAccessTicket(ticket)) {
       throw new createError.Forbidden(
         "You don't have permission to access this ticket"
       );
@@ -957,11 +963,7 @@ class TicketsService {
       throw new createError.NotFound("Ticket not found");
     }
 
-    // User-level security: Users can only update tickets they created or are assigned to
-    if (
-      existingTicket.createdBy !== this.currentUserId &&
-      existingTicket.assignedTo !== this.currentUserId
-    ) {
+    if (!this.canAccessTicket(existingTicket)) {
       throw new createError.Forbidden(
         "You don't have permission to update this ticket"
       );
@@ -1062,11 +1064,7 @@ class TicketsService {
       throw new createError.NotFound("Ticket not found");
     }
 
-    // User-level security: Users can only update status of tickets they created or are assigned to
-    if (
-      existingTicket.createdBy !== this.currentUserId &&
-      existingTicket.assignedTo !== this.currentUserId
-    ) {
+    if (!this.canAccessTicket(existingTicket)) {
       throw new createError.Forbidden(
         "You don't have permission to update this ticket status"
       );

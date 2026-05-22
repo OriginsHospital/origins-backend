@@ -15,6 +15,9 @@ const {
   getTasksQuerySchema
 } = require("../schemas/tasksSchema");
 const TasksModel = require("../models/Master/tasksMaster");
+const {
+  isTicketingGlobalViewer
+} = require("../constants/ticketingGlobalViewers");
 
 class TasksService {
   constructor(request, response, next) {
@@ -23,12 +26,45 @@ class TasksService {
     this._next = next;
     this.mysqlConnection = MySqlConnection._instance;
     this.currentUserId = this._request?.userDetails?.id;
+    this.currentUserEmail = this._request?.userDetails?.email;
     this.currentUserRole = this._request?.userDetails?.roleDetails?.name;
   }
 
   // Check if user is admin
   isAdmin() {
     return this.currentUserRole?.toLowerCase() === "admin";
+  }
+
+  canViewAllTasks() {
+    return isTicketingGlobalViewer(this.currentUserEmail);
+  }
+
+  async canAccessTask(task) {
+    if (this.canViewAllTasks()) {
+      return true;
+    }
+
+    const createdBy = task.created_by ?? task.createdBy;
+    const assignedTo = task.assigned_to ?? task.assignedTo;
+    const taskId = task.id;
+
+    if (createdBy === this.currentUserId || assignedTo === this.currentUserId) {
+      return true;
+    }
+
+    if (taskId) {
+      const [assigneeCheck] = await this.mysqlConnection.query(
+        `SELECT COUNT(*) as count FROM task_assignees WHERE task_id = ? AND user_id = ?`,
+        {
+          replacements: [taskId, this.currentUserId]
+        }
+      );
+      if (assigneeCheck[0]?.count > 0) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   // Get branch code from user's branch details
@@ -208,9 +244,9 @@ class TasksService {
       const hasStatusFilter = statusValue !== null;
       const hasSearchFilter = searchValue !== null;
 
-      // User-based filtering: ALL users can only see tasks they created or are assigned to
-      // This ensures user-level security - users only see tasks relevant to them
-      let userIdFilter = this.currentUserId;
+      const viewAllTasks = this.canViewAllTasks();
+      // Global viewers see every task; others only see tasks they created or are assigned to
+      let userIdFilter = viewAllTasks ? null : this.currentUserId;
       const hasUserIdFilter = userIdFilter !== null;
 
       console.log("Task query params:", {
@@ -223,6 +259,7 @@ class TasksService {
         hasSearchFilter,
         hasUserIdFilter,
         userIdFilter,
+        viewAllTasks,
         isAdmin: this.isAdmin()
       });
 
@@ -511,11 +548,7 @@ class TasksService {
 
     const task = result[0];
 
-    // User-level security: Users can only view tasks they created or are assigned to
-    if (
-      task.created_by !== this.currentUserId &&
-      task.assigned_to !== this.currentUserId
-    ) {
+    if (!(await this.canAccessTask(task))) {
       throw new createError.Forbidden(
         "You do not have permission to view this task"
       );
@@ -761,19 +794,7 @@ class TasksService {
         throw new createError.NotFound("Task not found");
       }
 
-      // User-level security: Users can only update tasks they created or are assigned to
-      // Check if user is in task_assignees table
-      const [assigneeCheck] = await this.mysqlConnection.query(
-        `SELECT COUNT(*) as count FROM task_assignees WHERE task_id = ? AND user_id = ?`,
-        {
-          replacements: [taskId, this.currentUserId]
-        }
-      );
-
-      const isAssigned =
-        assigneeCheck[0]?.count > 0 || task.assignedTo === this.currentUserId;
-
-      if (task.createdBy !== this.currentUserId && !isAssigned) {
+      if (!(await this.canAccessTask(task))) {
         throw new createError.Forbidden(
           "You do not have permission to update this task"
         );
@@ -899,11 +920,7 @@ class TasksService {
         throw new createError.NotFound("Task not found");
       }
 
-      // User-level security: Users can only update tasks they created or are assigned to
-      if (
-        task.createdBy !== this.currentUserId &&
-        task.assignedTo !== this.currentUserId
-      ) {
+      if (!(await this.canAccessTask(task))) {
         throw new createError.Forbidden(
           "You do not have permission to update this task"
         );
