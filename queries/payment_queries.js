@@ -314,7 +314,8 @@ SELECT
     JSON_OBJECT(
         'totalOrderAmount', odm.totalOrderAmount,
         'paidOrderAmount', odm.paidOrderAmount,
-        'discountAmount', odm.discountAmount
+        'discountAmount', odm.discountAmount,
+        'couponCode', odm.couponCode
     ) AS orderSummary,
     (
         SELECT JSON_ARRAYAGG(
@@ -416,7 +417,8 @@ SELECT
     JSON_OBJECT(
         'totalOrderAmount', odm.totalOrderAmount,
         'paidOrderAmount', odm.paidOrderAmount,
-        'discountAmount', odm.discountAmount
+        'discountAmount', odm.discountAmount,
+        'couponCode', odm.couponCode
     ) AS orderSummary,
     (
         SELECT JSON_ARRAYAGG(

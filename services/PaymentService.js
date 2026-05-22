@@ -1336,6 +1336,58 @@ class PaymentService extends BaseService {
     return 1;
   }
 
+  getUndiscountedLineTotalFromPurchaseDetails(purchaseDetails) {
+    if (!Array.isArray(purchaseDetails)) {
+      return 0;
+    }
+    return purchaseDetails.reduce((sum, pd) => {
+      const qty = Number(pd?.initialUsedQuantity ?? pd?.usedQuantity ?? 0);
+      return sum + Number(pd?.mrpPerTablet || 0) * qty;
+    }, 0);
+  }
+
+  /** Allocates order-level coupon/discount across line items by stored line totals. */
+  getPharmacyLinePaidRatio(orderRow, parsedOrderDetails) {
+    const sumLineTotals = (parsedOrderDetails || []).reduce(
+      (sum, item) => sum + Number(item?.totalCost || 0),
+      0
+    );
+    const paidOrderAmount = Number(orderRow?.paidOrderAmount || 0);
+    if (sumLineTotals > 0 && paidOrderAmount >= 0) {
+      return paidOrderAmount / sumLineTotals;
+    }
+    return this.getOrderDiscountMultiplier(orderRow);
+  }
+
+  getPharmacyRefundGrnUnitPrice({
+    orderEntry,
+    lineBill,
+    purchaseInfo,
+    linePaidRatio
+  }) {
+    const paidLineTotal = Number(orderEntry?.totalCost || 0);
+    const paidLineEffective = paidLineTotal * Number(linePaidRatio || 1);
+    const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
+      ? orderEntry.purchaseDetails
+      : [];
+    const undiscountedLineTotal = this.getUndiscountedLineTotalFromPurchaseDetails(
+      purchaseDetails
+    );
+    const mrpPerTablet = Number(purchaseInfo?.mrpPerTablet || 0);
+    const purchasedQty = Number(lineBill?.purchaseQuantity || 0);
+
+    if (paidLineEffective <= 0) {
+      return 0;
+    }
+    if (undiscountedLineTotal > 0 && mrpPerTablet > 0) {
+      return (paidLineEffective / undiscountedLineTotal) * mrpPerTablet;
+    }
+    if (purchasedQty > 0) {
+      return paidLineEffective / purchasedQty;
+    }
+    return mrpPerTablet;
+  }
+
   normalizePharmacyReturnRecord(row) {
     let parsedReturnDetails = null;
     try {
@@ -1447,7 +1499,10 @@ class PaymentService extends BaseService {
     const lineBillByRefId = new Map(
       lineBillRows.map(row => [Number(row.id), row.dataValues || row])
     );
-    const discountMultiplier = this.getOrderDiscountMultiplier(orderDetails);
+    const linePaidRatio = this.getPharmacyLinePaidRatio(
+      orderDetails,
+      parsedOrderDetails
+    );
 
     let computedTotalAmount = 0;
     const branchByRefId = new Map();
@@ -1468,11 +1523,6 @@ class PaymentService extends BaseService {
       const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
         ? orderEntry.purchaseDetails
         : [];
-      const fallbackUnitPrice =
-        Number(lineBill.purchaseQuantity || 0) > 0
-          ? Number(orderEntry?.totalCost || 0) /
-            Number(lineBill.purchaseQuantity || 1)
-          : 0;
       const purchaseByGrnId = new Map(
         purchaseDetails.map(pd => [Number(pd.grnId), pd])
       );
@@ -1625,9 +1675,12 @@ class PaymentService extends BaseService {
         const grnId = Number(row.grnId);
         const returnQty = Number(row.returnQuantity || 0);
         const purchaseInfo = purchaseByGrnId.get(grnId);
-        const unitPrice =
-          Number(purchaseInfo?.mrpPerTablet ?? fallbackUnitPrice ?? 0) *
-          discountMultiplier;
+        const unitPrice = this.getPharmacyRefundGrnUnitPrice({
+          orderEntry,
+          lineBill,
+          purchaseInfo,
+          linePaidRatio
+        });
         lineCost += unitPrice * returnQty;
       }
       computedTotalAmount += lineCost;
