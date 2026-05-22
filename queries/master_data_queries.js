@@ -241,6 +241,33 @@ const getOtDefaultPersonQuery = `SELECT
 FROM
 	ot_person_default_master opdm`;
 
+const getAllPharmacyKitsQuery = `
+SELECT
+    pkm.id,
+    pkm.kitName,
+    pkm.kitValue,
+    pkm.medicines,
+    pkm.isActive,
+    (SELECT u.fullName FROM users u WHERE u.id = pkm.createdBy) AS createdBy,
+    (SELECT u.fullName FROM users u WHERE u.id = pkm.updatedBy) AS updatedBy,
+    pkm.createdAt,
+    pkm.updatedAt
+FROM pharmacy_kit_master pkm
+ORDER BY pkm.kitName
+`;
+
+const getActivePharmacyKitsQuery = `
+SELECT
+    pkm.id,
+    pkm.kitName,
+    pkm.kitValue,
+    pkm.medicines,
+    pkm.isActive
+FROM pharmacy_kit_master pkm
+WHERE pkm.isActive = 1
+ORDER BY pkm.kitName
+`;
+
 module.exports = {
   getAllAppointmentReasonsQuery,
   getAllLabTestGroupQuery,
@@ -257,5 +284,7 @@ module.exports = {
   getSuppliesByDepartmentQuery,
   getReferralListQuery,
   getCitiesListQuery,
-  getOtDefaultPersonQuery
+  getOtDefaultPersonQuery,
+  getAllPharmacyKitsQuery,
+  getActivePharmacyKitsQuery
 };

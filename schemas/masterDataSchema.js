@@ -340,6 +340,47 @@ const editOtDefaultPersonSchema = Joi.object({
     .required()
 });
 
+const kitMedicineItemSchema = Joi.object({
+  name: Joi.string()
+    .max(255)
+    .required(),
+  quantity: Joi.number()
+    .integer()
+    .min(1)
+    .required()
+});
+
+const createPharmacyKitSchema = Joi.object({
+  kitName: Joi.string()
+    .max(255)
+    .required(),
+  kitValue: Joi.string()
+    .max(100)
+    .optional(),
+  medicines: Joi.array()
+    .items(kitMedicineItemSchema)
+    .min(1)
+    .required(),
+  isActive: Joi.number().required()
+});
+
+const editPharmacyKitSchema = Joi.object({
+  id: Joi.number()
+    .integer()
+    .required(),
+  kitName: Joi.string()
+    .max(255)
+    .required(),
+  kitValue: Joi.string()
+    .max(100)
+    .optional(),
+  medicines: Joi.array()
+    .items(kitMedicineItemSchema)
+    .min(1)
+    .required(),
+  isActive: Joi.number().required()
+});
+
 module.exports = {
   createLabTestGroupSchema,
   createLabTestSampleTypeSchema,
@@ -366,5 +407,7 @@ module.exports = {
   createEmbryologySchema,
   editEmbryologySchema,
   saveOtDefaultPersonSchema,
-  editOtDefaultPersonSchema
+  editOtDefaultPersonSchema,
+  createPharmacyKitSchema,
+  editPharmacyKitSchema
 };

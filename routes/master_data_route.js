@@ -187,6 +187,35 @@ class ManageMasterDataRoute {
             tokenVerified,
             this.editPharmacyItemRoute
         );
+
+        // Pharmacy Kit master (shots & kits in prescriptions)
+        this._route.get(
+            "/pharmacyKit/getAllPharmacyKits",
+            checkActiveSession,
+            tokenVerified,
+            this.getAllPharmacyKitsRoute
+        );
+
+        this._route.get(
+            "/pharmacyKit/getActivePharmacyKits",
+            checkActiveSession,
+            tokenVerified,
+            this.getActivePharmacyKitsRoute
+        );
+
+        this._route.post(
+            "/pharmacyKit/addNewPharmacyKit",
+            checkActiveSession,
+            tokenVerified,
+            this.addNewPharmacyKitRoute
+        );
+
+        this._route.post(
+            "/pharmacyKit/editPharmacyKit",
+            checkActiveSession,
+            tokenVerified,
+            this.editPharmacyKitRoute
+        );
         
         // incident management
         this._route.get(
@@ -482,6 +511,26 @@ class ManageMasterDataRoute {
     editPharmacyItemRoute = asyncHandler(async (req, res, next) => {
         const controllerObj = new MasterDataController(req, res, next);
         await controllerObj.editPharmacyItemController();
+    });
+
+    getAllPharmacyKitsRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getPharmacyKitsController();
+    });
+
+    getActivePharmacyKitsRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getActivePharmacyKitsController();
+    });
+
+    addNewPharmacyKitRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.addPharmacyKitController();
+    });
+
+    editPharmacyKitRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.editPharmacyKitController();
     });
     
     // incident management

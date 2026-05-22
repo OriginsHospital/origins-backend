@@ -24,7 +24,9 @@ const {
   getCitiesListQuery,
   getAllScansQuery,
   getAllEmbryologyQuery,
-  getOtDefaultPersonQuery
+  getOtDefaultPersonQuery,
+  getAllPharmacyKitsQuery,
+  getActivePharmacyKitsQuery
 } = require("../queries/master_data_queries");
 const {
   createLabTestGroupSchema,
@@ -52,8 +54,11 @@ const {
   createEmbryologySchema,
   editEmbryologySchema,
   saveOtDefaultPersonSchema,
-  editOtDefaultPersonSchema
+  editOtDefaultPersonSchema,
+  createPharmacyKitSchema,
+  editPharmacyKitSchema
 } = require("../schemas/masterDataSchema");
+const PharmacyKitMasterModel = require("../models/Master/pharmacyKitMaster");
 const LabTestGroupMasterModel = require("../models/Master/labTestGroupMaster");
 const LabTestSampleTypeMasterModel = require("../models/Master/labTestSampleTypeMaster");
 const LabTestMasterModel = require("../models/Master/labTestMaster");
@@ -1912,6 +1917,175 @@ class MasterDataService {
       }
     ).catch(err => {
       console.log("Error while updating default person list", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  buildKitValueFromName(kitName) {
+    const normalized = kitName
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!normalized) {
+      return "";
+    }
+    return normalized.endsWith("_KIT") ? normalized : `${normalized}_KIT`;
+  }
+
+  async getPharmacyKitService() {
+    const data = await this.mysqlConnection
+      .query(getAllPharmacyKitsQuery, {
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting pharmacy kits", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data.map(row => ({
+      ...row,
+      medicines:
+        typeof row.medicines === "string"
+          ? JSON.parse(row.medicines)
+          : row.medicines
+    }));
+  }
+
+  async getActivePharmacyKitService() {
+    const data = await this.mysqlConnection
+      .query(getActivePharmacyKitsQuery, {
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting active pharmacy kits", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data.map(row => ({
+      kitName: row.kitName,
+      kitValue: row.kitValue,
+      medicines:
+        typeof row.medicines === "string"
+          ? JSON.parse(row.medicines)
+          : row.medicines
+    }));
+  }
+
+  async createPharmacyKitService() {
+    const validatedPayload = await createPharmacyKitSchema.validateAsync(
+      this._request.body
+    );
+
+    const kitValue =
+      validatedPayload?.kitValue?.trim() ||
+      this.buildKitValueFromName(validatedPayload.kitName);
+
+    const existingKit = await PharmacyKitMasterModel.findOne({
+      where: {
+        [Op.or]: [
+          { kitValue },
+          Sequelize.where(
+            Sequelize.fn(
+              "REPLACE",
+              Sequelize.fn("LOWER", Sequelize.col("kitName")),
+              " ",
+              ""
+            ),
+            validatedPayload.kitName.replace(/\s+/g, "").toLowerCase()
+          )
+        ]
+      }
+    }).catch(err => {
+      console.log("Error while checking pharmacy kit", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!lodash.isEmpty(existingKit)) {
+      throw new createError.BadRequest("Pharmacy kit already exists");
+    }
+
+    await PharmacyKitMasterModel.create({
+      kitName: validatedPayload.kitName.trim(),
+      kitValue,
+      medicines: validatedPayload.medicines,
+      isActive: validatedPayload.isActive,
+      createdBy: this._request?.userDetails?.id
+    }).catch(err => {
+      console.log("Error while creating pharmacy kit", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async editPharmacyKitService() {
+    const validatedPayload = await editPharmacyKitSchema.validateAsync(
+      this._request.body
+    );
+
+    const kitValue =
+      validatedPayload?.kitValue?.trim() ||
+      this.buildKitValueFromName(validatedPayload.kitName);
+
+    const existingKit = await PharmacyKitMasterModel.findOne({
+      where: {
+        [Op.and]: [
+          { id: { [Op.ne]: validatedPayload.id } },
+          {
+            [Op.or]: [
+              { kitValue },
+              Sequelize.where(
+                Sequelize.fn(
+                  "REPLACE",
+                  Sequelize.fn("LOWER", Sequelize.col("kitName")),
+                  " ",
+                  ""
+                ),
+                validatedPayload.kitName.replace(/\s+/g, "").toLowerCase()
+              )
+            ]
+          }
+        ]
+      }
+    }).catch(err => {
+      console.log("Error while checking pharmacy kit update", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!lodash.isEmpty(existingKit)) {
+      throw new createError.BadRequest("Pharmacy kit already exists");
+    }
+
+    await PharmacyKitMasterModel.update(
+      {
+        kitName: validatedPayload.kitName.trim(),
+        kitValue,
+        medicines: validatedPayload.medicines,
+        isActive: validatedPayload.isActive,
+        updatedBy: this._request?.userDetails?.id
+      },
+      {
+        where: {
+          id: validatedPayload.id
+        }
+      }
+    ).catch(err => {
+      console.log("Error while updating pharmacy kit", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );

@@ -464,5 +464,41 @@ class MasterDataController {
       data: data
     });
   }
+
+  async getPharmacyKitsController() {
+    const data = await this._service.getPharmacyKitService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getActivePharmacyKitsController() {
+    const data = await this._service.getActivePharmacyKitService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async addPharmacyKitController() {
+    const data = await this._service.createPharmacyKitService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async editPharmacyKitController() {
+    const data = await this._service.editPharmacyKitService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.DATA_UPDATED_SUCCESS,
+      data: data
+    });
+  }
 }
 module.exports = MasterDataController;
