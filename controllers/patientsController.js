@@ -147,6 +147,16 @@ class PatientsController {
     });
   }
 
+  async uploadDischargeSummaryImageHandler() {
+    const data = await this._service.uploadDischargeSummaryImageService();
+    this._response.status(200).send({
+      success: true,
+      status: 200,
+      message: Constants.SUCCESS,
+      data
+    });
+  }
+
   async getPickUpSheetByTreatmentIdHandler() {
     const data = await this._service.getPickUpSheetByTreatmentIdService(
       this._request

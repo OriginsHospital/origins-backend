@@ -1015,6 +1015,64 @@ class PatientsService extends BaseService {
     return Constants.DATA_UPDATED_SUCCESS;
   }
 
+  async uploadDischargeSummaryImageService() {
+    const { id } = this._request.params;
+    if (!id) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{{params}}", "TreatmentCycle Id")
+      );
+    }
+
+    const files = this._request.files;
+    if (!files || files.length === 0) {
+      throw new createError.BadRequest("Image file is required");
+    }
+
+    const file = files[0];
+    const allowedMimeTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp"
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new createError.BadRequest(
+        "Only image files (JPEG, PNG, GIF, WEBP) are allowed"
+      );
+    }
+
+    try {
+      const baseName =
+        file.originalname?.split(".")[0]?.replace(/\s+/g, "_") || "image";
+      const extension = file.originalname?.split(".").pop() || "png";
+      const uniqueFileName = `${baseName}_${Date.now()}`;
+      const key = `DischargeSummary/${id}/${uniqueFileName}.${extension}`;
+
+      const uploadResult = await this.s3
+        .upload({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype
+        })
+        .promise();
+
+      return {
+        files: [uploadResult.Location],
+        baseurl: "",
+        path: uploadResult.Location,
+        isImages: [true]
+      };
+    } catch (err) {
+      console.log("Error while uploading discharge summary image", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
+  }
+
   async getPickUpSheetByTreatmentIdService() {
     const { id } = this._request.params;
     if (!id) {

@@ -108,6 +108,14 @@ class PatientsRoute {
       this.saveDischargeSummarySheet
     );
 
+    this._route.post(
+      "/uploadDischargeSummaryImage/:id",
+      checkActiveSession,
+      tokenVerified,
+      upload.any(),
+      this.uploadDischargeSummaryImage
+    );
+
     this._route.get(
       "/getPickUpSheetByTreatmentId/:id",
       checkActiveSession,
@@ -207,6 +215,11 @@ class PatientsRoute {
     const controllerObj = new PatientsController(req, res, next);
     await controllerObj.saveDischargeSummarySheetHandler();
   })
+
+  uploadDischargeSummaryImage = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.uploadDischargeSummaryImageHandler();
+  });
 
   getPickUpSheetByTreatmentId = asyncHandler(async (req,res,next) =>{
     const controllerObj = new PatientsController(req, res, next);
