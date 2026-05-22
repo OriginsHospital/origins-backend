@@ -791,6 +791,60 @@ class PaymentService extends BaseService {
     return [];
   }
 
+  formatBatchNumbersFromPurchaseDetails(purchaseDetails) {
+    if (!Array.isArray(purchaseDetails) || purchaseDetails.length === 0) {
+      return "-";
+    }
+    const batchNos = purchaseDetails
+      .map(pd => pd?.batchNo)
+      .filter(batchNo => batchNo != null && String(batchNo).trim() !== "");
+    const uniqueBatchNos = [...new Set(batchNos)];
+    return uniqueBatchNos.length > 0 ? uniqueBatchNos.join(", ") : "-";
+  }
+
+  async resolveBatchNumbersForInvoice(purchaseDetails) {
+    const fromStored = this.formatBatchNumbersFromPurchaseDetails(
+      purchaseDetails
+    );
+    if (fromStored !== "-") {
+      return fromStored;
+    }
+    if (!Array.isArray(purchaseDetails) || purchaseDetails.length === 0) {
+      return "-";
+    }
+    const grnIds = [
+      ...new Set(
+        purchaseDetails
+          .map(pd => Number(pd?.grnId))
+          .filter(grnId => Number.isFinite(grnId) && grnId > 0)
+      )
+    ];
+    if (grnIds.length === 0) {
+      return "-";
+    }
+    const rows = await this.stockMySqlConnection
+      .query(
+        `SELECT DISTINCT gia.batchNo
+         FROM stockmanagement.grn_items_associations gia
+         WHERE gia.grnId IN (:grnIds)
+           AND gia.batchNo IS NOT NULL
+           AND TRIM(gia.batchNo) <> ''`,
+        {
+          replacements: { grnIds },
+          type: Sequelize.QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("Error while resolving batch numbers for invoice", err);
+        return [];
+      });
+    const batchNos = rows
+      .map(row => row?.batchNo)
+      .filter(batchNo => batchNo != null && String(batchNo).trim() !== "");
+    const uniqueBatchNos = [...new Set(batchNos)];
+    return uniqueBatchNos.length > 0 ? uniqueBatchNos.join(", ") : "-";
+  }
+
   async generateProductInformationTable(
     appointmentId,
     type,
@@ -834,19 +888,24 @@ class PaymentService extends BaseService {
 
       if (!lodash.isEmpty(itemInfo)) {
         itemInfo = itemInfo[0];
-        let orderData = itemInfo?.itemInfo?.map((info, index) => {
-          const costInfo = orderDetails.find(
-            details => details.refId == info.refId
-          );
-          return {
-            serialNumber: index + 1,
-            itemName: info.itemName,
-            presQty: info.prescribedQuantity,
-            purcQty: info.purchaseQuantity,
-            totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
-            prescribedTo: info?.prescribedTo
-          };
-        });
+        const orderData = await Promise.all(
+          (itemInfo?.itemInfo || []).map(async (info, index) => {
+            const costInfo = orderDetails.find(
+              details => details.refId == info.refId
+            );
+            return {
+              serialNumber: index + 1,
+              itemName: info.itemName,
+              batchNo: await this.resolveBatchNumbersForInvoice(
+                costInfo?.purchaseDetails
+              ),
+              presQty: info.prescribedQuantity,
+              purcQty: info.purchaseQuantity,
+              totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
+              prescribedTo: info?.prescribedTo
+            };
+          })
+        );
         return orderData;
       }
     } else if (
