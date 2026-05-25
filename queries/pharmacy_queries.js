@@ -15,15 +15,92 @@ FROM stockmanagement.manufacturer_master mm
 INNER JOIN defaultdb.users u ON mm.createdBy = u.id`;
 
 const getPharmacyListByDateQuery = `
-    select
-	CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, '')) as patientName,
-	pga.name as spouseName,
-	COALESCE(pm.firstName,'') as firstName,
-	pm.patientId, 
+WITH consultation_line_ids AS (
+	SELECT calba.id AS lineId
+	FROM consultation_appointment_line_bills_associations calba
+	INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+	WHERE calba.billTypeId = 3
+		AND caa.appointmentDate = :date
+		AND caa.branchId = :branchId
+),
+treatment_line_ids AS (
+	SELECT talba.id AS lineId
+	FROM treatment_appointment_line_bills_associations talba
+	INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+	WHERE talba.billTypeId = 3
+		AND taa.appointmentDate = :date
+		AND taa.branchId = :branchId
+),
+branch_item_stock AS (
+	SELECT
+		gia.itemId,
+		gm.branchId,
+		IFNULL(SUM(
+			CASE
+				WHEN CAST(NOW() AS DATE) < gia.expiryDate THEN gia.totalQuantity
+				ELSE 0
+			END
+		), 0) AS availableQuantity
+	FROM stockmanagement.grn_items_associations gia
+	INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+	WHERE gm.branchId = :branchId
+	GROUP BY gia.itemId, gm.branchId
+),
+pharmacy_paid_orders AS (
+	SELECT
+		jt.refId,
+		odm.type,
+		MAX(odm.id) AS orderDbId
+	FROM defaultdb.order_details_master odm
+	INNER JOIN JSON_TABLE(
+		odm.orderDetails,
+		'$[*]' COLUMNS(refId INT PATH '$.refId')
+	) jt ON 1 = 1
+	WHERE odm.productType = 'PHARMACY'
+		AND odm.paymentStatus = 'PAID'
+		AND odm.type IN ('Consultation', 'Treatment')
+		AND (
+			jt.refId IN (SELECT lineId FROM consultation_line_ids)
+			OR jt.refId IN (SELECT lineId FROM treatment_line_ids)
+		)
+	GROUP BY jt.refId, odm.type
+),
+pharmacy_order_details AS (
+	SELECT
+		ppo.refId,
+		ppo.type,
+		odm.orderId,
+		odm.id AS orderDbId
+	FROM pharmacy_paid_orders ppo
+	INNER JOIN defaultdb.order_details_master odm ON odm.id = ppo.orderDbId
+),
+purchase_non_reason AS (
+	SELECT
+		ppdt.refId,
+		ppdt.type,
+		MAX(NULLIF(TRIM(jt.nonPurchaseReason), '')) AS nonPurchaseReason
+	FROM stockmanagement.pharmacy_purchase_details_temp ppdt
+	INNER JOIN JSON_TABLE(
+		ppdt.purchaseDetails,
+		'$[*]' COLUMNS (
+			nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
+		)
+	) jt ON 1 = 1
+	WHERE (
+		(ppdt.type = 'Consultation' AND ppdt.refId IN (SELECT lineId FROM consultation_line_ids))
+		OR (ppdt.type = 'Treatment' AND ppdt.refId IN (SELECT lineId FROM treatment_line_ids))
+	)
+	GROUP BY ppdt.refId, ppdt.type
+)
+SELECT
+	CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, '')) AS patientName,
+	pga.name AS spouseName,
+	COALESCE(pm.firstName, '') AS firstName,
+	pm.patientId,
 	pm.photoPath,
-	(select cdm.Name from consultation_doctor_master cdm where cdm.userId = caa.consultationDoctorId) as doctorName,
-	calba.appointmentId as appointmentId,
-	pva.id as visitId,
+	cdm.Name AS doctorName,
+	calba.appointmentId AS appointmentId,
+	pva.id AS visitId,
 	CASE
 		WHEN pva.isActive = 1 AND EXISTS (
 			SELECT 1
@@ -36,118 +113,62 @@ const getPharmacyListByDateQuery = `
 		) THEN 1
 		ELSE 0
 	END AS hasActivePackage,
-	'Consultation' as type,
+	'Consultation' AS type,
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
 			'id', calba.id,
-			'orderId', (
-				SELECT odm.orderId
-				FROM defaultdb.order_details_master odm
-				JOIN JSON_TABLE(
-					odm.orderDetails,
-					'$[*]' COLUMNS(refId INT PATH '$.refId')
-				) refTable ON refTable.refId = calba.id
-				WHERE odm.productType = 'PHARMACY'
-					AND odm.type = 'Consultation'
-					AND odm.paymentStatus = 'PAID'
-				ORDER BY odm.id DESC
-				LIMIT 1
-			),
-			'orderDbId', (
-				SELECT odm.id
-				FROM defaultdb.order_details_master odm
-				JOIN JSON_TABLE(
-					odm.orderDetails,
-					'$[*]' COLUMNS(refId INT PATH '$.refId')
-				) refTable ON refTable.refId = calba.id
-				WHERE odm.productType = 'PHARMACY'
-					AND odm.type = 'Consultation'
-					AND odm.paymentStatus = 'PAID'
-				ORDER BY odm.id DESC
-				LIMIT 1
-			),
-			'itemName', (select sm.itemName from stockmanagement.item_master sm where sm.id = calba.billTypeValue),
+			'orderId', pod.orderId,
+			'orderDbId', pod.orderDbId,
+			'itemName', sm.itemName,
 			'prescribedQuantity', calba.prescribedQuantity,
-			'availableQuantity', (
-				select IFNULL(SUM(
-						CASE 
-							WHEN CAST(NOW() AS DATE) < expiryDate THEN gia.totalQuantity
-							ELSE 0
-						END
-					), 0) as availableQuantity from stockmanagement.grn_items_associations gia 
-						INNER JOIN stockmanagement.grn_master gm on gm.id = gia.grnId
-					where itemId  = calba.billTypeValue and gm.branchId = caa.branchId
-			),
-			'purchaseQuantity', calba.purchaseQuantity ,
-			'nonPurchaseReason', (
-				SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
-				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
-				JOIN JSON_TABLE(
-					ppdt.purchaseDetails,
-					'$[*]' COLUMNS (
-						nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
-					)
-				) jt
-				WHERE ppdt.refId = calba.id
-				  AND ppdt.type = 'Consultation'
-				LIMIT 1
-			),
-			'prescriptionDetails', calba.prescriptionDetails ,
-			'prescriptionDays', calba.prescriptionDays ,
+			'availableQuantity', IFNULL(bis.availableQuantity, 0),
+			'purchaseQuantity', calba.purchaseQuantity,
+			'nonPurchaseReason', pnr.nonPurchaseReason,
+			'prescriptionDetails', calba.prescriptionDetails,
+			'prescriptionDays', calba.prescriptionDays,
 			'isSpouse', calba.isSpouse,
-			'itemStage', (CASE 
-				WHEN IFNULL(calba.purchaseQuantity, 0) <> 0 
-				AND (select calba_inner.status from consultation_appointment_line_bills_associations calba_inner
-					WHERE calba_inner.id = calba.id
-				) = 'DUE'THEN 'PACKED'
-				WHEN 
-				(select calba_inner.status from consultation_appointment_line_bills_associations calba_inner
-					WHERE calba_inner.id = calba.id
-				) = 'PAID' THEN 'PAID'
-				ELSE 'PRESCRIBED'
-			END),
-			'itemPurchaseInformation', (CASE 
-				WHEN IFNULL(calba.purchaseQuantity, 0) <> 0 
-				AND (select calba_inner.status from consultation_appointment_line_bills_associations calba_inner
-					WHERE calba_inner.id = calba.id
-				) = 'DUE'THEN (
-					SELECT ppdt.purchaseDetails FROM stockmanagement.pharmacy_purchase_details_temp ppdt where ppdt.refId  = calba.id
-				)
-				WHEN 
-				(select calba_inner.status from consultation_appointment_line_bills_associations calba_inner
-					WHERE calba_inner.id = calba.id
-				) = 'PAID' THEN NULL
-				ELSE NULL
-			END)
-		) 
-	) as itemDetails 
-from
-	consultation_appointment_line_bills_associations calba
-INNER JOIN consultation_appointments_associations caa on
-	caa.id = calba.appointmentId
-INNER JOIN visit_consultations_associations vca on
-	vca.id = caa.consultationId
-INNER JOIN patient_visits_association pva on
-	pva.id = vca.visitId
-INNER JOIN patient_master pm on 
-	pva.patientId  = pm.id
-LEFT JOIN patient_guardian_associations pga 
-		ON pga.patientId = pm.id
-WHERE
-	calba.billTypeId = 3
-	and caa.appointmentDate = :date
-	and caa.branchId  = :branchId
-GROUP by calba.appointmentId
+			'itemStage', (
+				CASE
+					WHEN IFNULL(calba.purchaseQuantity, 0) <> 0 AND calba.status = 'DUE' THEN 'PACKED'
+					WHEN calba.status = 'PAID' THEN 'PAID'
+					ELSE 'PRESCRIBED'
+				END
+			),
+			'itemPurchaseInformation', (
+				CASE
+					WHEN IFNULL(calba.purchaseQuantity, 0) <> 0 AND calba.status = 'DUE' THEN ppdt.purchaseDetails
+					ELSE NULL
+				END
+			)
+		)
+	) AS itemDetails
+FROM consultation_appointment_line_bills_associations calba
+INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+INNER JOIN patient_master pm ON pva.patientId = pm.id
+LEFT JOIN patient_guardian_associations pga ON pga.patientId = pm.id
+LEFT JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
+LEFT JOIN stockmanagement.item_master sm ON sm.id = calba.billTypeValue
+LEFT JOIN branch_item_stock bis ON bis.itemId = calba.billTypeValue AND bis.branchId = caa.branchId
+LEFT JOIN pharmacy_order_details pod ON pod.refId = calba.id AND pod.type = 'Consultation'
+LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
+	ON ppdt.refId = calba.id AND ppdt.type = 'Consultation'
+LEFT JOIN purchase_non_reason pnr ON pnr.refId = calba.id AND pnr.type = 'Consultation'
+WHERE calba.billTypeId = 3
+	AND caa.appointmentDate = :date
+	AND caa.branchId = :branchId
+GROUP BY calba.appointmentId
 UNION ALL
-select
-	CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, '')) as patientName,
-	pga.name as spouseName,
-	COALESCE(pm.firstName,'') as firstName,
-	pm.patientId, 
+SELECT
+	CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, '')) AS patientName,
+	pga.name AS spouseName,
+	COALESCE(pm.firstName, '') AS firstName,
+	pm.patientId,
 	pm.photoPath,
-	(select cdm.Name from consultation_doctor_master cdm where cdm.userId = taa.consultationDoctorId) as doctorName,
-	talba.appointmentId as appointmentId,
-	pva.id as visitId,
+	cdm.Name AS doctorName,
+	talba.appointmentId AS appointmentId,
+	pva.id AS visitId,
 	CASE
 		WHEN pva.isActive = 1 AND EXISTS (
 			SELECT 1
@@ -160,108 +181,52 @@ select
 		) THEN 1
 		ELSE 0
 	END AS hasActivePackage,
-	'Treatment' as type,
+	'Treatment' AS type,
 	JSON_ARRAYAGG(
 		JSON_OBJECT(
 			'id', talba.id,
-			'orderId', (
-				SELECT odm.orderId
-				FROM defaultdb.order_details_master odm
-				JOIN JSON_TABLE(
-					odm.orderDetails,
-					'$[*]' COLUMNS(refId INT PATH '$.refId')
-				) refTable ON refTable.refId = talba.id
-				WHERE odm.productType = 'PHARMACY'
-					AND odm.type = 'Treatment'
-					AND odm.paymentStatus = 'PAID'
-				ORDER BY odm.id DESC
-				LIMIT 1
-			),
-			'orderDbId', (
-				SELECT odm.id
-				FROM defaultdb.order_details_master odm
-				JOIN JSON_TABLE(
-					odm.orderDetails,
-					'$[*]' COLUMNS(refId INT PATH '$.refId')
-				) refTable ON refTable.refId = talba.id
-				WHERE odm.productType = 'PHARMACY'
-					AND odm.type = 'Treatment'
-					AND odm.paymentStatus = 'PAID'
-				ORDER BY odm.id DESC
-				LIMIT 1
-			),
-			'itemName', (select sm.itemName from stockmanagement.item_master sm where sm.id = talba.billTypeValue),
+			'orderId', pod.orderId,
+			'orderDbId', pod.orderDbId,
+			'itemName', sm.itemName,
 			'prescribedQuantity', talba.prescribedQuantity,
-			'availableQuantity', (
-				select IFNULL(SUM(
-						CASE 
-							WHEN CAST(NOW() AS DATE) < expiryDate THEN gia.totalQuantity
-							ELSE 0
-						END
-					), 0) as availableQuantity from stockmanagement.grn_items_associations gia 
-					INNER JOIN stockmanagement.grn_master gm on gm.id = gia.grnId
-					where itemId  = talba.billTypeValue and gm.branchId = taa.branchId
-			),
-			'purchaseQuantity', talba.purchaseQuantity ,
-			'nonPurchaseReason', (
-				SELECT MAX(NULLIF(TRIM(jt.nonPurchaseReason), ''))
-				FROM stockmanagement.pharmacy_purchase_details_temp ppdt
-				JOIN JSON_TABLE(
-					ppdt.purchaseDetails,
-					'$[*]' COLUMNS (
-						nonPurchaseReason VARCHAR(500) PATH '$.nonPurchaseReason'
-					)
-				) jt
-				WHERE ppdt.refId = talba.id
-				  AND ppdt.type = 'Treatment'
-				LIMIT 1
-			),
-			'prescriptionDetails', talba.prescriptionDetails ,
-			'prescriptionDays', talba.prescriptionDays ,
+			'availableQuantity', IFNULL(bis.availableQuantity, 0),
+			'purchaseQuantity', talba.purchaseQuantity,
+			'nonPurchaseReason', pnr.nonPurchaseReason,
+			'prescriptionDetails', talba.prescriptionDetails,
+			'prescriptionDays', talba.prescriptionDays,
 			'isSpouse', talba.isSpouse,
-			'itemStage', (CASE 
-				WHEN IFNULL(talba.purchaseQuantity, 0) <> 0 
-				AND (select talba_inner.status from treatment_appointment_line_bills_associations talba_inner
-					WHERE talba_inner.id = talba.id
-				) = 'DUE'THEN 'PACKED'
-				WHEN 
-				(select talba_inner.status from treatment_appointment_line_bills_associations talba_inner
-					WHERE talba_inner.id = talba.id
-				) = 'PAID' THEN 'PAID'
-				ELSE 'PRESCRIBED'
-			END),
-			'itemPurchaseInformation', (CASE 
-				WHEN IFNULL(talba.purchaseQuantity, 0) <> 0 
-				AND (select talba_inner.status from treatment_appointment_line_bills_associations talba_inner
-					WHERE talba_inner.id = talba.id
-				) = 'DUE'THEN (
-					SELECT ppdt.purchaseDetails FROM stockmanagement.pharmacy_purchase_details_temp ppdt where ppdt.refId  = talba.id
-				)
-				WHEN 
-				(select talba_inner.status from treatment_appointment_line_bills_associations talba_inner
-					WHERE talba_inner.id = talba.id
-				) = 'PAID' THEN NULL
-				ELSE NULL
-			END)
-		) 
-	) as itemDetails 
-from
-	treatment_appointment_line_bills_associations talba
-INNER JOIN treatment_appointments_associations taa  on
-	taa.id = talba.appointmentId
-INNER JOIN visit_treatment_cycles_associations vtca on
-	vtca.id = taa.treatmentCycleId 
-INNER JOIN patient_visits_association pva on
-	pva.id = vtca.visitId
-INNER JOIN patient_master pm on 
-	pva.patientId  = pm.id
-LEFT JOIN patient_guardian_associations pga 
-		ON pga.patientId = pm.id
-WHERE
-	talba.billTypeId = 3
-	and taa.appointmentDate = :date
-	and taa.branchId  = :branchId
-GROUP by talba.appointmentId
+			'itemStage', (
+				CASE
+					WHEN IFNULL(talba.purchaseQuantity, 0) <> 0 AND talba.status = 'DUE' THEN 'PACKED'
+					WHEN talba.status = 'PAID' THEN 'PAID'
+					ELSE 'PRESCRIBED'
+				END
+			),
+			'itemPurchaseInformation', (
+				CASE
+					WHEN IFNULL(talba.purchaseQuantity, 0) <> 0 AND talba.status = 'DUE' THEN ppdt.purchaseDetails
+					ELSE NULL
+				END
+			)
+		)
+	) AS itemDetails
+FROM treatment_appointment_line_bills_associations talba
+INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+INNER JOIN patient_master pm ON pva.patientId = pm.id
+LEFT JOIN patient_guardian_associations pga ON pga.patientId = pm.id
+LEFT JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
+LEFT JOIN stockmanagement.item_master sm ON sm.id = talba.billTypeValue
+LEFT JOIN branch_item_stock bis ON bis.itemId = talba.billTypeValue AND bis.branchId = taa.branchId
+LEFT JOIN pharmacy_order_details pod ON pod.refId = talba.id AND pod.type = 'Treatment'
+LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
+	ON ppdt.refId = talba.id AND ppdt.type = 'Treatment'
+LEFT JOIN purchase_non_reason pnr ON pnr.refId = talba.id AND pnr.type = 'Treatment'
+WHERE talba.billTypeId = 3
+	AND taa.appointmentDate = :date
+	AND taa.branchId = :branchId
+GROUP BY talba.appointmentId
 `;
 
 const pharmacyPurchaseAndStockReductionQuery = `
