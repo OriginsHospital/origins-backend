@@ -427,6 +427,24 @@ class PharmacyService {
     return Constants.DATA_UPDATED_SUCCESS;
   }
 
+  normalizePharmacyItemDetails(itemDetails) {
+    if (!itemDetails) {
+      return [];
+    }
+    if (Array.isArray(itemDetails)) {
+      return itemDetails.filter(Boolean);
+    }
+    if (typeof itemDetails === "string") {
+      try {
+        const parsed = JSON.parse(itemDetails);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    return [];
+  }
+
   async getPharmacyByDateService() {
     const { date, branch } = this._request.query;
     if (lodash.isEmpty(date.trim())) {
@@ -439,7 +457,7 @@ class PharmacyService {
         Constants.PARAMS_ERROR.replace("{params}", "branch")
       );
     }
-    return await this.mysqlConnection
+    const rows = await this.mysqlConnection
       .query(getPharmacyListByDateQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
@@ -453,6 +471,11 @@ class PharmacyService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+    return rows.map(row => ({
+      ...row,
+      itemDetails: this.normalizePharmacyItemDetails(row.itemDetails)
+    }));
   }
 
   // To Calculate which item should be picked from which GRN during PACKGED stage
