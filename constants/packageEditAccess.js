@@ -1,23 +1,41 @@
-const PACKAGE_EDIT_ALLOWED_EMAIL = "nikhilsuvva77@gmail.com";
+const createError = require("http-errors");
+const Constants = require("./constants");
 
-function hasPackageEditAccess(email) {
-  if (!email || typeof email !== "string") {
+const PACKAGE_EDIT_ALLOWED_EMAIL = "nikhilsuvva77@gmail.com";
+const PACKAGE_EDIT_ADMIN_ROLE_IDS = [1, 7];
+
+function hasPackageEditAccess(userDetails) {
+  if (!userDetails) {
     return false;
   }
-  return email.trim().toLowerCase() === PACKAGE_EDIT_ALLOWED_EMAIL;
+
+  const email = userDetails.email?.trim()?.toLowerCase();
+  if (email === PACKAGE_EDIT_ALLOWED_EMAIL) {
+    return true;
+  }
+
+  const roleId = userDetails.roleDetails?.id;
+  if (PACKAGE_EDIT_ADMIN_ROLE_IDS.includes(roleId)) {
+    return true;
+  }
+
+  const roleName = userDetails.roleDetails?.name?.trim()?.toLowerCase();
+  if (roleName === "admin") {
+    return true;
+  }
+
+  return false;
 }
 
 function assertPackageEditAllowed(request) {
-  const createError = require("http-errors");
-  const Constants = require("./constants");
-
-  if (!hasPackageEditAccess(request.userDetails?.email)) {
+  if (!hasPackageEditAccess(request.userDetails)) {
     throw new createError.Forbidden(Constants.PACKAGE_EDIT_FORBIDDEN);
   }
 }
 
 module.exports = {
   PACKAGE_EDIT_ALLOWED_EMAIL,
+  PACKAGE_EDIT_ADMIN_ROLE_IDS,
   hasPackageEditAccess,
   assertPackageEditAllowed
 };
