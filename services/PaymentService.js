@@ -4,7 +4,7 @@ const StockMySqlConnection = require("../connections/stock_mysql_connection");
 const Constants = require("../constants/constants");
 const { Sequelize } = require("sequelize");
 const lodash = require("lodash");
-var converter = require("number-to-words");
+const { formatAmountInWords } = require("../utils/amountInWordsUtils");
 const { v4: uuidv4 } = require("uuid");
 const {
   orderDetailsSchema,
@@ -1077,8 +1077,7 @@ class PaymentService extends BaseService {
       let patientOrderAndPaymentInfo = {
         ...invoiceDetails?.orderDetails,
         ...invoiceDetails?.paymentBreakUp,
-        amountInWords:
-          lodash.startCase(converter.toWords(+paidAmount)) + " Rupees",
+        amountInWords: formatAmountInWords(paidAmount),
         currentDate: invoiceDetails?.currentDate,
         hospitalLogoInformation: hospitalLogoHeaderTemplate,
         Currency: "Rs",

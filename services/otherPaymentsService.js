@@ -22,7 +22,7 @@ const { v4: uuidv4 } = require("uuid");
 const BaseService = require("./baseService");
 const GenerateHtmlTemplate = require("../utils/templateUtils");
 let { patientHeaderForInvoice } = require("../templates/headerTemplates");
-var converter = require("number-to-words");
+const { formatAmountInWords } = require("../utils/amountInWordsUtils");
 let { invoiceTemplate } = require("../templates/invoiceTemplate");
 
 function assertAdvancePaymentHistoryEditorAllowed(request) {
@@ -367,8 +367,7 @@ class OtherPaymentsService extends BaseService {
       let patientOrderAndPaymentInfo = {
         ...invoiceDetails?.orderDetails,
         ...invoiceDetails?.paymentBreakUp,
-        amountInWords:
-          lodash.startCase(converter.toWords(+paidAmount)) + " Rupees",
+        amountInWords: formatAmountInWords(paidAmount),
         currentDate: invoiceDetails?.currentDate,
         hospitalLogoInformation: hospitalLogoHeaderTemplate,
         Currency: "Rs",
