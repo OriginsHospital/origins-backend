@@ -25,7 +25,8 @@ const {
   getPatientDetailsForOpdSheetQuery,
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
-  upsertFutureCycleQuery
+  upsertFutureCycleQuery,
+  patientHasStartedTreatmentQuery
 } = require("../queries/patient_queries");
 const AWSConnection = require("../connections/aws_connection");
 const formFTemplate = require("../templates/formFTemplate");
@@ -1222,6 +1223,24 @@ class PatientsService extends BaseService {
     );
     if (!patient) {
       throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const treatmentCheck = await this.mysqlConnection
+      .query(patientHasStartedTreatmentQuery, {
+        replacements: { patientId: value.patientId },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error checking patient treatment status", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (treatmentCheck[0]?.hasStartedTreatment) {
+      throw new createError.BadRequest(
+        "Future cycle cannot be scheduled for patients who have already started treatment."
+      );
     }
 
     const userId = this._request.userDetails?.id || null;

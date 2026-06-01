@@ -276,6 +276,16 @@ ON DUPLICATE KEY UPDATE
     updatedAt = CURRENT_TIMESTAMP
 `;
 
+const patientHasStartedTreatmentQuery = `
+SELECT EXISTS (
+    SELECT 1
+    FROM visit_treatment_cycles_associations vtca
+    INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+    WHERE pva.patientId = :patientId
+      AND pva.isActive = 1
+) AS hasStartedTreatment
+`;
+
 module.exports = {
   getDateFilteredPatientsQuery,
   getPatientsQuery,
@@ -284,5 +294,6 @@ module.exports = {
   getPatientDetailsForOpdSheetQuery,
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
-  upsertFutureCycleQuery
+  upsertFutureCycleQuery,
+  patientHasStartedTreatmentQuery
 };
