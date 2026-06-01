@@ -72,7 +72,7 @@ class PatientsService extends BaseService {
       .query(searchPatientByAadhaarQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
-          aadhaarNo: givenPatientData
+          searchData: givenPatientData
         }
       })
       .catch(err => {

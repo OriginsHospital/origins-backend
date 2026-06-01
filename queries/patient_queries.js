@@ -242,7 +242,19 @@ from
 LEFT JOIN patient_guardian_associations pga on
 	pga.patientId = pm.id
 where
-	pm.aadhaarNo = :aadhaarNo or pga.aadhaarNo = :aadhaarNo
+	pm.patientId = :searchData
+	or pm.mobileNo = :searchData
+	or pm.aadhaarNo = :searchData
+	or pga.aadhaarNo = :searchData
+order by
+	case
+		when pm.patientId = :searchData then 1
+		when pm.mobileNo = :searchData then 2
+		when pm.aadhaarNo = :searchData then 3
+		when pga.aadhaarNo = :searchData then 4
+		else 5
+	end
+limit 1
 `;
 
 const getFutureCyclesQuery = `
