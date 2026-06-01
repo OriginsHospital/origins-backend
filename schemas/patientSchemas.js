@@ -226,6 +226,20 @@ const savePickUpSheet = Joi.object({
   template: Joi.string().required()
 });
 
+const saveFutureCycleSchema = Joi.object({
+  patientId: Joi.number().required(),
+  cycleMonth: Joi.number()
+    .integer()
+    .min(1)
+    .max(12)
+    .required(),
+  cycleYear: Joi.number()
+    .integer()
+    .min(2000)
+    .max(2100)
+    .required()
+});
+
 module.exports = {
   createPatientSchema,
   editPatientSchema,
@@ -234,5 +248,6 @@ module.exports = {
   editGuardianSchema,
   saveOpdSheetSchema,
   saveDischargeSummarySheet,
-  savePickUpSheet
+  savePickUpSheet,
+  saveFutureCycleSchema
 };

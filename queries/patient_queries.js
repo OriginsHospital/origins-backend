@@ -244,11 +244,45 @@ LEFT JOIN patient_guardian_associations pga on
 where
 	pm.aadhaarNo = :aadhaarNo or pga.aadhaarNo = :aadhaarNo
 `;
+
+const getFutureCyclesQuery = `
+SELECT
+    pfc.id,
+    pfc.patientId AS patientMasterId,
+    pm.patientId,
+    pm.photoPath,
+    CONCAT(pm.lastName, ' ', pm.firstName) AS patientName,
+    pfc.cycleMonth,
+    pfc.cycleYear,
+    pm.mobileNo,
+    JSON_OBJECT('id', pm.cityId, 'name', COALESCE(cm.name, '')) AS city,
+    pm.branchId,
+    (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
+    (SELECT bm.name FROM branch_master bm WHERE bm.id = pm.branchId) AS branchName,
+    DATE_FORMAT(pfc.createdAt, '%d-%m-%Y') AS scheduledOn
+FROM patient_future_cycles pfc
+INNER JOIN patient_master pm ON pm.id = pfc.patientId
+LEFT JOIN city_master cm ON cm.id = pm.cityId
+WHERE 1=1
+`;
+
+const upsertFutureCycleQuery = `
+INSERT INTO patient_future_cycles (patientId, cycleMonth, cycleYear, createdBy)
+VALUES (:patientId, :cycleMonth, :cycleYear, :createdBy)
+ON DUPLICATE KEY UPDATE
+    cycleMonth = VALUES(cycleMonth),
+    cycleYear = VALUES(cycleYear),
+    createdBy = VALUES(createdBy),
+    updatedAt = CURRENT_TIMESTAMP
+`;
+
 module.exports = {
   getDateFilteredPatientsQuery,
   getPatientsQuery,
   getPatientInfoForDischargeSheet,
   getPatientTreatmentCYclesQuery,
   getPatientDetailsForOpdSheetQuery,
-  searchPatientByAadhaarQuery
+  searchPatientByAadhaarQuery,
+  getFutureCyclesQuery,
+  upsertFutureCycleQuery
 };

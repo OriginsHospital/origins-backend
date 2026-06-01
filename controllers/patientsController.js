@@ -191,5 +191,23 @@ class PatientsController {
   async downloadOpdSheedByPatientIdHandler() {
     await this._service.downloadOpdSheedByPatientIdService(this._request);
   }
+
+  async saveFutureCycleHandler() {
+    const data = await this._service.saveFutureCycleService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getFutureCyclesHandler() {
+    const data = await this._service.getFutureCyclesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 module.exports = PatientsController;

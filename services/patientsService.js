@@ -10,7 +10,8 @@ const {
   editGuardianSchema,
   saveOpdSheetSchema,
   saveDischargeSummarySheet,
-  savePickUpSheet
+  savePickUpSheet,
+  saveFutureCycleSchema
 } = require("../schemas/patientSchemas");
 const createError = require("http-errors");
 const lodash = require("lodash");
@@ -22,7 +23,9 @@ const {
   getPatientInfoForDischargeSheet,
   getPatientTreatmentCYclesQuery,
   getPatientDetailsForOpdSheetQuery,
-  searchPatientByAadhaarQuery
+  searchPatientByAadhaarQuery,
+  getFutureCyclesQuery,
+  upsertFutureCycleQuery
 } = require("../queries/patient_queries");
 const AWSConnection = require("../connections/aws_connection");
 const formFTemplate = require("../templates/formFTemplate");
@@ -1206,6 +1209,85 @@ class PatientsService extends BaseService {
         );
       });
     return patientsTreatmentCyclesData;
+  }
+
+  async saveFutureCycleService() {
+    const { error, value } = saveFutureCycleSchema.validate(this._request.body);
+    if (error) {
+      throw new createError.BadRequest(error.details[0].message);
+    }
+
+    const patient = await PatientMasterModel.findByPk(value.patientId).catch(
+      () => null
+    );
+    if (!patient) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const userId = this._request.userDetails?.id || null;
+
+    await this.mysqlConnection
+      .query(upsertFutureCycleQuery, {
+        replacements: {
+          patientId: value.patientId,
+          cycleMonth: value.cycleMonth,
+          cycleYear: value.cycleYear,
+          createdBy: userId
+        },
+        type: Sequelize.QueryTypes.INSERT
+      })
+      .catch(err => {
+        console.log("Error while saving future cycle", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async getFutureCyclesService() {
+    const { branchId, cycleMonth, cycleYear } = this._request.query;
+
+    let query = getFutureCyclesQuery;
+    const replacements = {};
+
+    if (branchId) {
+      query += ` AND pm.branchId = :branchId`;
+      replacements.branchId = branchId;
+    }
+    if (cycleMonth) {
+      query += ` AND pfc.cycleMonth = :cycleMonth`;
+      replacements.cycleMonth = parseInt(cycleMonth, 10);
+    }
+    if (cycleYear) {
+      query += ` AND pfc.cycleYear = :cycleYear`;
+      replacements.cycleYear = parseInt(cycleYear, 10);
+    }
+
+    query += `
+      ORDER BY
+        CASE
+          WHEN STR_TO_DATE(CONCAT(pfc.cycleYear, '-', LPAD(pfc.cycleMonth, 2, '0'), '-01'), '%Y-%m-%d') >= CURDATE()
+          THEN 0
+          ELSE 1
+        END,
+        STR_TO_DATE(CONCAT(pfc.cycleYear, '-', LPAD(pfc.cycleMonth, 2, '0'), '-01'), '%Y-%m-%d') ASC
+    `;
+
+    const futureCyclesData = await this.mysqlConnection
+      .query(query, {
+        replacements,
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting future cycles data", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return futureCyclesData;
   }
 
   async downloadOpdSheedByPatientIdService() {

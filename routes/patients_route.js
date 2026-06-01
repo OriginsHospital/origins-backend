@@ -137,6 +137,20 @@ class PatientsRoute {
       this.getPatientTreatmentCycles
     );
 
+    this._route.post(
+      "/futureCycles",
+      checkActiveSession,
+      tokenVerified,
+      this.saveFutureCycle
+    );
+
+    this._route.get(
+      "/futureCycles",
+      checkActiveSession,
+      tokenVerified,
+      this.getFutureCycles
+    );
+
     this._route.get(
       "/downloadOpdSheetByPatientId/:id",
       checkActiveSession,
@@ -235,6 +249,16 @@ class PatientsRoute {
     const controllerObj = new PatientsController(req, res, next);
     await controllerObj.getPatientTreatmentCyclesHandler();
   })
+
+  saveFutureCycle = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.saveFutureCycleHandler();
+  });
+
+  getFutureCycles = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.getFutureCyclesHandler();
+  });
 
   downloadOpdSheetByPatientId = asyncHandler(async (req,res,next) =>{
     const controllerObj = new PatientsController(req, res, next);
