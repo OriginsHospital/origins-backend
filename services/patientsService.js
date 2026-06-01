@@ -1213,21 +1213,33 @@ class PatientsService extends BaseService {
   }
 
   async saveFutureCycleService() {
-    const { error, value } = saveFutureCycleSchema.validate(this._request.body);
+    const { error, value } = saveFutureCycleSchema.validate(
+      this._request.body,
+      {
+        convert: true
+      }
+    );
     if (error) {
       throw new createError.BadRequest(error.details[0].message);
     }
 
-    const patient = await PatientMasterModel.findByPk(value.patientId).catch(
+    let patient = await PatientMasterModel.findByPk(value.patientId).catch(
       () => null
     );
+    if (!patient) {
+      patient = await PatientMasterModel.findOne({
+        where: { patientId: String(value.patientId) }
+      }).catch(() => null);
+    }
     if (!patient) {
       throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
     }
 
+    const patientMasterId = patient.id;
+
     const treatmentCheck = await this.mysqlConnection
       .query(patientHasStartedTreatmentQuery, {
-        replacements: { patientId: value.patientId },
+        replacements: { patientId: patientMasterId },
         type: Sequelize.QueryTypes.SELECT
       })
       .catch(err => {
@@ -1237,7 +1249,7 @@ class PatientsService extends BaseService {
         );
       });
 
-    if (treatmentCheck[0]?.hasStartedTreatment) {
+    if (Number(treatmentCheck[0]?.hasStartedTreatment) === 1) {
       throw new createError.BadRequest(
         "Future cycle cannot be scheduled for patients who have already started treatment."
       );
@@ -1248,15 +1260,19 @@ class PatientsService extends BaseService {
     await this.mysqlConnection
       .query(upsertFutureCycleQuery, {
         replacements: {
-          patientId: value.patientId,
+          patientId: patientMasterId,
           cycleMonth: value.cycleMonth,
           cycleYear: value.cycleYear,
           createdBy: userId
-        },
-        type: Sequelize.QueryTypes.INSERT
+        }
       })
       .catch(err => {
         console.log("Error while saving future cycle", err.message);
+        if (err.message && err.message.includes("patient_future_cycles")) {
+          throw new createError.InternalServerError(
+            "Future cycles table is missing. Please run database migration 038_create_patient_future_cycles.sql"
+          );
+        }
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
