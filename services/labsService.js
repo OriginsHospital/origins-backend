@@ -93,21 +93,30 @@ class LabsService extends BaseService {
   }
 
   async getAllOutsourcingLabTestsService() {
-    const { searchQuery } = this._request.query;
+    const { searchQuery, branchId = null } = this._request.query;
     const trimmedSearchQuery = searchQuery?.trim();
+    const parsedBranchId = branchId ? Number(branchId) : null;
 
     let query = getAllOutsourcingLabtestsQuery;
+    const conditions = [];
     if (trimmedSearchQuery) {
-      query += `
-        where patientName LIKE :searchQuery
-      `;
+      conditions.push("patientName LIKE :searchQuery");
+    }
+    if (parsedBranchId) {
+      conditions.push("branchId = :branchId");
+    }
+    if (conditions.length) {
+      query += ` WHERE ${conditions.join(" AND ")}`;
     }
 
-    query += `ORDER BY appointmentDate DESC`;
+    query += ` ORDER BY appointmentDate DESC`;
 
     const getAllOutsourcingLabTestsData = await this.mysqlConnection
       .query(query, {
-        replacements: { searchQuery: `%${trimmedSearchQuery}%` },
+        replacements: {
+          searchQuery: `%${trimmedSearchQuery}%`,
+          branchId: parsedBranchId
+        },
         type: Sequelize.QueryTypes.SELECT
       })
       .catch(err => {
