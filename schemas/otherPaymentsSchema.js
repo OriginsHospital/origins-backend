@@ -17,7 +17,16 @@ const getOrderIdSchema = Joi.object({
   discountAmount: Joi.number().required(),
   payableAfterDiscountAmount: Joi.number().required(),
   pendingOrderAmount: Joi.number().required(),
-  paymentMode: Joi.string().required()
+  paymentMode: Joi.string().required(),
+  isSplitPayment: Joi.boolean().optional(),
+  splitPayment: Joi.object({
+    cashAmount: Joi.number().required(),
+    upiAmount: Joi.number().required(),
+    totalAmount: Joi.number().required()
+  }).optional(),
+  splitPaymentSummary: Joi.string()
+    .optional()
+    .allow("", null)
 });
 
 const sendTransactionIdSchema = Joi.object({

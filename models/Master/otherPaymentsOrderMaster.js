@@ -59,6 +59,23 @@ const OtherPaymentsOrderMaster = MySqlConnection._instance.define(
       type: Sequelize.DataTypes.STRING(100),
       allowNull: false
     },
+    isSplitPayment: {
+      type: Sequelize.DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    splitCashAmount: {
+      type: Sequelize.DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    splitUpiAmount: {
+      type: Sequelize.DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    splitPaymentSummary: {
+      type: Sequelize.DataTypes.STRING(500),
+      allowNull: true
+    },
     type: {
       type: Sequelize.STRING(100),
       allowNull: true,

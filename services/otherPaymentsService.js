@@ -134,8 +134,34 @@ class OtherPaymentsService extends BaseService {
         pendingOrderAmount,
         couponCode,
         paymentMode,
-        refId
+        refId,
+        isSplitPayment,
+        splitPayment,
+        splitPaymentSummary
       } = validOrderData;
+
+      const isSplit =
+        isSplitPayment === true ||
+        paymentMode === "SPLIT" ||
+        Boolean(splitPayment?.cashAmount && splitPayment?.upiAmount);
+
+      if (isSplit) {
+        const cashAmount = Number(splitPayment?.cashAmount || 0);
+        const upiAmount = Number(splitPayment?.upiAmount || 0);
+        const totalSplit = Number((cashAmount + upiAmount).toFixed(2));
+        const expected = Number(Number(payableAfterDiscountAmount).toFixed(2));
+
+        if (cashAmount <= 0 || upiAmount <= 0) {
+          throw new createError.BadRequest(
+            "Split payment requires both Cash and UPI amounts greater than 0"
+          );
+        }
+        if (totalSplit !== expected) {
+          throw new createError.BadRequest(
+            `Split amount must equal payable amount (₹${expected})`
+          );
+        }
+      }
 
       const calculatedPayableAmount = totalOrderAmount - pendingOrderAmount;
       if (calculatedPayableAmount.toString() != payableAmount) {
@@ -197,9 +223,22 @@ class OtherPaymentsService extends BaseService {
         orderId = moment.tz("Asia/Kolkata").format("YYYYMMDDHHmmssSS");
       }
 
+      const resolvedPaymentMode = isSplit ? "SPLIT" : paymentMode;
+      const resolvedSplitSummary =
+        splitPaymentSummary ||
+        (isSplit
+          ? `Cash: ₹${Number(splitPayment.cashAmount).toFixed(
+              2
+            )}, UPI: ₹${Number(splitPayment.upiAmount).toFixed(2)}`
+          : null);
+
       const orderData = {
         orderId,
-        paymentMode,
+        paymentMode: resolvedPaymentMode,
+        isSplitPayment: isSplit ? 1 : 0,
+        splitCashAmount: isSplit ? splitPayment.cashAmount : null,
+        splitUpiAmount: isSplit ? splitPayment.upiAmount : null,
+        splitPaymentSummary: isSplit ? resolvedSplitSummary : null,
         pendingOrderAmount: pendingOrderAmount,
         paidOrderAmountBeforeDiscount: payableAmount,
         paidOrderAmount: payableAfterDiscountAmount,
@@ -210,7 +249,11 @@ class OtherPaymentsService extends BaseService {
           .tz("Asia/Kolkata")
           .format("YYYY-MM-DD HH:mm:ss"),
         paymentStatus:
-          paymentMode === "CASH" || paymentMode === "UPI" ? "PAID" : "DUE",
+          resolvedPaymentMode === "CASH" ||
+          resolvedPaymentMode === "UPI" ||
+          resolvedPaymentMode === "SPLIT"
+            ? "PAID"
+            : "DUE",
         refId
       };
 
@@ -315,9 +358,36 @@ class OtherPaymentsService extends BaseService {
       .replaceAll("{{doctorName}}", data[0]?.patientInformation?.doctorName)
       .replaceAll("{{ageGender}}", data[0]?.patientInformation?.ageGender)
       .replaceAll("{{mobileNumber}}", data[0]?.patientInformation?.mobileNumber)
-      .replaceAll("{{paymentMode}}", orderDetails?.paymentMode);
+      .replaceAll(
+        "{{paymentMode}}",
+        this.formatPaymentModeForInvoice(orderDetails)
+      );
 
     return patientHeaderInforForInvoice;
+  }
+
+  formatPaymentModeForInvoice(orderDetails) {
+    const splitSummary = orderDetails?.splitPaymentSummary;
+    const splitCashAmount = orderDetails?.splitCashAmount;
+    const splitUpiAmount = orderDetails?.splitUpiAmount;
+    let paymentModeLabel = orderDetails?.paymentMode || "";
+
+    if (
+      orderDetails?.isSplitPayment ||
+      splitSummary ||
+      splitCashAmount ||
+      splitUpiAmount
+    ) {
+      paymentModeLabel = `${paymentModeLabel || "SPLIT"} (Split)`;
+      if (splitCashAmount || splitUpiAmount) {
+        paymentModeLabel += ` | Cash: ₹${splitCashAmount ||
+          0}, UPI: ₹${splitUpiAmount || 0}`;
+      } else if (splitSummary) {
+        paymentModeLabel += ` | ${splitSummary}`;
+      }
+    }
+
+    return paymentModeLabel;
   }
 
   async downloadInvoiceService() {
@@ -378,7 +448,15 @@ class OtherPaymentsService extends BaseService {
         isConsultationFee: 0,
         isAppointment: 0,
         isMileStone: 0,
-        isAdvancePayment: 1 // For Showing Advance payment Section in Invoice Template
+        isAdvancePayment: 1, // For Showing Advance payment Section in Invoice Template
+        isSplitPayment:
+          invoiceDetails?.orderDetails?.isSplitPayment === true ||
+          invoiceDetails?.orderDetails?.isSplitPayment === 1 ||
+          invoiceDetails?.orderDetails?.isSplitPayment === "1",
+        splitCashAmount: invoiceDetails?.orderDetails?.splitCashAmount || 0,
+        splitUpiAmount: invoiceDetails?.orderDetails?.splitUpiAmount || 0,
+        splitPaymentSummary:
+          invoiceDetails?.orderDetails?.splitPaymentSummary || ""
       };
 
       let productTableData;

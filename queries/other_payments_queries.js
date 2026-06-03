@@ -18,6 +18,10 @@ SELECT
 			JSON_OBJECT(
 				'id', opom.id,
 				'paymentMode', opom.paymentMode, 
+				'isSplitPayment', IFNULL(opom.isSplitPayment, 0),
+				'splitCashAmount', opom.splitCashAmount,
+				'splitUpiAmount', opom.splitUpiAmount,
+				'splitPaymentSummary', IFNULL(opom.splitPaymentSummary, ''),
 				'discountAmount', opom.discountAmount,
 				'paidOrderAmount', opom.paidOrderAmountBeforeDiscount,
 				'paymentDate', opom.orderDate,
@@ -40,8 +44,12 @@ SELECT
         'transactionNo', IFNULL(opom.transactionId,'') ,
         'paymentStatus', opom.paymentStatus ,
         'paymentMode', opom.paymentMode,
-        'isOnlineMode', CASE WHEN opom.paymentMode IN ('ONLINE', 'UPI') THEN TRUE ELSE FALSE END,
-        'isCashMode', CASE WHEN opom.paymentMode = 'CASH' THEN TRUE ELSE FALSE END,
+        'isSplitPayment', IFNULL(opom.isSplitPayment, 0),
+        'splitCashAmount', opom.splitCashAmount,
+        'splitUpiAmount', opom.splitUpiAmount,
+        'splitPaymentSummary', IFNULL(opom.splitPaymentSummary, ''),
+        'isOnlineMode', CASE WHEN opom.paymentMode IN ('ONLINE', 'UPI') AND IFNULL(opom.isSplitPayment, 0) = 0 THEN TRUE ELSE FALSE END,
+        'isCashMode', CASE WHEN opom.paymentMode = 'CASH' OR IFNULL(opom.isSplitPayment, 0) = 1 THEN TRUE ELSE FALSE END,
         'orderDate', CAST(opom.orderDate as DATE)
     ) as orderDetails,
     JSON_OBJECT(

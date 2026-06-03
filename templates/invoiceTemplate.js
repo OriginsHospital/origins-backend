@@ -367,6 +367,22 @@ let invoiceTemplate = `
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
+            {{#if isSplitPayment}}
+            <tr>
+                <td colspan="2" style="padding: 2px;">
+                    <strong>Split Payment:</strong>
+                    Cash {{Currency}}.{{splitCashAmount}} |
+                    UPI {{Currency}}.{{splitUpiAmount}}
+                </td>
+            </tr>
+            {{#if splitPaymentSummary}}
+            <tr>
+                <td colspan="2" style="padding: 2px;">
+                    <strong>Payment Division:</strong> {{splitPaymentSummary}}
+                </td>
+            </tr>
+            {{/if}}
+            {{/if}}
             
         </table>
         {{/if}}
