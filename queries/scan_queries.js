@@ -478,6 +478,7 @@ const getOpuSheetsByDateQuery = `
 SELECT
   taa.id AS appointmentId,
   taa.treatmentCycleId,
+  vtca.treatmentTypeId AS treatmentTypeId,
   'Treatment' AS appointmentType,
   CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
   COALESCE(
@@ -497,6 +498,7 @@ INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
 INNER JOIN patient_master pm ON pm.id = pva.patientId
 WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
   AND (:branchId IS NULL OR taa.branchId = :branchId)
+  AND vtca.treatmentTypeId NOT IN (1, 2, 3)
 ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 `;
 
