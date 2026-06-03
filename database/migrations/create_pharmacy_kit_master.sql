@@ -52,7 +52,7 @@ SELECT * FROM (
             JSON_OBJECT('name', 'BUSCOGAST INJ', 'quantity', 1),
             JSON_OBJECT('name', 'NIPRO SYRINGE 2.5ML', 'quantity', 2),
             JSON_OBJECT('name', 'ZADY 500MG', 'quantity', 5),
-            JSON_OBJECT('name', 'DROTIN-M TAB', 'quantity', 3)
+            JSON_OBJECT('name', 'DROTVIN M', 'quantity', 3)
         ), 1, 1
     UNION ALL SELECT 'FLUSH KIT', 'FLUSH_KIT',
         JSON_ARRAY(
