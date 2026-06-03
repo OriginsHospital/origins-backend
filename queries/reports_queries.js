@@ -811,6 +811,29 @@ const salesDataQuery = `
         ) = :branchId
 `;
 
+const pharmacyReturnDiscountSql = `
+  CASE
+    WHEN CAST(odm.paidOrderAmount AS DECIMAL(10, 2)) > 0
+      AND CAST(odm.totalOrderAmount AS DECIMAL(10, 2)) > CAST(odm.paidOrderAmount AS DECIMAL(10, 2))
+    THEN ROUND(
+      pppr.totalAmount * (
+        (CAST(odm.totalOrderAmount AS DECIMAL(10, 2)) - CAST(odm.paidOrderAmount AS DECIMAL(10, 2)))
+        / CAST(odm.paidOrderAmount AS DECIMAL(10, 2))
+      ),
+      2
+    )
+    WHEN CAST(odm.discountAmount AS DECIMAL(10, 2)) > 0
+      AND CAST(odm.totalOrderAmount AS DECIMAL(10, 2)) > 0
+    THEN ROUND(
+      pppr.totalAmount * (
+        CAST(odm.discountAmount AS DECIMAL(10, 2))
+        / CAST(odm.totalOrderAmount AS DECIMAL(10, 2))
+      ),
+      2
+    )
+    ELSE 0
+  END`;
+
 const returnsDataQuery = `
     select
 	JSON_OBJECT(
@@ -842,6 +865,11 @@ const returnsDataQuery = `
         'type', odm.type ,
         'date', DATE(pppr.returnedDate),
         'amount', pppr.totalAmount  ,
+        'discountAmount', ${pharmacyReturnDiscountSql},
+        'paymentMode', COALESCE(
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pppr.returnDetails, '$.refundMethod')), ''),
+            'CASH'
+        ),
         'productType', odm.productType ) as orderDetails
     from
         stockmanagement.patient_pharamacy_purchase_returns pppr INNER JOIN
@@ -897,6 +925,11 @@ const returnsDataQuery = `
             'type', odm.type ,
             'date', DATE(pppr.returnedDate),
             'amount', pppr.totalAmount ,
+            'discountAmount', ${pharmacyReturnDiscountSql},
+            'paymentMode', COALESCE(
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pppr.returnDetails, '$.refundMethod')), ''),
+                'CASH'
+            ),
             'productType', odm.productType 
     ) as orderDetails
     from

@@ -1252,6 +1252,31 @@ class PaymentService extends BaseService {
           purchaseType: orderDetails?.type || null
         };
       }
+
+      // Always expose order payment summary from the master row for refund discount math.
+      let orderSummary = orderInformation.orderSummary;
+      if (typeof orderSummary === "string") {
+        try {
+          orderSummary = JSON.parse(orderSummary);
+        } catch (err) {
+          orderSummary = {};
+        }
+      }
+      if (!orderSummary || typeof orderSummary !== "object") {
+        orderSummary = {};
+      }
+      orderInformation.orderSummary = {
+        totalOrderAmount: Number(
+          orderSummary.totalOrderAmount ?? orderDetails?.totalOrderAmount ?? 0
+        ),
+        paidOrderAmount: Number(
+          orderSummary.paidOrderAmount ?? orderDetails?.paidOrderAmount ?? 0
+        ),
+        discountAmount: Number(
+          orderSummary.discountAmount ?? orderDetails?.discountAmount ?? 0
+        ),
+        couponCode: orderSummary.couponCode ?? orderDetails?.couponCode ?? null
+      };
     }
 
     // If purchasedItems is null or empty, try to parse orderDetails directly as fallback
@@ -1406,15 +1431,58 @@ class PaymentService extends BaseService {
 
   /** Allocates order-level coupon/discount across line items by stored line totals. */
   getPharmacyLinePaidRatio(orderRow, parsedOrderDetails) {
+    const totalOrderAmount = Number(orderRow?.totalOrderAmount || 0);
+    const paidOrderAmount = Number(orderRow?.paidOrderAmount || 0);
     const sumLineTotals = (parsedOrderDetails || []).reduce(
       (sum, item) => sum + Number(item?.totalCost || 0),
       0
     );
-    const paidOrderAmount = Number(orderRow?.paidOrderAmount || 0);
+
+    // Line items already store the post-discount paid amount (e.g. medicine stages).
+    if (
+      sumLineTotals > 0 &&
+      paidOrderAmount >= 0 &&
+      Math.abs(sumLineTotals - paidOrderAmount) < 0.05
+    ) {
+      return 1;
+    }
+
+    // Order header discount/coupon is authoritative when lines hold pre-discount MRP.
+    if (totalOrderAmount > 0) {
+      return this.getOrderDiscountMultiplier(orderRow);
+    }
+
     if (sumLineTotals > 0 && paidOrderAmount >= 0) {
       return paidOrderAmount / sumLineTotals;
     }
+
     return this.getOrderDiscountMultiplier(orderRow);
+  }
+
+  getPharmacyLineTotalBasis(orderEntry) {
+    const storedLineTotal = Number(orderEntry?.totalCost);
+    const hasStoredLineTotal =
+      orderEntry?.totalCost !== undefined &&
+      orderEntry?.totalCost !== null &&
+      !Number.isNaN(storedLineTotal);
+
+    if (hasStoredLineTotal) {
+      return storedLineTotal;
+    }
+
+    const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
+      ? orderEntry.purchaseDetails
+      : [];
+    return this.getUndiscountedLineTotalFromPurchaseDetails(purchaseDetails);
+  }
+
+  getPharmacyLinePaidEffective(orderEntry, linePaidRatio) {
+    const lineTotalBasis = this.getPharmacyLineTotalBasis(orderEntry);
+    // Explicit zero line total means a 100% item coupon — nothing was paid for this line.
+    if (lineTotalBasis === 0) {
+      return 0;
+    }
+    return lineTotalBasis * Number(linePaidRatio || 1);
   }
 
   getPharmacyRefundGrnUnitPrice({
@@ -1423,8 +1491,10 @@ class PaymentService extends BaseService {
     purchaseInfo,
     linePaidRatio
   }) {
-    const paidLineTotal = Number(orderEntry?.totalCost || 0);
-    const paidLineEffective = paidLineTotal * Number(linePaidRatio || 1);
+    const paidLineEffective = this.getPharmacyLinePaidEffective(
+      orderEntry,
+      linePaidRatio
+    );
     const purchasedQty = Number(lineBill?.purchaseQuantity || 0);
 
     if (paidLineEffective <= 0) {
