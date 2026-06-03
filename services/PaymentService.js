@@ -1425,25 +1425,16 @@ class PaymentService extends BaseService {
   }) {
     const paidLineTotal = Number(orderEntry?.totalCost || 0);
     const paidLineEffective = paidLineTotal * Number(linePaidRatio || 1);
-    const purchaseDetails = Array.isArray(orderEntry?.purchaseDetails)
-      ? orderEntry.purchaseDetails
-      : [];
-    const undiscountedLineTotal = this.getUndiscountedLineTotalFromPurchaseDetails(
-      purchaseDetails
-    );
-    const mrpPerTablet = Number(purchaseInfo?.mrpPerTablet || 0);
     const purchasedQty = Number(lineBill?.purchaseQuantity || 0);
 
     if (paidLineEffective <= 0) {
       return 0;
     }
-    if (undiscountedLineTotal > 0 && mrpPerTablet > 0) {
-      return (paidLineEffective / undiscountedLineTotal) * mrpPerTablet;
-    }
+    // Order/coupon discount is on the bill total; refund the line's paid share per tablet.
     if (purchasedQty > 0) {
       return paidLineEffective / purchasedQty;
     }
-    return mrpPerTablet;
+    return Number(purchaseInfo?.mrpPerTablet || 0);
   }
 
   normalizePharmacyReturnRecord(row) {
