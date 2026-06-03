@@ -1937,6 +1937,35 @@ class MasterDataService {
     return normalized.endsWith("_KIT") ? normalized : `${normalized}_KIT`;
   }
 
+  parseKitMedicinesRaw(medicines) {
+    if (!medicines) {
+      return [];
+    }
+    if (typeof medicines === "string") {
+      try {
+        return JSON.parse(medicines);
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(medicines) ? medicines : [];
+  }
+
+  normalizeKitMedicines(medicines) {
+    return this.parseKitMedicinesRaw(medicines)
+      .map(item => {
+        const quantity = Number(item?.quantity ?? item?.qty);
+        return {
+          name: String(item?.name ?? "").trim(),
+          quantity:
+            Number.isFinite(quantity) && quantity >= 1
+              ? Math.floor(quantity)
+              : 1
+        };
+      })
+      .filter(item => item.name);
+  }
+
   async getPharmacyKitService() {
     const data = await this.mysqlConnection
       .query(getAllPharmacyKitsQuery, {
@@ -1951,10 +1980,7 @@ class MasterDataService {
 
     return data.map(row => ({
       ...row,
-      medicines:
-        typeof row.medicines === "string"
-          ? JSON.parse(row.medicines)
-          : row.medicines
+      medicines: this.normalizeKitMedicines(row.medicines)
     }));
   }
 
@@ -1973,10 +1999,7 @@ class MasterDataService {
     return data.map(row => ({
       kitName: row.kitName,
       kitValue: row.kitValue,
-      medicines:
-        typeof row.medicines === "string"
-          ? JSON.parse(row.medicines)
-          : row.medicines
+      medicines: this.normalizeKitMedicines(row.medicines)
     }));
   }
 
@@ -2015,10 +2038,14 @@ class MasterDataService {
       throw new createError.BadRequest("Pharmacy kit already exists");
     }
 
+    const normalizedMedicines = this.normalizeKitMedicines(
+      validatedPayload.medicines
+    );
+
     await PharmacyKitMasterModel.create({
       kitName: validatedPayload.kitName.trim(),
       kitValue,
-      medicines: validatedPayload.medicines,
+      medicines: normalizedMedicines,
       isActive: validatedPayload.isActive,
       createdBy: this._request?.userDetails?.id
     }).catch(err => {
@@ -2071,25 +2098,50 @@ class MasterDataService {
       throw new createError.BadRequest("Pharmacy kit already exists");
     }
 
-    await PharmacyKitMasterModel.update(
-      {
-        kitName: validatedPayload.kitName.trim(),
-        kitValue,
-        medicines: validatedPayload.medicines,
-        isActive: validatedPayload.isActive,
-        updatedBy: this._request?.userDetails?.id
-      },
-      {
-        where: {
-          id: validatedPayload.id
-        }
-      }
+    const normalizedMedicines = this.normalizeKitMedicines(
+      validatedPayload.medicines
+    );
+
+    const existingRecord = await PharmacyKitMasterModel.findByPk(
+      validatedPayload.id
     ).catch(err => {
-      console.log("Error while updating pharmacy kit", err);
+      console.log("Error while fetching pharmacy kit for update", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
+
+    if (!existingRecord) {
+      throw new createError.NotFound("Pharmacy kit not found");
+    }
+
+    await this.mysqlConnection
+      .query(
+        `UPDATE pharmacy_kit_master
+         SET kitName = :kitName,
+             kitValue = :kitValue,
+             medicines = :medicines,
+             isActive = :isActive,
+             updatedBy = :updatedBy
+         WHERE id = :id`,
+        {
+          replacements: {
+            kitName: validatedPayload.kitName.trim(),
+            kitValue,
+            medicines: JSON.stringify(normalizedMedicines),
+            isActive: validatedPayload.isActive,
+            updatedBy: this._request?.userDetails?.id,
+            id: validatedPayload.id
+          },
+          type: Sequelize.QueryTypes.UPDATE
+        }
+      )
+      .catch(err => {
+        console.log("Error while updating pharmacy kit", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
 
     return Constants.DATA_UPDATED_SUCCESS;
   }
