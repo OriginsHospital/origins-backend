@@ -3,7 +3,10 @@ const Joi = require("@hapi/joi");
 const consultationGetAvailableDoctorsSchema = Joi.object({
   date: Joi.string()
     .max(100)
-    .required()
+    .required(),
+  branchId: Joi.number()
+    .integer()
+    .optional()
 });
 
 const consultationGetAvailableSlotsSchema = Joi.object({

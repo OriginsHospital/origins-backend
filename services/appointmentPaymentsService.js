@@ -115,13 +115,16 @@ class AppointmentsPaymentService extends BaseService {
         return branch.id;
       }
     );
+    const branchIdsForQuery = payload.branchId
+      ? [payload.branchId]
+      : currentUserBranchId;
 
     const data = await this.mysqlConnection
       .query(consultationGetAvailableDoctorsQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           date: payload.date,
-          branchId: currentUserBranchId.map(branch => String(branch))
+          branchId: branchIdsForQuery.map(branch => String(branch))
         }
       })
       .catch(err => {
