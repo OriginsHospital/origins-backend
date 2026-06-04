@@ -26,8 +26,11 @@ const {
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
-  patientHasStartedTreatmentQuery
+  patientHasStartedTreatmentQuery,
+  patientActiveTreatmentTypeQuery
 } = require("../queries/patient_queries");
+
+const FUTURE_CYCLE_ELIGIBLE_TREATMENT_TYPE_IDS = [1, 2, 3];
 const AWSConnection = require("../connections/aws_connection");
 const formFTemplate = require("../templates/formFTemplate");
 const patientVisitsAssociation = require("../models/Associations/patientVisitsAssociation");
@@ -1250,9 +1253,31 @@ class PatientsService extends BaseService {
       });
 
     if (Number(treatmentCheck[0]?.hasStartedTreatment) === 1) {
-      throw new createError.BadRequest(
-        "Future cycle cannot be scheduled for patients who have already started treatment."
+      const activeTreatmentRows = await this.mysqlConnection
+        .query(patientActiveTreatmentTypeQuery, {
+          replacements: { patientId: patientMasterId },
+          type: Sequelize.QueryTypes.SELECT
+        })
+        .catch(err => {
+          console.log("Error fetching active treatment type", err.message);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      const activeTreatmentTypeId = Number(
+        activeTreatmentRows[0]?.treatmentTypeId
       );
+
+      if (
+        !FUTURE_CYCLE_ELIGIBLE_TREATMENT_TYPE_IDS.includes(
+          activeTreatmentTypeId
+        )
+      ) {
+        throw new createError.BadRequest(
+          "Future cycle is only available for OI + TI, IUI Self, and IUI Donor patients, or before treatment has started."
+        );
+      }
     }
 
     const userId = this._request.userDetails?.id || null;

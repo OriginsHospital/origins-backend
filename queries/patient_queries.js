@@ -271,7 +271,16 @@ SELECT
     pm.branchId,
     (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
     (SELECT bm.name FROM branch_master bm WHERE bm.id = pm.branchId) AS branchName,
-    DATE_FORMAT(pfc.createdAt, '%d-%m-%Y') AS scheduledOn
+    DATE_FORMAT(pfc.createdAt, '%d-%m-%Y') AS scheduledOn,
+    (
+        SELECT ttm.name
+        FROM visit_treatment_cycles_associations vtca
+        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId AND pva.isActive = 1
+        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+        WHERE pva.patientId = pm.id
+        ORDER BY vtca.createdAt DESC, vtca.id DESC
+        LIMIT 1
+    ) AS treatmentType
 FROM patient_future_cycles pfc
 INNER JOIN patient_master pm ON pm.id = pfc.patientId
 LEFT JOIN city_master cm ON cm.id = pm.cityId
@@ -298,6 +307,16 @@ SELECT EXISTS (
 ) AS hasStartedTreatment
 `;
 
+const patientActiveTreatmentTypeQuery = `
+SELECT vtca.treatmentTypeId AS treatmentTypeId
+FROM visit_treatment_cycles_associations vtca
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+WHERE pva.patientId = :patientId
+  AND pva.isActive = 1
+ORDER BY vtca.createdAt DESC, vtca.id DESC
+LIMIT 1
+`;
+
 module.exports = {
   getDateFilteredPatientsQuery,
   getPatientsQuery,
@@ -307,5 +326,6 @@ module.exports = {
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
-  patientHasStartedTreatmentQuery
+  patientHasStartedTreatmentQuery,
+  patientActiveTreatmentTypeQuery
 };
