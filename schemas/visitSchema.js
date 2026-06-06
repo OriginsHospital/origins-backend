@@ -35,7 +35,12 @@ const createPackageSchema = Joi.object({
   marketingPackage: Joi.number().required(),
   registrationDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .required(),
+    .allow(null)
+    .when("registrationAmount", {
+      is: Joi.number().greater(0),
+      then: Joi.required(),
+      otherwise: Joi.optional().allow(null)
+    }),
   registrationAmount: Joi.number().required(),
   donorBookingDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -85,7 +90,12 @@ const editPackageSchema = Joi.object({
   marketingPackage: Joi.number().required(),
   registrationDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+    .allow(null)
+    .when("registrationAmount", {
+      is: Joi.number().greater(0),
+      then: Joi.required(),
+      otherwise: Joi.optional().allow(null)
+    }),
   registrationAmount: Joi.number().required(),
   donorBookingDate: Joi.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)

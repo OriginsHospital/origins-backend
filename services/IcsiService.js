@@ -15,6 +15,7 @@ const OTListMasterModel = require("../models/Master/otListMasterModel");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const TriggerTimeStampsModel = require("../models/Master/triggerTimeStampsMaster");
 const VisitEraConsentsAssociations = require("../models/Associations/visitEraConsentsAssociations");
+const { assertPackageDefinedForConsent } = require("../utils/packageUtils");
 
 const getS3KeyFromConsentRecord = consentRecord => {
   if (consentRecord?.key) {
@@ -74,9 +75,7 @@ class ConsentFormsTemplateService {
       }
     });
 
-    if (!packageData || !packageData.registrationDate) {
-      throw new createError.BadRequest("Package Amount still not defined");
-    }
+    assertPackageDefinedForConsent(packageData);
 
     if (!this._request.files && this._request.files.icsiConsent) {
       throw new createError.BadRequest("icsiConsent File is missing!");
@@ -317,9 +316,7 @@ class ConsentFormsTemplateService {
       }
     });
 
-    if (!packageData || !packageData.registrationDate) {
-      throw new createError.BadRequest("Package Amount still not defined");
-    }
+    assertPackageDefinedForConsent(packageData);
 
     if (!this._request.files && this._request.files.eraConsent) {
       throw new createError.BadRequest("Era File is missing!");

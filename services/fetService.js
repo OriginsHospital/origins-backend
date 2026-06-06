@@ -9,6 +9,7 @@ const AppointmentPaymentService = require("../services/appointmentPaymentsServic
 const VisitPackagesAssociation = require("../models/Associations/visitPackagesAssociation");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const TriggerTimeStampsModel = require("../models/Master/triggerTimeStampsMaster");
+const { assertPackageDefinedForConsent } = require("../utils/packageUtils");
 
 const getS3KeyFromConsentRecord = consentRecord => {
   if (consentRecord?.key) {
@@ -68,9 +69,7 @@ class ConsentFormsTemplateService {
       }
     });
 
-    if (!packageData || !packageData.registrationDate) {
-      throw new createError.BadRequest("Package Amount still not defined");
-    }
+    assertPackageDefinedForConsent(packageData);
 
     if (!this._request.files && this._request.files.fetConsent) {
       throw new createError.BadRequest("Fet File is missing!");
