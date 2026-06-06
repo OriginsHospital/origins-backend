@@ -209,5 +209,47 @@ class PatientsController {
       data: data
     });
   }
+
+  async createReferringDoctorHandler() {
+    const data = await this._service.createReferringDoctorService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async updateReferringDoctorHandler() {
+    const data = await this._service.updateReferringDoctorService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getReferringDoctorsHandler() {
+    const data = await this._service.getReferringDoctorsService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getReferringDoctorsLogHandler() {
+    const data = await this._service.getReferringDoctorsLogService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 module.exports = PatientsController;

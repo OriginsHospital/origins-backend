@@ -240,6 +240,47 @@ const saveFutureCycleSchema = Joi.object({
     .required()
 });
 
+const referringDoctorSchema = Joi.object({
+  doctorName: Joi.string()
+    .trim()
+    .min(1)
+    .max(255)
+    .required(),
+  specialization: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .required(),
+  branchId: Joi.number()
+    .integer()
+    .required(),
+  areaVillage: Joi.string()
+    .trim()
+    .min(1)
+    .max(255)
+    .required(),
+  contactNumber: Joi.string()
+    .pattern(/^[0-9]{10}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Contact number must be exactly 10 digits"
+    }),
+  hospitalName: Joi.string()
+    .trim()
+    .min(1)
+    .max(255)
+    .required(),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .default(1)
+});
+
+const updateReferringDoctorSchema = referringDoctorSchema.keys({
+  id: Joi.number()
+    .integer()
+    .required()
+});
+
 module.exports = {
   createPatientSchema,
   editPatientSchema,
@@ -249,5 +290,7 @@ module.exports = {
   saveOpdSheetSchema,
   saveDischargeSummarySheet,
   savePickUpSheet,
-  saveFutureCycleSchema
+  saveFutureCycleSchema,
+  referringDoctorSchema,
+  updateReferringDoctorSchema
 };

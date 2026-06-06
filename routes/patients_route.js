@@ -152,6 +152,34 @@ class PatientsRoute {
     );
 
     this._route.get(
+      "/referringDoctors",
+      checkActiveSession,
+      tokenVerified,
+      this.getReferringDoctors
+    );
+
+    this._route.post(
+      "/referringDoctors",
+      checkActiveSession,
+      tokenVerified,
+      this.createReferringDoctor
+    );
+
+    this._route.put(
+      "/referringDoctors",
+      checkActiveSession,
+      tokenVerified,
+      this.updateReferringDoctor
+    );
+
+    this._route.get(
+      "/referringDoctors/logs",
+      checkActiveSession,
+      tokenVerified,
+      this.getReferringDoctorsLog
+    );
+
+    this._route.get(
       "/downloadOpdSheetByPatientId/:id",
       checkActiveSession,
       tokenVerified,
@@ -258,6 +286,26 @@ class PatientsRoute {
   getFutureCycles = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientsController(req, res, next);
     await controllerObj.getFutureCyclesHandler();
+  });
+
+  createReferringDoctor = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.createReferringDoctorHandler();
+  });
+
+  updateReferringDoctor = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.updateReferringDoctorHandler();
+  });
+
+  getReferringDoctors = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.getReferringDoctorsHandler();
+  });
+
+  getReferringDoctorsLog = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.getReferringDoctorsLogHandler();
   });
 
   downloadOpdSheetByPatientId = asyncHandler(async (req,res,next) =>{

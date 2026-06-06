@@ -11,7 +11,9 @@ const {
   saveOpdSheetSchema,
   saveDischargeSummarySheet,
   savePickUpSheet,
-  saveFutureCycleSchema
+  saveFutureCycleSchema,
+  referringDoctorSchema,
+  updateReferringDoctorSchema
 } = require("../schemas/patientSchemas");
 const createError = require("http-errors");
 const lodash = require("lodash");
@@ -29,6 +31,17 @@ const {
   patientHasStartedTreatmentQuery,
   patientActiveTreatmentTypeQuery
 } = require("../queries/patient_queries");
+const {
+  getReferringDoctorsQuery,
+  insertReferringDoctorQuery,
+  updateReferringDoctorQuery,
+  getReferringDoctorByIdQuery,
+  insertReferringDoctorLogQuery,
+  getReferringDoctorsLogQuery
+} = require("../queries/referring_doctors_queries");
+const {
+  assertReferringDoctorsLogAccess
+} = require("../constants/referringDoctorsLogAccess");
 
 const FUTURE_CYCLE_ELIGIBLE_TREATMENT_TYPE_IDS = [1, 2, 3];
 const AWSConnection = require("../connections/aws_connection");
@@ -1348,6 +1361,332 @@ class PatientsService extends BaseService {
       });
 
     return futureCyclesData;
+  }
+
+  _normalizeDoctorName(name) {
+    return String(name || "")
+      .trim()
+      .replace(/^dr\.?\s*/i, "");
+  }
+
+  _formatDoctorRecord(record) {
+    return [
+      `Name: Dr. ${record.doctorName}`,
+      `Specialization: ${record.specialization}`,
+      `Branch ID: ${record.branchId}`,
+      `Area/Village: ${record.areaVillage}`,
+      `Contact: ${record.contactNumber}`,
+      `Hospital: ${record.hospitalName}`,
+      `Status: ${Number(record.isActive) === 1 ? "Active" : "Inactive"}`
+    ].join("; ");
+  }
+
+  _getFieldChanges(oldRecord, newRecord) {
+    const fields = [
+      { key: "doctorName", label: "Doctor Name", format: v => `Dr. ${v}` },
+      { key: "specialization", label: "Specialization" },
+      { key: "branchId", label: "Branch ID" },
+      { key: "areaVillage", label: "Area/Village" },
+      { key: "contactNumber", label: "Contact Number" },
+      { key: "hospitalName", label: "Hospital Name" },
+      {
+        key: "isActive",
+        label: "Status",
+        format: v => (Number(v) === 1 ? "Active" : "Inactive")
+      }
+    ];
+
+    const previousParts = [];
+    const updatedParts = [];
+
+    fields.forEach(({ key, label, format }) => {
+      const oldVal = oldRecord[key];
+      const newVal = newRecord[key];
+      if (String(oldVal) !== String(newVal)) {
+        const fmt = format || (v => v);
+        previousParts.push(`${label}: ${fmt(oldVal)}`);
+        updatedParts.push(`${label}: ${fmt(newVal)}`);
+      }
+    });
+
+    return { previousParts, updatedParts };
+  }
+
+  async _logReferringDoctorActivity({
+    referringDoctorId,
+    doctorName,
+    action,
+    previousValue,
+    updatedValue
+  }) {
+    const userId = this._request.userDetails?.id;
+    if (!userId) return;
+
+    await this.mysqlConnection
+      .query(insertReferringDoctorLogQuery, {
+        replacements: {
+          referringDoctorId,
+          doctorName,
+          action,
+          previousValue: previousValue || null,
+          updatedValue: updatedValue || null,
+          performedBy: userId
+        }
+      })
+      .catch(err => {
+        console.log(
+          "Error while logging referring doctor activity",
+          err.message
+        );
+      });
+  }
+
+  async createReferringDoctorService() {
+    const { error, value } = referringDoctorSchema.validate(
+      this._request.body,
+      { convert: true }
+    );
+    if (error) {
+      throw new createError.BadRequest(error.details[0].message);
+    }
+
+    const userId = this._request.userDetails?.id || null;
+    const doctorName = this._normalizeDoctorName(value.doctorName);
+
+    const [insertResult] = await this.mysqlConnection
+      .query(insertReferringDoctorQuery, {
+        replacements: {
+          doctorName,
+          specialization: value.specialization,
+          branchId: value.branchId,
+          areaVillage: value.areaVillage,
+          contactNumber: value.contactNumber,
+          hospitalName: value.hospitalName,
+          isActive: value.isActive ?? 1,
+          userId
+        }
+      })
+      .catch(err => {
+        console.log("Error while creating referring doctor", err.message);
+        if (err.message && err.message.includes("referring_doctors")) {
+          throw new createError.InternalServerError(
+            "Referring doctors table is missing. Please run database migration 041_create_referring_doctors.sql"
+          );
+        }
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const insertId = insertResult?.insertId;
+    const record = {
+      doctorName,
+      specialization: value.specialization,
+      branchId: value.branchId,
+      areaVillage: value.areaVillage,
+      contactNumber: value.contactNumber,
+      hospitalName: value.hospitalName,
+      isActive: value.isActive ?? 1
+    };
+
+    await this._logReferringDoctorActivity({
+      referringDoctorId: insertId,
+      doctorName,
+      action: "Created",
+      previousValue: "-",
+      updatedValue: this._formatDoctorRecord(record)
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async updateReferringDoctorService() {
+    const { error, value } = updateReferringDoctorSchema.validate(
+      this._request.body,
+      { convert: true }
+    );
+    if (error) {
+      throw new createError.BadRequest(error.details[0].message);
+    }
+
+    const existingRows = await this.mysqlConnection
+      .query(getReferringDoctorByIdQuery, {
+        replacements: { id: value.id },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error fetching referring doctor", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!existingRows.length) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const existing = existingRows[0];
+    const userId = this._request.userDetails?.id || null;
+    const doctorName = this._normalizeDoctorName(value.doctorName);
+
+    const newRecord = {
+      doctorName,
+      specialization: value.specialization,
+      branchId: value.branchId,
+      areaVillage: value.areaVillage,
+      contactNumber: value.contactNumber,
+      hospitalName: value.hospitalName,
+      isActive: value.isActive
+    };
+
+    await this.mysqlConnection
+      .query(updateReferringDoctorQuery, {
+        replacements: { ...newRecord, id: value.id, userId }
+      })
+      .catch(err => {
+        console.log("Error while updating referring doctor", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const statusChanged =
+      Number(existing.isActive) !== Number(newRecord.isActive);
+    const onlyStatusChanged =
+      statusChanged &&
+      existing.doctorName === newRecord.doctorName &&
+      existing.specialization === newRecord.specialization &&
+      Number(existing.branchId) === Number(newRecord.branchId) &&
+      existing.areaVillage === newRecord.areaVillage &&
+      existing.contactNumber === newRecord.contactNumber &&
+      existing.hospitalName === newRecord.hospitalName;
+
+    if (onlyStatusChanged) {
+      await this._logReferringDoctorActivity({
+        referringDoctorId: value.id,
+        doctorName,
+        action: Number(newRecord.isActive) === 1 ? "Activated" : "Deactivated",
+        previousValue: Number(existing.isActive) === 1 ? "Active" : "Inactive",
+        updatedValue: Number(newRecord.isActive) === 1 ? "Active" : "Inactive"
+      });
+    } else {
+      const { previousParts, updatedParts } = this._getFieldChanges(
+        existing,
+        newRecord
+      );
+
+      if (previousParts.length > 0) {
+        await this._logReferringDoctorActivity({
+          referringDoctorId: value.id,
+          doctorName,
+          action: "Updated",
+          previousValue: previousParts.join("; "),
+          updatedValue: updatedParts.join("; ")
+        });
+      }
+
+      if (statusChanged && !onlyStatusChanged) {
+        await this._logReferringDoctorActivity({
+          referringDoctorId: value.id,
+          doctorName,
+          action:
+            Number(newRecord.isActive) === 1 ? "Activated" : "Deactivated",
+          previousValue:
+            Number(existing.isActive) === 1 ? "Active" : "Inactive",
+          updatedValue: Number(newRecord.isActive) === 1 ? "Active" : "Inactive"
+        });
+      }
+    }
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async getReferringDoctorsService() {
+    const {
+      doctorName,
+      specialization,
+      branchId,
+      areaVillage,
+      contactNumber,
+      hospitalName,
+      status
+    } = this._request.query;
+
+    let query = getReferringDoctorsQuery;
+    const replacements = {};
+
+    if (doctorName) {
+      query += ` AND rd.doctorName LIKE :doctorName`;
+      replacements.doctorName = `%${doctorName}%`;
+    }
+    if (specialization) {
+      query += ` AND rd.specialization = :specialization`;
+      replacements.specialization = specialization;
+    }
+    if (branchId) {
+      query += ` AND rd.branchId = :branchId`;
+      replacements.branchId = branchId;
+    }
+    if (areaVillage) {
+      query += ` AND rd.areaVillage LIKE :areaVillage`;
+      replacements.areaVillage = `%${areaVillage}%`;
+    }
+    if (contactNumber) {
+      query += ` AND rd.contactNumber LIKE :contactNumber`;
+      replacements.contactNumber = `%${contactNumber}%`;
+    }
+    if (hospitalName) {
+      query += ` AND rd.hospitalName LIKE :hospitalName`;
+      replacements.hospitalName = `%${hospitalName}%`;
+    }
+    if (status === "Active") {
+      query += ` AND rd.isActive = 1`;
+    } else if (status === "Inactive") {
+      query += ` AND rd.isActive = 0`;
+    }
+
+    query += ` ORDER BY rd.updatedAt DESC, rd.id DESC`;
+
+    const data = await this.mysqlConnection
+      .query(query, {
+        replacements,
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting referring doctors", err.message);
+        if (err.message && err.message.includes("referring_doctors")) {
+          throw new createError.InternalServerError(
+            "Referring doctors table is missing. Please run database migration 041_create_referring_doctors.sql"
+          );
+        }
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data;
+  }
+
+  async getReferringDoctorsLogService() {
+    assertReferringDoctorsLogAccess(this._request);
+
+    const data = await this.mysqlConnection
+      .query(getReferringDoctorsLogQuery, {
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting referring doctors log", err.message);
+        if (err.message && err.message.includes("referring_doctors_log")) {
+          throw new createError.InternalServerError(
+            "Referring doctors log table is missing. Please run database migration 041_create_referring_doctors.sql"
+          );
+        }
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data;
   }
 
   async downloadOpdSheedByPatientIdService() {
