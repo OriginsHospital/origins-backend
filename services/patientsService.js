@@ -1420,7 +1420,13 @@ class PatientsService extends BaseService {
     updatedValue
   }) {
     const userId = this._request.userDetails?.id;
-    if (!userId) return;
+    if (!userId || !referringDoctorId) {
+      console.log(
+        "Skipping referring doctor log entry",
+        JSON.stringify({ userId, referringDoctorId, action })
+      );
+      return;
+    }
 
     await this.mysqlConnection
       .query(insertReferringDoctorLogQuery, {
@@ -1431,7 +1437,8 @@ class PatientsService extends BaseService {
           previousValue: previousValue || null,
           updatedValue: updatedValue || null,
           performedBy: userId
-        }
+        },
+        type: Sequelize.QueryTypes.INSERT
       })
       .catch(err => {
         console.log(
@@ -1453,7 +1460,7 @@ class PatientsService extends BaseService {
     const userId = this._request.userDetails?.id || null;
     const doctorName = this._normalizeDoctorName(value.doctorName);
 
-    const [insertResult] = await this.mysqlConnection
+    const [insertId] = await this.mysqlConnection
       .query(insertReferringDoctorQuery, {
         replacements: {
           doctorName,
@@ -1464,7 +1471,8 @@ class PatientsService extends BaseService {
           hospitalName: value.hospitalName,
           isActive: value.isActive ?? 1,
           userId
-        }
+        },
+        type: Sequelize.QueryTypes.INSERT
       })
       .catch(err => {
         console.log("Error while creating referring doctor", err.message);
@@ -1478,7 +1486,6 @@ class PatientsService extends BaseService {
         );
       });
 
-    const insertId = insertResult?.insertId;
     const record = {
       doctorName,
       specialization: value.specialization,
