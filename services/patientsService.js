@@ -1674,26 +1674,102 @@ class PatientsService extends BaseService {
     return data;
   }
 
+  _parseLogAttributes(valueStr) {
+    if (!valueStr || valueStr === "-") {
+      return {};
+    }
+    if (valueStr === "Active" || valueStr === "Inactive") {
+      return { status: valueStr };
+    }
+
+    const labelMap = {
+      Name: "doctorDisplayName",
+      "Doctor Name": "doctorDisplayName",
+      Specialization: "specialization",
+      "Branch ID": "branchId",
+      "Area/Village": "areaVillage",
+      Contact: "contactNumber",
+      "Contact Number": "contactNumber",
+      Hospital: "hospitalName",
+      "Hospital Name": "hospitalName",
+      Status: "status"
+    };
+
+    const result = {};
+    valueStr.split(";").forEach(part => {
+      const trimmed = part.trim();
+      const idx = trimmed.indexOf(":");
+      if (idx === -1) return;
+      const label = trimmed.slice(0, idx).trim();
+      const val = trimmed.slice(idx + 1).trim();
+      const key = labelMap[label];
+      if (key) {
+        result[key] = val;
+      }
+    });
+
+    return result;
+  }
+
+  _mapLogRowForDisplay(row, branchMap) {
+    const parsed = this._parseLogAttributes(row.updatedValue);
+    const branchFromId = parsed.branchId
+      ? branchMap[parsed.branchId] ||
+        branchMap[Number(parsed.branchId)] ||
+        parsed.branchId
+      : null;
+
+    return {
+      id: row.id,
+      doctorDisplayName:
+        parsed.doctorDisplayName || row.doctorDisplayName || "-",
+      action: row.action,
+      specialization: parsed.specialization || row.rdSpecialization || "-",
+      branch: branchFromId || row.rdBranch || "-",
+      areaVillage: parsed.areaVillage || row.rdAreaVillage || "-",
+      contactNumber: parsed.contactNumber || row.rdContactNumber || "-",
+      hospitalName: parsed.hospitalName || row.rdHospitalName || "-",
+      performedBy: row.performedBy || "-",
+      performedAt: row.performedAt
+    };
+  }
+
+  async _getBranchLookupMap() {
+    const branches = await this.mysqlConnection
+      .query("SELECT id, branchCode, name FROM branch_master", {
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(() => []);
+
+    return branches.reduce((acc, branch) => {
+      acc[branch.id] = branch.branchCode || branch.name;
+      return acc;
+    }, {});
+  }
+
   async getReferringDoctorsLogService() {
     assertReferringDoctorsLogAccess(this._request);
 
-    const data = await this.mysqlConnection
-      .query(getReferringDoctorsLogQuery, {
-        type: Sequelize.QueryTypes.SELECT
-      })
-      .catch(err => {
-        console.log("Error while getting referring doctors log", err.message);
-        if (err.message && err.message.includes("referring_doctors_log")) {
+    const [data, branchMap] = await Promise.all([
+      this.mysqlConnection
+        .query(getReferringDoctorsLogQuery, {
+          type: Sequelize.QueryTypes.SELECT
+        })
+        .catch(err => {
+          console.log("Error while getting referring doctors log", err.message);
+          if (err.message && err.message.includes("referring_doctors_log")) {
+            throw new createError.InternalServerError(
+              "Referring doctors log table is missing. Please run database migration 041_create_referring_doctors.sql"
+            );
+          }
           throw new createError.InternalServerError(
-            "Referring doctors log table is missing. Please run database migration 041_create_referring_doctors.sql"
+            Constants.SOMETHING_ERROR_OCCURRED
           );
-        }
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
+        }),
+      this._getBranchLookupMap()
+    ]);
 
-    return data;
+    return data.map(row => this._mapLogRowForDisplay(row, branchMap));
   }
 
   async downloadOpdSheedByPatientIdService() {

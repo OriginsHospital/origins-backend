@@ -61,15 +61,22 @@ INSERT INTO referring_doctors_log (
 const getReferringDoctorsLogQuery = `
 SELECT
     rdl.id,
+    rdl.referringDoctorId,
     rdl.doctorName,
     CONCAT('Dr. ', rdl.doctorName) AS doctorDisplayName,
     rdl.action,
-    rdl.previousValue,
     rdl.updatedValue,
+    rd.specialization AS rdSpecialization,
+    rd.areaVillage AS rdAreaVillage,
+    rd.contactNumber AS rdContactNumber,
+    rd.hospitalName AS rdHospitalName,
+    COALESCE(bm.branchCode, bm.name) AS rdBranch,
     (SELECT u.fullName FROM users u WHERE u.id = rdl.performedBy) AS performedBy,
     DATE_FORMAT(rdl.performedAt, '%d-%m-%Y %H:%i') AS performedAt,
     rdl.performedAt AS performedAtRaw
 FROM referring_doctors_log rdl
+LEFT JOIN referring_doctors rd ON rd.id = rdl.referringDoctorId
+LEFT JOIN branch_master bm ON bm.id = rd.branchId
 ORDER BY rdl.performedAt DESC, rdl.id DESC
 `;
 
