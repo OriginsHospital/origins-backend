@@ -595,25 +595,27 @@ class AppointmentsPaymentService extends BaseService {
     ];
 
     const medicationsRows = [
-      { value: "endofert", label: "TAB ENDOFERT-H 2MG" },
-      { value: "estrobet", label: "ESTROBET GEL" },
-      { value: "ecospirin", label: "TAB. ECOSPIRIN 150 MG" },
-      { value: "asvit", label: "TAB.ASVIT E" },
-      { value: "nicardia", label: "TAB.NICARDIA" },
-      { value: "bifolate", label: "TAB.BIFOLATE-OD" },
-      { value: "pregnasur", label: "TAB.PREGNASUR E-HS" },
-      { value: "dolonex", label: "TAB. DOLONEX DT ½ TID" },
-      { value: "susten", label: "INJ.SUSTEN 100MG IM" },
-      { value: "michelle", label: "CAP.MICHELLE 200MG" },
-      { value: "dydropreg", label: "TAB.DYDROPREG" }
+      { label: "Endofert-H", value: "Endofert-H" },
+      { label: "ESTRABET GEL", value: "ESTRABET GEL" },
+      { label: "ASVIT-E", value: "ASVIT-E" },
+      {
+        label: "Nicardia retard 20 mg tab",
+        value: "Nicardia retard 20 mg tab"
+      },
+      { label: "BIFOLATE", value: "BIFOLATE" },
+      { label: "PREGNASURE", value: "PREGNASURE" },
+      { label: "DOLONEX DT 20MG TAB", value: "DOLONEX DT 20MG TAB" },
+      { label: "SUSTEN 100 INJ", value: "SUSTEN 100 INJ" },
+      { label: "MICHELLE 200 TAB", value: "MICHELLE 200 TAB" },
+      { label: "DYDROPREG", value: "DYDROPREG" }
     ];
 
     const scansRows = [];
 
     const template = {
       columns: dateRange,
-      medicationRows: [],
-      medicationSheet: [],
+      medicationRows: medicationsRows,
+      medicationSheet: { rows: medicationsRows },
       scanRows: scansRows,
       scanSheet: []
     };
@@ -647,7 +649,7 @@ class AppointmentsPaymentService extends BaseService {
       date: dateRange,
       follicularSheet: follicularRows,
       scanSheet: scansRows,
-      medicationSheet: []
+      medicationSheet: medicationsRows
     };
   }
 
