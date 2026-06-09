@@ -282,7 +282,7 @@ const stockExpiryReportQuery = `
         FROM stockmanagement.grn_items_associations gia
     )
     SELECT
-        (SELECT im.itemName FROM stockmanagement.item_master im WHERE im.id = gia.itemId) AS itemName,
+        im.itemName,
         gia.batchNo,
         (gia.totalQuantity * gia.ratePerTablet) AS rate,
         gia.ratePerTablet,
@@ -313,13 +313,19 @@ const stockExpiryReportQuery = `
     FROM stockmanagement.grn_items_associations gia
     INNER JOIN expiryDuration ed ON ed.id = gia.id
     INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+    INNER JOIN stockmanagement.item_master im ON im.id = gia.itemId
     WHERE gia.totalQuantity > 0
         AND (:branchId IS NULL OR gm.branchId = :branchId)
         AND (
             :reportType IS NULL
             OR :reportType = ''
             OR (:reportType = 'expired' AND ed.duration < 0)
-            OR (:reportType = 'nearExpire' AND ed.duration >= 0 AND ed.duration <= :nearExpireDays)
+            OR (
+                :reportType = 'nearExpire'
+                AND ed.duration >= 0
+                AND ed.duration <= :nearExpireDays
+                AND im.isActive = 1
+            )
         )
     ORDER BY
         CASE WHEN :reportType = 'nearExpire' THEN ed.duration END ASC,
