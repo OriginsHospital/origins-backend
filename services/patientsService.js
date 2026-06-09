@@ -36,6 +36,7 @@ const {
   insertReferringDoctorQuery,
   updateReferringDoctorQuery,
   getReferringDoctorByIdQuery,
+  getReferringDoctorByContactNumberQuery,
   insertReferringDoctorLogQuery,
   getReferringDoctorsLogQuery
 } = require("../queries/referring_doctors_queries");
@@ -1412,6 +1413,38 @@ class PatientsService extends BaseService {
     return { previousParts, updatedParts };
   }
 
+  _isDuplicateReferringDoctorContactError(err) {
+    const message = err?.message || "";
+    return (
+      err?.name === "SequelizeUniqueConstraintError" ||
+      message.includes("Duplicate entry") ||
+      message.includes("idx_contact_number_unique")
+    );
+  }
+
+  async _assertReferringDoctorContactUnique(contactNumber, excludeId = null) {
+    const existingRows = await this.mysqlConnection
+      .query(getReferringDoctorByContactNumberQuery, {
+        replacements: { contactNumber, excludeId: excludeId || null },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log(
+          "Error while checking referring doctor contact number",
+          err.message
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (existingRows.length) {
+      throw new createError.BadRequest(
+        "A referring doctor with this contact number already exists"
+      );
+    }
+  }
+
   async _logReferringDoctorActivity({
     referringDoctorId,
     doctorName,
@@ -1460,6 +1493,8 @@ class PatientsService extends BaseService {
     const userId = this._request.userDetails?.id || null;
     const doctorName = this._normalizeDoctorName(value.doctorName);
 
+    await this._assertReferringDoctorContactUnique(value.contactNumber);
+
     const [insertId] = await this.mysqlConnection
       .query(insertReferringDoctorQuery, {
         replacements: {
@@ -1476,6 +1511,11 @@ class PatientsService extends BaseService {
       })
       .catch(err => {
         console.log("Error while creating referring doctor", err.message);
+        if (this._isDuplicateReferringDoctorContactError(err)) {
+          throw new createError.BadRequest(
+            "A referring doctor with this contact number already exists"
+          );
+        }
         if (err.message && err.message.includes("referring_doctors")) {
           throw new createError.InternalServerError(
             "Referring doctors table is missing. Please run database migration 041_create_referring_doctors.sql"
@@ -1546,12 +1586,22 @@ class PatientsService extends BaseService {
       isActive: value.isActive
     };
 
+    await this._assertReferringDoctorContactUnique(
+      value.contactNumber,
+      value.id
+    );
+
     await this.mysqlConnection
       .query(updateReferringDoctorQuery, {
         replacements: { ...newRecord, id: value.id, userId }
       })
       .catch(err => {
         console.log("Error while updating referring doctor", err.message);
+        if (this._isDuplicateReferringDoctorContactError(err)) {
+          throw new createError.BadRequest(
+            "A referring doctor with this contact number already exists"
+          );
+        }
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );

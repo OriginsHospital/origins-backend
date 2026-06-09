@@ -50,6 +50,14 @@ const getReferringDoctorByIdQuery = `
 SELECT * FROM referring_doctors WHERE id = :id LIMIT 1
 `;
 
+const getReferringDoctorByContactNumberQuery = `
+SELECT id, doctorName, contactNumber
+FROM referring_doctors
+WHERE contactNumber = :contactNumber
+  AND (:excludeId IS NULL OR id != :excludeId)
+LIMIT 1
+`;
+
 const insertReferringDoctorLogQuery = `
 INSERT INTO referring_doctors_log (
     referringDoctorId, doctorName, action, previousValue, updatedValue, performedBy
@@ -85,6 +93,7 @@ module.exports = {
   insertReferringDoctorQuery,
   updateReferringDoctorQuery,
   getReferringDoctorByIdQuery,
+  getReferringDoctorByContactNumberQuery,
   insertReferringDoctorLogQuery,
   getReferringDoctorsLogQuery
 };

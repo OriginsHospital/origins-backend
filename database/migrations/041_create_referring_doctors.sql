@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS referring_doctors (
     INDEX idx_specialization (specialization),
     INDEX idx_branch_id (branchId),
     INDEX idx_is_active (isActive),
-    INDEX idx_doctor_name (doctorName)
+    INDEX idx_doctor_name (doctorName),
+    UNIQUE KEY idx_contact_number_unique (contactNumber)
 ) COMMENT 'Referring doctors who refer patients to the hospital';
 
 CREATE TABLE IF NOT EXISTS referring_doctors_log (
