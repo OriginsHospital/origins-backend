@@ -28,6 +28,12 @@ class AppointmentPaymentRoute {
       this.getAppointmentsByIdHandler
     );
     this._route.get(
+      "/appointments/getAppointmentsByVisitId/:visitId",
+      checkActiveSession,
+      tokenVerified,
+      this.getAppointmentsByVisitIdHandler
+    );
+    this._route.get(
       "/appointments/getAppointmentReasons",
       checkActiveSession,
       tokenVerified,
@@ -291,6 +297,11 @@ class AppointmentPaymentRoute {
   getAppointmentsByIdHandler = asyncHandler(async (req, res, next) => {
     const controllerObj = new AppointmentsPaymentController(req, res, next);
     await controllerObj.getAppointmentsByIdHandler();
+  });
+
+  getAppointmentsByVisitIdHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new AppointmentsPaymentController(req, res, next);
+    await controllerObj.getAppointmentsByVisitIdHandler();
   });
 
   treatmentGetAvailableDoctors = asyncHandler(async (req, res, next) => {

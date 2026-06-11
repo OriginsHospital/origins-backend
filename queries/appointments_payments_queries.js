@@ -1448,6 +1448,90 @@ select taa.id as appointmentId,  taa.appointmentDate,(select u.fullName from use
 INNER JOIN visit_treatment_cycles_associations vtca on vtca.id = taa.treatmentCycleId  and vtca.visitId = :activeVisitId
 `;
 
+const getMergedAppointmentsByTreatmentCycleId = `
+SELECT
+	taa.id AS appointmentId,
+	taa.branchId AS branchId,
+	taa.appointmentDate AS appointmentDate,
+	TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
+	TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd,
+	taa.consultationDoctorId AS doctorId,
+	(
+		SELECT cdm.name
+		FROM consultation_doctor_master cdm
+		WHERE cdm.userId = taa.consultationDoctorId
+	) AS doctorName,
+	'Treatment' AS appointmentSource,
+	NULL AS consultationType
+FROM treatment_appointments_associations taa
+WHERE taa.treatmentCycleId = :id
+
+UNION ALL
+
+SELECT
+	caa.id AS appointmentId,
+	caa.branchId AS branchId,
+	caa.appointmentDate AS appointmentDate,
+	TIME_FORMAT(caa.timeStart, '%H:%i') AS timeStart,
+	TIME_FORMAT(caa.timeEnd, '%H:%i') AS timeEnd,
+	caa.consultationDoctorId AS doctorId,
+	(
+		SELECT cdm.name
+		FROM consultation_doctor_master cdm
+		WHERE cdm.userId = caa.consultationDoctorId
+	) AS doctorName,
+	'Consultation' AS appointmentSource,
+	vca.type AS consultationType
+FROM consultation_appointments_associations caa
+INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+INNER JOIN visit_treatment_cycles_associations vtca ON vca.visitId = vtca.visitId
+WHERE vtca.id = :id
+
+ORDER BY appointmentDate DESC, timeStart DESC
+`;
+
+const getAllAppointmentsForVisitQuery = `
+SELECT
+	taa.id AS appointmentId,
+	taa.branchId AS branchId,
+	taa.appointmentDate AS appointmentDate,
+	TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
+	TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd,
+	taa.consultationDoctorId AS doctorId,
+	(
+		SELECT cdm.name
+		FROM consultation_doctor_master cdm
+		WHERE cdm.userId = taa.consultationDoctorId
+	) AS doctorName,
+	'Treatment' AS appointmentSource,
+	NULL AS consultationType
+FROM treatment_appointments_associations taa
+INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
+WHERE vtca.visitId = :visitId
+
+UNION ALL
+
+SELECT
+	caa.id AS appointmentId,
+	caa.branchId AS branchId,
+	caa.appointmentDate AS appointmentDate,
+	TIME_FORMAT(caa.timeStart, '%H:%i') AS timeStart,
+	TIME_FORMAT(caa.timeEnd, '%H:%i') AS timeEnd,
+	caa.consultationDoctorId AS doctorId,
+	(
+		SELECT cdm.name
+		FROM consultation_doctor_master cdm
+		WHERE cdm.userId = caa.consultationDoctorId
+	) AS doctorName,
+	'Consultation' AS appointmentSource,
+	vca.type AS consultationType
+FROM consultation_appointments_associations caa
+INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+WHERE vca.visitId = :visitId
+
+ORDER BY appointmentDate DESC, timeStart DESC
+`;
+
 module.exports = {
   consultationGetAvailableDoctorsQuery,
   consultationAvailableSlotsQuery,
@@ -1486,5 +1570,7 @@ module.exports = {
   printPrescriptionQuery,
   getPendingAppointmentReason,
   checkIsFirstAppointmentInVisit,
-  getAllActiveVisitAppointmentsQuery
+  getAllActiveVisitAppointmentsQuery,
+  getMergedAppointmentsByTreatmentCycleId,
+  getAllAppointmentsForVisitQuery
 };

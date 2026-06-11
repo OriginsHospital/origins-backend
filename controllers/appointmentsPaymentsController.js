@@ -112,6 +112,15 @@ class AppointmentsPaymentController {
     });
   }
 
+  async getAppointmentsByVisitIdHandler() {
+    const data = await this._service.getAppointmentsByVisitIdService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async treatmentGetAvailableDoctorsHandler() {
     const data = await this._service.treatmentGetAvailableDoctorsService();
     this._response.status(200).send({

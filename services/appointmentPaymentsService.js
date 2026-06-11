@@ -38,6 +38,8 @@ const {
   getAppointmentsByDateQuery,
   getAppointmentByConsultationId,
   getAppointmentByTreatmentId,
+  getMergedAppointmentsByTreatmentCycleId,
+  getAllAppointmentsForVisitQuery,
   consultationFeeCheckQuery,
   getLastConsultationFeePaymentDetails,
   getTreatmentStatusQuery,
@@ -1438,7 +1440,7 @@ class AppointmentsPaymentService extends BaseService {
 
     if (payload.type == "Treatment") {
       const data = await this.mysqlConnection
-        .query(getAppointmentByTreatmentId, {
+        .query(getMergedAppointmentsByTreatmentCycleId, {
           replacements: {
             id: payload.id
           },
@@ -1470,6 +1472,27 @@ class AppointmentsPaymentService extends BaseService {
       return data;
     }
     return [];
+  }
+
+  async getAppointmentsByVisitIdService() {
+    const visitId = Number(this._request.params.visitId);
+    if (!visitId) {
+      throw new createError.BadRequest("Visit ID is required");
+    }
+
+    const data = await this.mysqlConnection
+      .query(getAllAppointmentsForVisitQuery, {
+        replacements: { visitId },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while fetching visit appointments", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data;
   }
 
   async treatmentGetAvailableDoctorsService() {
