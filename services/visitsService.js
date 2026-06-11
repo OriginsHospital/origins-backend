@@ -37,6 +37,9 @@ const BloodGroupMaster = require("../models/Master/bloodGroupMaster");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const VisitHysteroscopyAssociations = require("../models/Associations/visitHysteroscopyAssociations");
 const VisitHysteroscopyReferenceImages = require("../models/Associations/visitHysteroscopyReferenceImages");
+const ConsultationAppointmentAssociations = require("../models/Associations/consultationAppointmentsAssociations");
+const TreatmentAppointmentAssociations = require("../models/Associations/treatmentAppointmentAssociations");
+
 class VisitsService {
   constructor(request, response, next) {
     this._request = request;
@@ -307,6 +310,192 @@ class VisitsService {
     return Constants.VISIT_CLOSED_SUCCESSFULLY;
   }
 
+  async convertConsultationAppointmentToTreatment(
+    consultationAppointmentId,
+    treatmentCycleId,
+    visitId,
+    transaction
+  ) {
+    const consultationRows = await this.mysqlConnection.query(
+      `
+        SELECT caa.*
+        FROM consultation_appointments_associations caa
+        INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+        WHERE caa.id = :consultationAppointmentId AND vca.visitId = :visitId
+        LIMIT 1
+      `,
+      {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { consultationAppointmentId, visitId },
+        transaction
+      }
+    );
+
+    if (lodash.isEmpty(consultationRows)) {
+      throw new createError.BadRequest(
+        "Consultation appointment not found for this visit"
+      );
+    }
+
+    const consultationAppointment = consultationRows[0];
+    const treatmentAppointment = await TreatmentAppointmentAssociations.create(
+      {
+        treatmentCycleId,
+        branchId: consultationAppointment.branchId,
+        appointmentDate: consultationAppointment.appointmentDate,
+        consultationDoctorId: consultationAppointment.consultationDoctorId,
+        timeStart: consultationAppointment.timeStart,
+        timeEnd: consultationAppointment.timeEnd,
+        appointmentReasonId: consultationAppointment.appointmentReasonId,
+        createdBy: consultationAppointment.createdBy,
+        isSeen: consultationAppointment.isSeen,
+        seenAt: consultationAppointment.seenAt,
+        isDone: consultationAppointment.isDone,
+        doneAt: consultationAppointment.doneAt,
+        isArrived: consultationAppointment.isArrived,
+        arrivedAt: consultationAppointment.arrivedAt,
+        isScan: consultationAppointment.isScan,
+        scanAt: consultationAppointment.scanAt,
+        isDoctor: consultationAppointment.isDoctor,
+        doctorAt: consultationAppointment.doctorAt,
+        stage: consultationAppointment.stage,
+        appointmentType: consultationAppointment.appointmentType,
+        noShow: consultationAppointment.noShow,
+        noShowReason: consultationAppointment.noShowReason,
+        isCompleted: consultationAppointment.isCompleted,
+        isReviewAppointmentCreated:
+          consultationAppointment.isReviewAppointmentCreated
+      },
+      { transaction }
+    );
+
+    const oldAppointmentId = consultationAppointmentId;
+    const newAppointmentId = treatmentAppointment.id;
+    const replacements = { oldAppointmentId, newAppointmentId };
+
+    const migrationQueries = [
+      `
+        UPDATE vitals_appointments_associations
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
+      `,
+      `
+        INSERT INTO treatment_appointment_line_bills_associations
+          (appointmentId, billTypeId, billTypeValue, prescribedQuantity, purchaseQuantity,
+           returnQuantity, prescriptionDetails, prescriptionDays, isSpouse, status, createdBy,
+           createdAt, updatedAt)
+        SELECT :newAppointmentId, billTypeId, billTypeValue, prescribedQuantity, purchaseQuantity,
+               returnQuantity, prescriptionDetails, prescriptionDays, isSpouse, status, createdBy,
+               createdAt, updatedAt
+        FROM consultation_appointment_line_bills_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        INSERT INTO treatment_appointment_notes_associations
+          (appointmentId, notes, isSpouse, isDone, createdBy, createdAt, updatedAt)
+        SELECT :newAppointmentId, notes, isSpouse, 0, createdBy, createdAt, updatedAt
+        FROM consultation_appointment_notes_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        INSERT INTO treatment_appointment_labtests_associations
+          (appointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt)
+        SELECT :newAppointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt
+        FROM consultation_appointment_labtests_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        INSERT INTO treatment_appointment_pharmacy_associations
+          (appointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt)
+        SELECT :newAppointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt
+        FROM consultation_appointment_pharmacy_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        INSERT INTO treatment_payments_associations
+          (appointmentId, billType, totalAmount, totalAmountPaid, createdBy)
+        SELECT :newAppointmentId, billType, totalAmount, totalAmountPaid, createdBy
+        FROM consultation_payments_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        UPDATE lab_test_results
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId
+          AND type IN ('CONSULTATION', 'Consultation')
+      `,
+      `
+        UPDATE scan_results
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId
+          AND type IN ('CONSULTATION', 'Consultation')
+      `,
+      `
+        UPDATE patient_scan_formf_associations
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
+      `,
+      `
+        UPDATE order_details_master
+        SET appointmentId = :newAppointmentId, type = 'TREATMENT'
+        WHERE appointmentId = :oldAppointmentId
+          AND type IN ('CONSULTATION', 'Consultation')
+      `,
+      `
+        DELETE FROM consultation_appointment_line_bills_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_appointment_notes_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_appointment_labtests_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_appointment_pharmacy_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_payments_associations
+        WHERE appointmentId = :oldAppointmentId
+      `
+    ];
+
+    for (const query of migrationQueries) {
+      await this.mysqlConnection
+        .query(query, {
+          replacements,
+          transaction
+        })
+        .catch(err => {
+          console.log(
+            "Error while migrating consultation appointment data to treatment",
+            err.message
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+    }
+
+    await ConsultationAppointmentAssociations.destroy({
+      where: { id: oldAppointmentId },
+      transaction
+    }).catch(err => {
+      console.log(
+        "Error while removing converted consultation appointment",
+        err.message
+      );
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return newAppointmentId;
+  }
+
   async createConsultationOrTreatmentService() {
     const createdByUserId = this._request?.userDetails?.id;
     const validatedInfoData = await createConsultationOrTreatmentSchema.validateAsync(
@@ -377,53 +566,76 @@ class VisitsService {
           Constants.TREATMENT_ALREADY_EXISTS_FOR_THIS_VISIT
         );
       }
-      const treatmentRecord = await visitTreatmentsAssociations
-        .create({
-          ...dataPassed,
-          treatmentTypeId: validatedInfoData?.treatmentTypeId
-        })
-        .catch(err => {
-          console.log(
-            "Error while creating new visitTreatmentsAssociations record",
-            err.message
-          );
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
 
-      // Check if package is required for selected treatment type.
-      // Some environments may contain newer treatment types in DB that are not yet
-      // present in local constants; in that case, default to non-package flow.
-      const selectedTreatmentTypeConfig =
-        treatmentTypes[(validatedInfoData?.treatmentTypeId)];
-      const isPackageRequired = !!selectedTreatmentTypeConfig?.isPackageExists;
-      if (validatedInfoData?.treatmentTypeId && isPackageRequired) {
-        const isPackageExist = await VisitPackagesAssociation.findOne({
-          where: {
-            visitId: visitId
+      const consultationAppointmentId =
+        validatedInfoData?.consultationAppointmentId;
+
+      return await this.mysqlConnection.transaction(async transaction => {
+        const treatmentRecord = await visitTreatmentsAssociations
+          .create(
+            {
+              ...dataPassed,
+              treatmentTypeId: validatedInfoData?.treatmentTypeId
+            },
+            { transaction }
+          )
+          .catch(err => {
+            console.log(
+              "Error while creating new visitTreatmentsAssociations record",
+              err.message
+            );
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+
+        const selectedTreatmentTypeConfig =
+          treatmentTypes[(validatedInfoData?.treatmentTypeId)];
+        const isPackageRequired = !!selectedTreatmentTypeConfig?.isPackageExists;
+        if (validatedInfoData?.treatmentTypeId && isPackageRequired) {
+          const isPackageExist = await VisitPackagesAssociation.findOne({
+            where: {
+              visitId: visitId
+            },
+            transaction
+          });
+
+          if (isPackageExist) {
+            throw new createError.Conflict(
+              Constants.PACKAGE_ALREADY_EXIST_FOR_VISIT
+            );
           }
-        });
 
-        if (isPackageExist) {
-          throw new createError.Conflict(
-            Constants.PACKAGE_ALREADY_EXIST_FOR_VISIT
+          await VisitPackagesAssociation.create(
+            {
+              visitId,
+              doctorSuggestedPackage: packageAmount,
+              registrationDate: null
+            },
+            { transaction }
+          ).catch(err => {
+            console.log("Error while creating automatic package", err);
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+        }
+
+        let convertedAppointmentId = null;
+        if (consultationAppointmentId) {
+          convertedAppointmentId = await this.convertConsultationAppointmentToTreatment(
+            consultationAppointmentId,
+            treatmentRecord.id,
+            visitId,
+            transaction
           );
         }
 
-        await VisitPackagesAssociation.create({
-          visitId,
-          doctorSuggestedPackage: packageAmount,
-          registrationDate: null
-        }).catch(err => {
-          console.log("Error while creating automatic package", err);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
-      }
-
-      return treatmentRecord.dataValues;
+        return {
+          ...treatmentRecord.dataValues,
+          convertedAppointmentId
+        };
+      });
     } else {
       throw new createError.BadRequest(
         "Please provide correct createType value"

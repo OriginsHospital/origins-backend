@@ -22,6 +22,7 @@ const createConsultationOrTreatmentSchema = Joi.object({
   visitId: Joi.number().required(),
   type: Joi.string().required(),
   packageAmount: Joi.number().optional(),
+  consultationAppointmentId: Joi.number().optional(),
   treatmentTypeId: Joi.number().when("createType", {
     is: "Treatment",
     then: Joi.number().required(),
