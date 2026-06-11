@@ -39,7 +39,10 @@ const VisitHysteroscopyAssociations = require("../models/Associations/visitHyste
 const VisitHysteroscopyReferenceImages = require("../models/Associations/visitHysteroscopyReferenceImages");
 const ConsultationAppointmentAssociations = require("../models/Associations/consultationAppointmentsAssociations");
 const TreatmentAppointmentAssociations = require("../models/Associations/treatmentAppointmentAssociations");
-
+const consultationAppointmentLineBillsAssociations = require("../models/Associations/consultationAppointmentLineBillsAssociations");
+const treatmentAppointmentLineBillsAssociations = require("../models/Associations/treatmentAppointmentLineBillsAssociations");
+const consultationAppointmentNotesAssociations = require("../models/Associations/consultationAppointmentNotesAssociations");
+const treatmentAppointmentNotesAssociations = require("../models/Associations/treatmentAppointmentNotesAssociations");
 class VisitsService {
   constructor(request, response, next) {
     this._request = request;
@@ -310,6 +313,118 @@ class VisitsService {
     return Constants.VISIT_CLOSED_SUCCESSFULLY;
   }
 
+  async runOptionalAppointmentMigrationQuery(query, replacements, transaction) {
+    try {
+      await this.mysqlConnection.query(query, {
+        replacements,
+        transaction
+      });
+    } catch (err) {
+      console.log("Optional appointment migration skipped:", err.message);
+    }
+  }
+
+  async copyConsultationLineBillsToTreatment(
+    oldAppointmentId,
+    newAppointmentId,
+    transaction
+  ) {
+    const consultationLineBills = await consultationAppointmentLineBillsAssociations
+      .findAll({
+        where: { appointmentId: oldAppointmentId },
+        transaction
+      })
+      .catch(err => {
+        console.log(
+          "Error while fetching consultation line bills",
+          err.message
+        );
+        return [];
+      });
+
+    for (const bill of consultationLineBills) {
+      const {
+        id,
+        appointmentId,
+        createdAt,
+        updatedAt,
+        ...billData
+      } = bill.dataValues;
+      await treatmentAppointmentLineBillsAssociations
+        .create(
+          {
+            ...billData,
+            appointmentId: newAppointmentId
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log(
+            "Error while copying consultation line bill",
+            err.message
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+    }
+
+    if (consultationLineBills.length > 0) {
+      await consultationAppointmentLineBillsAssociations.destroy({
+        where: { appointmentId: oldAppointmentId },
+        transaction
+      });
+    }
+  }
+
+  async copyConsultationNotesToTreatment(
+    oldAppointmentId,
+    newAppointmentId,
+    transaction
+  ) {
+    const consultationNotes = await consultationAppointmentNotesAssociations
+      .findAll({
+        where: { appointmentId: oldAppointmentId },
+        transaction
+      })
+      .catch(err => {
+        console.log("Error while fetching consultation notes", err.message);
+        return [];
+      });
+
+    for (const note of consultationNotes) {
+      const {
+        id,
+        appointmentId,
+        createdAt,
+        updatedAt,
+        ...noteData
+      } = note.dataValues;
+      await treatmentAppointmentNotesAssociations
+        .create(
+          {
+            ...noteData,
+            appointmentId: newAppointmentId,
+            isDone: noteData.isDone ?? 0
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log("Error while copying consultation note", err.message);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+    }
+
+    if (consultationNotes.length > 0) {
+      await consultationAppointmentNotesAssociations.destroy({
+        where: { appointmentId: oldAppointmentId },
+        transaction
+      });
+    }
+  }
+
   async convertConsultationAppointmentToTreatment(
     consultationAppointmentId,
     treatmentCycleId,
@@ -337,71 +452,81 @@ class VisitsService {
       );
     }
 
-    const consultationAppointment = consultationRows[0];
+    const consultationData = consultationRows[0];
+
     const treatmentAppointment = await TreatmentAppointmentAssociations.create(
       {
         treatmentCycleId,
-        branchId: consultationAppointment.branchId,
-        appointmentDate: consultationAppointment.appointmentDate,
-        consultationDoctorId: consultationAppointment.consultationDoctorId,
-        timeStart: consultationAppointment.timeStart,
-        timeEnd: consultationAppointment.timeEnd,
-        appointmentReasonId: consultationAppointment.appointmentReasonId,
-        createdBy: consultationAppointment.createdBy,
-        isSeen: consultationAppointment.isSeen,
-        seenAt: consultationAppointment.seenAt,
-        isDone: consultationAppointment.isDone,
-        doneAt: consultationAppointment.doneAt,
-        isArrived: consultationAppointment.isArrived,
-        arrivedAt: consultationAppointment.arrivedAt,
-        isScan: consultationAppointment.isScan,
-        scanAt: consultationAppointment.scanAt,
-        isDoctor: consultationAppointment.isDoctor,
-        doctorAt: consultationAppointment.doctorAt,
-        stage: consultationAppointment.stage,
-        appointmentType: consultationAppointment.appointmentType,
-        noShow: consultationAppointment.noShow,
-        noShowReason: consultationAppointment.noShowReason,
-        isCompleted: consultationAppointment.isCompleted,
-        isReviewAppointmentCreated:
-          consultationAppointment.isReviewAppointmentCreated
+        branchId: consultationData.branchId,
+        appointmentDate: consultationData.appointmentDate,
+        consultationDoctorId: consultationData.consultationDoctorId,
+        timeStart: consultationData.timeStart,
+        timeEnd: consultationData.timeEnd,
+        appointmentReasonId: consultationData.appointmentReasonId,
+        createdBy: consultationData.createdBy,
+        isSeen: consultationData.isSeen,
+        seenAt: consultationData.seenAt,
+        isDone: consultationData.isDone,
+        doneAt: consultationData.doneAt,
+        isArrived: consultationData.isArrived,
+        arrivedAt: consultationData.arrivedAt,
+        isScan: consultationData.isScan,
+        scanAt: consultationData.scanAt,
+        isDoctor: consultationData.isDoctor,
+        doctorAt: consultationData.doctorAt,
+        stage: consultationData.stage,
+        appointmentType: consultationData.appointmentType,
+        noShow: consultationData.noShow,
+        noShowReason: consultationData.noShowReason,
+        isCompleted: consultationData.isCompleted,
+        isReviewAppointmentCreated: consultationData.isReviewAppointmentCreated
       },
       { transaction }
-    );
+    ).catch(err => {
+      console.log(
+        "Error while creating treatment appointment from consultation",
+        err.message
+      );
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
 
     const oldAppointmentId = consultationAppointmentId;
     const newAppointmentId = treatmentAppointment.id;
     const replacements = { oldAppointmentId, newAppointmentId };
 
-    const migrationQueries = [
+    await this.runOptionalAppointmentMigrationQuery(
       `
         UPDATE vitals_appointments_associations
         SET appointmentId = :newAppointmentId, type = 'Treatment'
         WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
       `,
-      `
-        INSERT INTO treatment_appointment_line_bills_associations
-          (appointmentId, billTypeId, billTypeValue, prescribedQuantity, purchaseQuantity,
-           returnQuantity, prescriptionDetails, prescriptionDays, isSpouse, status, createdBy,
-           createdAt, updatedAt)
-        SELECT :newAppointmentId, billTypeId, billTypeValue, prescribedQuantity, purchaseQuantity,
-               returnQuantity, prescriptionDetails, prescriptionDays, isSpouse, status, createdBy,
-               createdAt, updatedAt
-        FROM consultation_appointment_line_bills_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        INSERT INTO treatment_appointment_notes_associations
-          (appointmentId, notes, isSpouse, isDone, createdBy, createdAt, updatedAt)
-        SELECT :newAppointmentId, notes, isSpouse, 0, createdBy, createdAt, updatedAt
-        FROM consultation_appointment_notes_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
+      replacements,
+      transaction
+    );
+
+    await this.copyConsultationLineBillsToTreatment(
+      oldAppointmentId,
+      newAppointmentId,
+      transaction
+    );
+    await this.copyConsultationNotesToTreatment(
+      oldAppointmentId,
+      newAppointmentId,
+      transaction
+    );
+
+    const optionalMigrationQueries = [
       `
         INSERT INTO treatment_appointment_labtests_associations
           (appointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt)
         SELECT :newAppointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt
         FROM consultation_appointment_labtests_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_appointment_labtests_associations
         WHERE appointmentId = :oldAppointmentId
       `,
       `
@@ -412,10 +537,18 @@ class VisitsService {
         WHERE appointmentId = :oldAppointmentId
       `,
       `
+        DELETE FROM consultation_appointment_pharmacy_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
         INSERT INTO treatment_payments_associations
           (appointmentId, billType, totalAmount, totalAmountPaid, createdBy)
         SELECT :newAppointmentId, billType, totalAmount, totalAmountPaid, createdBy
         FROM consultation_payments_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        DELETE FROM consultation_payments_associations
         WHERE appointmentId = :oldAppointmentId
       `,
       `
@@ -440,45 +573,25 @@ class VisitsService {
         SET appointmentId = :newAppointmentId, type = 'TREATMENT'
         WHERE appointmentId = :oldAppointmentId
           AND type IN ('CONSULTATION', 'Consultation')
-      `,
-      `
-        DELETE FROM consultation_appointment_line_bills_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_appointment_notes_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_appointment_labtests_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_appointment_pharmacy_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_payments_associations
-        WHERE appointmentId = :oldAppointmentId
       `
     ];
 
-    for (const query of migrationQueries) {
-      await this.mysqlConnection
-        .query(query, {
-          replacements,
-          transaction
-        })
-        .catch(err => {
-          console.log(
-            "Error while migrating consultation appointment data to treatment",
-            err.message
-          );
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
+    for (const query of optionalMigrationQueries) {
+      await this.runOptionalAppointmentMigrationQuery(
+        query,
+        replacements,
+        transaction
+      );
     }
+
+    await consultationAppointmentLineBillsAssociations.destroy({
+      where: { appointmentId: oldAppointmentId },
+      transaction
+    });
+    await consultationAppointmentNotesAssociations.destroy({
+      where: { appointmentId: oldAppointmentId },
+      transaction
+    });
 
     await ConsultationAppointmentAssociations.destroy({
       where: { id: oldAppointmentId },
