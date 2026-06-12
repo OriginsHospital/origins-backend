@@ -9,7 +9,6 @@ const RedisConnection = require("./connections/redis_connection");
 const RedisStore = require("connect-redis").default;
 const { v4: uuid4 } = require("uuid");
 const cookieParser = require("cookie-parser");
-const http = require("http");
 const https = require("https");
 const path = require("path");
 const fs = require("fs");
@@ -27,11 +26,6 @@ class App {
   }
 
   async startApp() {
-    const useHttps = process.env.USE_HTTPS !== "false";
-
-    // Required when running behind nginx / load balancer (api.originshms.com)
-    this.app.set("trust proxy", 1);
-
     this.app.use(
       cors({
         exposedHeaders: ["filename", "Content-Disposition"],
@@ -42,11 +36,8 @@ class App {
           "https://localhost:3000",
           "http://13.234.149.138:42000",
           "https://hms-app-alpha.vercel.app",
-          "http://originshms.com",
-          "https://originshms.com",
-          "http://www.originshms.com",
           "https://www.originshms.com"
-        ],
+        ], // Replace with your frontend domain
         credentials: true
       })
     );
@@ -64,8 +55,8 @@ class App {
         cookie: {
           httpOnly: true,
           maxAge: +process.env.IDLE_SESSION_TIMEOUT,
-          secure: useHttps,
-          sameSite: useHttps ? "None" : "Lax"
+          secure: true,
+          sameSite: "None"
         },
         resave: false,
         rolling: true,
@@ -78,10 +69,6 @@ class App {
         }
       })
     );
-
-    this.app.get("/health", (req, res) => {
-      res.status(200).json({ status: "ok" });
-    });
 
     // Set Cookies For testing
     this.app.get("/test", async (req, res, next) => {
@@ -115,43 +102,19 @@ class App {
   }
 
   async listen() {
-    const port = Number(process.env.PORT) || 3000;
-    const host = process.env.HOST || "0.0.0.0";
-    const useHttps = process.env.USE_HTTPS !== "false";
-
-    const onListen = (protocol, listenPort) => err => {
+    const sslServer = https.createServer(
+      {
+        key: fs.readFileSync(path.join(__dirname, "cert", "key.pem")),
+        cert: fs.readFileSync(path.join(__dirname, "cert", "cert.pem"))
+      },
+      this.app
+    );
+    sslServer.listen(process.env.PORT, err => {
       if (err) {
         throw new Error("Application Could not Start", err);
       }
-      console.log(
-        `Application Running on ${protocol}://${host}:${listenPort} (USE_HTTPS=${useHttps})`
-      );
-    };
-
-    if (useHttps) {
-      const certDir = path.join(__dirname, "cert");
-      const keyPath = path.join(certDir, "key.pem");
-      const certPath = path.join(certDir, "cert.pem");
-
-      if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-        throw new Error(
-          `SSL cert files missing in ${certDir}. Set USE_HTTPS=false when running behind nginx.`
-        );
-      }
-
-      https
-        .createServer(
-          {
-            key: fs.readFileSync(keyPath),
-            cert: fs.readFileSync(certPath)
-          },
-          this.app
-        )
-        .listen(port, host, onListen("https", port));
-      return;
-    }
-
-    http.createServer(this.app).listen(port, host, onListen("http", port));
+      console.log(`Application Running on Port ${process.env.PORT}`);
+    });
   }
 }
 
