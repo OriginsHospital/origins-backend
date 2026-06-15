@@ -327,7 +327,9 @@ const createBranchSchema = Joi.object({
   name: Joi.string()
     .max(100)
     .required(),
-  cityId: Joi.number().required(),
+  cityId: Joi.alternatives()
+    .try(Joi.number(), Joi.valid(null, ""))
+    .optional(),
   branchCode: Joi.string()
     .max(10)
     .allow(null, ""),
@@ -343,7 +345,9 @@ const editBranchSchema = Joi.object({
   name: Joi.string()
     .max(100)
     .required(),
-  cityId: Joi.number().required(),
+  cityId: Joi.alternatives()
+    .try(Joi.number(), Joi.valid(null, ""))
+    .optional(),
   branchCode: Joi.string()
     .max(10)
     .allow(null, ""),

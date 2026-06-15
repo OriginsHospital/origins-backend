@@ -1882,24 +1882,27 @@ class MasterDataService {
     const validatedPayload = await createBranchSchema.validateAsync(
       this._request.body
     );
+    const cityId = validatedPayload?.cityId || null;
 
-    const city = await CityMasterModel.findOne({
-      where: { id: validatedPayload?.cityId }
-    }).catch(err => {
-      console.log("Error while verifying city for branch", err);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
+    if (cityId) {
+      const city = await CityMasterModel.findOne({
+        where: { id: cityId }
+      }).catch(err => {
+        console.log("Error while verifying city for branch", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
 
-    if (lodash.isEmpty(city)) {
-      throw new createError.BadRequest("City not found");
+      if (lodash.isEmpty(city)) {
+        throw new createError.BadRequest("City not found");
+      }
     }
 
     const existingBranch = await BranchMasterModel.findOne({
       where: {
         name: validatedPayload?.name.trim(),
-        cityId: validatedPayload?.cityId
+        cityId
       }
     }).catch(err => {
       console.log("Error while branch addition", err);
@@ -1929,7 +1932,7 @@ class MasterDataService {
 
     await BranchMasterModel.create({
       name: validatedPayload?.name.trim(),
-      cityId: validatedPayload?.cityId,
+      cityId,
       branchCode: validatedPayload?.branchCode?.trim() || null,
       address: validatedPayload?.address?.trim() || null,
       isActive: validatedPayload?.isActive,
@@ -1948,6 +1951,7 @@ class MasterDataService {
     const validatedPayload = await editBranchSchema.validateAsync(
       this._request.body
     );
+    const cityId = validatedPayload?.cityId || null;
 
     const branch = await BranchMasterModel.findOne({
       where: { id: validatedPayload?.id }
@@ -1962,23 +1966,25 @@ class MasterDataService {
       throw new createError.NotFound(Constants.BRANCH_NOT_FOUND);
     }
 
-    const city = await CityMasterModel.findOne({
-      where: { id: validatedPayload?.cityId }
-    }).catch(err => {
-      console.log("Error while verifying city for branch edit", err);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
+    if (cityId) {
+      const city = await CityMasterModel.findOne({
+        where: { id: cityId }
+      }).catch(err => {
+        console.log("Error while verifying city for branch edit", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
 
-    if (lodash.isEmpty(city)) {
-      throw new createError.BadRequest("City not found");
+      if (lodash.isEmpty(city)) {
+        throw new createError.BadRequest("City not found");
+      }
     }
 
     const existingBranch = await BranchMasterModel.findOne({
       where: {
         name: validatedPayload?.name.trim(),
-        cityId: validatedPayload?.cityId,
+        cityId,
         id: { [Op.ne]: validatedPayload?.id }
       }
     }).catch(err => {
@@ -2013,7 +2019,7 @@ class MasterDataService {
     await BranchMasterModel.update(
       {
         name: validatedPayload?.name.trim(),
-        cityId: validatedPayload?.cityId,
+        cityId,
         branchCode: validatedPayload?.branchCode?.trim() || null,
         address: validatedPayload?.address?.trim() || null,
         isActive: validatedPayload?.isActive,
