@@ -363,6 +363,28 @@ class ManageMasterDataRoute {
             this.editcityRoute
         );
 
+        //branches
+        this._route.get(
+            "/branches/getAllBranches",
+            checkActiveSession,
+            tokenVerified,
+            this.getAllBranchesRoute
+        );
+
+        this._route.post(
+            "/branches/addBranch",
+            checkActiveSession,
+            tokenVerified,
+            this.addBranchRoute
+        );
+
+        this._route.post(
+            "/branches/editBranch",
+            checkActiveSession,
+            tokenVerified,
+            this.editBranchRoute
+        );
+
         // Default OT Scheduler Persons
         this._route.get(
             "/otRecord/getDefaultPersonsList",
@@ -639,6 +661,21 @@ class ManageMasterDataRoute {
     editcityRoute = asyncHandler(async (req, res, next) => {
         const controllerObj = new MasterDataController(req, res, next);
         await controllerObj.editCityController();
+    });
+
+    getAllBranchesRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getAllBranchesController();
+    });
+
+    addBranchRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.addBranchController();
+    });
+
+    editBranchRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.editBranchController();
     });
 
     // ot default persons list

@@ -323,6 +323,37 @@ const editCitySchema = Joi.object({
     .required()
 });
 
+const createBranchSchema = Joi.object({
+  name: Joi.string()
+    .max(100)
+    .required(),
+  cityId: Joi.number().required(),
+  branchCode: Joi.string()
+    .max(10)
+    .allow(null, ""),
+  address: Joi.string().allow(null, ""),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .allow(null)
+    .required()
+});
+
+const editBranchSchema = Joi.object({
+  id: Joi.number().required(),
+  name: Joi.string()
+    .max(100)
+    .required(),
+  cityId: Joi.number().required(),
+  branchCode: Joi.string()
+    .max(10)
+    .allow(null, ""),
+  address: Joi.string().allow(null, ""),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .allow(null)
+    .required()
+});
+
 const saveOtDefaultPersonSchema = Joi.object({
   personId: Joi.string()
     .max(100)
@@ -402,6 +433,8 @@ module.exports = {
   editReferralsSchema,
   createCitySchema,
   editCitySchema,
+  createBranchSchema,
+  editBranchSchema,
   createScanSchema,
   editScanSchema,
   createEmbryologySchema,

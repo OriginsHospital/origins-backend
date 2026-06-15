@@ -22,6 +22,7 @@ const {
   getSuppliesByDepartmentQuery,
   getReferralListQuery,
   getCitiesListQuery,
+  getBranchesListQuery,
   getAllScansQuery,
   getAllEmbryologyQuery,
   getOtDefaultPersonQuery,
@@ -49,6 +50,8 @@ const {
   editReferralsSchema,
   createCitySchema,
   editCitySchema,
+  createBranchSchema,
+  editBranchSchema,
   createScanSchema,
   editScanSchema,
   createEmbryologySchema,
@@ -69,6 +72,7 @@ const VendorMasterModel = require("../models/Master/vendorMaster");
 const SuppliesMasterModel = require("../models/Master/suppliesMaster");
 const ReferralsMasterModel = require("../models/Master/referralsMaster");
 const CityMasterModel = require("../models/Master/citiesMaster");
+const BranchMasterModel = require("../models/Master/branchMaster");
 const LabTestMasterBranchAssociation = require("../models/Master/LabTestMasterBranchAssociation");
 const ScanMaster = require("../models/Master/ScanMaster");
 const ScanMasterBranchAssociation = require("../models/Master/ScanMasterBranchAssociation");
@@ -1838,6 +1842,190 @@ class MasterDataService {
       }
     ).catch(err => {
       console.log("Error while updating City", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  //branches
+  async getAllBranchesService() {
+    const { searchQuery } = this._request.query;
+    const trimmedSearchQuery = searchQuery?.trim();
+    let query = getBranchesListQuery;
+
+    if (!lodash.isEmpty(trimmedSearchQuery)) {
+      query += `
+        WHERE bm.name LIKE :searchQuery
+           OR bm.branchCode LIKE :searchQuery
+           OR (select cm.name from city_master cm where cm.id = bm.cityId) LIKE :searchQuery
+      `;
+    }
+
+    const branchesData = await this.mysqlConnection
+      .query(query, {
+        replacements: { searchQuery: `%${trimmedSearchQuery}%` },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting branches", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    return branchesData;
+  }
+
+  async addBranchService() {
+    const validatedPayload = await createBranchSchema.validateAsync(
+      this._request.body
+    );
+
+    const city = await CityMasterModel.findOne({
+      where: { id: validatedPayload?.cityId }
+    }).catch(err => {
+      console.log("Error while verifying city for branch", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(city)) {
+      throw new createError.BadRequest("City not found");
+    }
+
+    const existingBranch = await BranchMasterModel.findOne({
+      where: {
+        name: validatedPayload?.name.trim(),
+        cityId: validatedPayload?.cityId
+      }
+    }).catch(err => {
+      console.log("Error while branch addition", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!lodash.isEmpty(existingBranch)) {
+      throw new createError.BadRequest(Constants.BRANCH_NAME_EXISTS);
+    }
+
+    if (validatedPayload?.branchCode?.trim()) {
+      const existingCode = await BranchMasterModel.findOne({
+        where: { branchCode: validatedPayload.branchCode.trim() }
+      }).catch(err => {
+        console.log("Error while checking branch code", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (!lodash.isEmpty(existingCode)) {
+        throw new createError.BadRequest(Constants.BRANCH_CODE_EXISTS);
+      }
+    }
+
+    await BranchMasterModel.create({
+      name: validatedPayload?.name.trim(),
+      cityId: validatedPayload?.cityId,
+      branchCode: validatedPayload?.branchCode?.trim() || null,
+      address: validatedPayload?.address?.trim() || null,
+      isActive: validatedPayload?.isActive,
+      createdBy: this._request?.userDetails?.id
+    }).catch(err => {
+      console.log("Error while addition of Branch", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async editBranchService() {
+    const validatedPayload = await editBranchSchema.validateAsync(
+      this._request.body
+    );
+
+    const branch = await BranchMasterModel.findOne({
+      where: { id: validatedPayload?.id }
+    }).catch(err => {
+      console.log("Error while fetching branch for edit", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(branch)) {
+      throw new createError.NotFound(Constants.BRANCH_NOT_FOUND);
+    }
+
+    const city = await CityMasterModel.findOne({
+      where: { id: validatedPayload?.cityId }
+    }).catch(err => {
+      console.log("Error while verifying city for branch edit", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(city)) {
+      throw new createError.BadRequest("City not found");
+    }
+
+    const existingBranch = await BranchMasterModel.findOne({
+      where: {
+        name: validatedPayload?.name.trim(),
+        cityId: validatedPayload?.cityId,
+        id: { [Op.ne]: validatedPayload?.id }
+      }
+    }).catch(err => {
+      console.log("Error while branch edit validation", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!lodash.isEmpty(existingBranch)) {
+      throw new createError.BadRequest(Constants.BRANCH_NAME_EXISTS);
+    }
+
+    if (validatedPayload?.branchCode?.trim()) {
+      const existingCode = await BranchMasterModel.findOne({
+        where: {
+          branchCode: validatedPayload.branchCode.trim(),
+          id: { [Op.ne]: validatedPayload?.id }
+        }
+      }).catch(err => {
+        console.log("Error while checking branch code on edit", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (!lodash.isEmpty(existingCode)) {
+        throw new createError.BadRequest(Constants.BRANCH_CODE_EXISTS);
+      }
+    }
+
+    await BranchMasterModel.update(
+      {
+        name: validatedPayload?.name.trim(),
+        cityId: validatedPayload?.cityId,
+        branchCode: validatedPayload?.branchCode?.trim() || null,
+        address: validatedPayload?.address?.trim() || null,
+        isActive: validatedPayload?.isActive,
+        updatedBy: this._request?.userDetails?.id
+      },
+      {
+        where: {
+          id: validatedPayload?.id
+        }
+      }
+    ).catch(err => {
+      console.log("Error while updating Branch", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );

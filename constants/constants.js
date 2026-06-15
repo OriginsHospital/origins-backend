@@ -162,6 +162,8 @@ module.exports = {
     "Lab/Scan/Pharmacy/Embryology Pending. Cannot move to Completed",
   REFERRAL_NAME_EXISTS: "Referral Name Already Exists",
   CITY_NAME_EXISTS: "City Name Already Exists",
+  BRANCH_NAME_EXISTS: "Branch Name Already Exists In This City",
+  BRANCH_CODE_EXISTS: "Branch Code Already Exists",
   TREATMENT_EXISTS_CLOSE_IN_TREATMENT:
     "Treatment Exists. Please Close Visit in Treatment Page",
   PRESCRIPTION_DETAILS_NOT_FOUND: "Prescription Details Not Found",

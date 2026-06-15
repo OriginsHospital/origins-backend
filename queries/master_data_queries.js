@@ -217,6 +217,23 @@ from
 	defaultdb.city_master cm
 `;
 
+const getBranchesListQuery = `
+select
+	bm.id,
+	bm.name,
+	bm.cityId,
+	(select cm.name from city_master cm where cm.id = bm.cityId) as cityName,
+	bm.branchCode,
+	bm.address,
+	bm.isActive,
+	(select u.fullName from users u where u.id = bm.createdBy) as createdBy,
+	(select u.fullName from users u where u.id = bm.updatedBy) as updatedBy,
+	bm.createdAt,
+	bm.updatedAt
+from
+	defaultdb.branch_master bm
+`;
+
 const getOtDefaultPersonQuery = `SELECT
 	opdm.id,
 	opdm.branchId,
@@ -284,6 +301,7 @@ module.exports = {
   getSuppliesByDepartmentQuery,
   getReferralListQuery,
   getCitiesListQuery,
+  getBranchesListQuery,
   getOtDefaultPersonQuery,
   getAllPharmacyKitsQuery,
   getActivePharmacyKitsQuery

@@ -434,6 +434,33 @@ class MasterDataController {
     });
   }
 
+  async getAllBranchesController() {
+    const data = await this._service.getAllBranchesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async addBranchController() {
+    const data = await this._service.addBranchService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async editBranchController() {
+    const data = await this._service.editBranchService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getOtDefaultPersonsListController() {
     const data = await this._service.getOtDefaultPersonsListService(
       this._request
