@@ -9,7 +9,7 @@ SELECT
         SELECT JSON_ARRAYAGG(JSON_OBJECT('id', bm.id, 'name', bm.name , 'branchCode', bm.branchCode))
         FROM user_branch_association uba
         INNER JOIN branch_master bm ON bm.id = uba.branchId
-        WHERE uba.userId = u.id
+        WHERE uba.userId = u.id AND bm.isActive = 1
     ) AS branchDetails,
     (
         SELECT 

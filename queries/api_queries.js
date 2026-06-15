@@ -78,8 +78,9 @@ const getDropdownInfo = `
     SELECT 'roles' AS "Type", JSON_ARRAYAGG(JSON_OBJECT('id',rm.id, 'name',rm.name)) AS "List"
     FROM role_master rm
     UNION 
-    select 'branches' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',bm.id, 'name',bm.branchCode)) AS "List"
-    from branch_master bm 
+    select 'branches' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',bm.id, 'name',bm.name, 'branchCode', bm.branchCode)) AS "List"
+    from branch_master bm
+    WHERE bm.isActive = 1
     UNION 
     select 'referralTypes' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',rtm.id, 'name',rtm.name)) AS "List"
     from referral_type_master rtm

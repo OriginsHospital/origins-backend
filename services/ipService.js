@@ -24,6 +24,10 @@ const IpNotesAssociationsModel = require("../models/Associations/ipNotesAssociat
 const StateMasterModel = require("../models/Master/stateMaster");
 const CityMasterModel = require("../models/Master/citiesMaster");
 const BranchMasterModel = require("../models/Master/branchMaster");
+const {
+  grantNewBranchToEligibleUsers,
+  invalidateBranchesCache
+} = require("../constants/allBranchesAccess");
 const { date } = require("@hapi/joi");
 
 class IpService {
@@ -761,7 +765,7 @@ class IpService {
       }
     }
 
-    return await BranchMasterModel.create({
+    const branch = await BranchMasterModel.create({
       name: name.trim(),
       cityId,
       branchCode: branchCode?.trim() || null,
@@ -769,6 +773,11 @@ class IpService {
       isActive,
       createdBy: createdByUserId
     });
+
+    await grantNewBranchToEligibleUsers(branch.id);
+    invalidateBranchesCache();
+
+    return branch;
   }
 
   async getBranchesService() {

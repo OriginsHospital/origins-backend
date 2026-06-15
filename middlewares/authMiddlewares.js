@@ -8,7 +8,7 @@ const {
 const { asyncHandler } = require("./errorHandlers");
 const JwtHelper = require("../utils/jwtUtils");
 const {
-  hasAllBranchesAccess,
+  shouldReceiveAllBranches,
   getAllBranchesDetails
 } = require("../constants/allBranchesAccess");
 
@@ -104,7 +104,7 @@ const tokenVerified = asyncHandler(async (req, res, next) => {
     );
   }
   req.userDetails = JSON.parse(userDecodedData.aud);
-  if (hasAllBranchesAccess(req.userDetails?.email)) {
+  if (shouldReceiveAllBranches(req.userDetails)) {
     req.userDetails.branchDetails = await getAllBranchesDetails();
   }
   next();

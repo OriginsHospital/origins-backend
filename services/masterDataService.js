@@ -1,5 +1,9 @@
 const Constants = require("../constants/constants");
 const createError = require("http-errors");
+const {
+  grantNewBranchToEligibleUsers,
+  invalidateBranchesCache
+} = require("../constants/allBranchesAccess");
 const MySqlConnection = require("../connections/mysql_connection");
 const {
   createAppointmentReasonSchema,
@@ -1930,7 +1934,7 @@ class MasterDataService {
       }
     }
 
-    await BranchMasterModel.create({
+    const newBranch = await BranchMasterModel.create({
       name: validatedPayload?.name.trim(),
       cityId,
       branchCode: validatedPayload?.branchCode?.trim() || null,
@@ -1943,6 +1947,9 @@ class MasterDataService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
+
+    await grantNewBranchToEligibleUsers(newBranch.id);
+    invalidateBranchesCache();
 
     return Constants.SUCCESS;
   }
