@@ -324,6 +324,76 @@ class VisitsService {
     }
   }
 
+  async cleanupConsultationAppointmentDependencies(
+    oldAppointmentId,
+    newAppointmentId,
+    transaction
+  ) {
+    const replacements = { oldAppointmentId, newAppointmentId };
+    const cleanupQueries = [
+      `
+        INSERT INTO treatment_appointment_labtests_associations
+          (appointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt)
+        SELECT :newAppointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt
+        FROM consultation_appointment_labtests_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `DELETE FROM consultation_appointment_labtests_associations WHERE appointmentId = :oldAppointmentId`,
+      `
+        INSERT INTO treatment_appointment_pharmacy_associations
+          (appointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt)
+        SELECT :newAppointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt
+        FROM consultation_appointment_pharmacy_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `DELETE FROM consultation_appointment_pharmacy_associations WHERE appointmentId = :oldAppointmentId`,
+      `
+        INSERT INTO treatment_payments_associations
+          (appointmentId, billType, totalAmount, totalAmountPaid, createdBy)
+        SELECT :newAppointmentId, billType, totalAmount, totalAmountPaid, createdBy
+        FROM consultation_payments_associations
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `DELETE FROM consultation_payments_associations WHERE appointmentId = :oldAppointmentId`,
+      `
+        UPDATE lab_test_results
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        UPDATE scan_results
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        UPDATE patient_scan_formf_associations
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        UPDATE order_details_master
+        SET appointmentId = :newAppointmentId, type = 'TREATMENT'
+        WHERE appointmentId = :oldAppointmentId
+      `,
+      `
+        UPDATE vitals_appointments_associations
+        SET appointmentId = :newAppointmentId, type = 'Treatment'
+        WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
+      `,
+      `DELETE FROM consultation_embryology_association WHERE consultationId = :oldAppointmentId`,
+      `DELETE FROM consultation_appointment_line_bills_associations WHERE appointmentId = :oldAppointmentId`,
+      `DELETE FROM consultation_appointment_notes_associations WHERE appointmentId = :oldAppointmentId`
+    ];
+
+    for (const query of cleanupQueries) {
+      await this.runOptionalAppointmentMigrationQuery(
+        query,
+        replacements,
+        transaction
+      );
+    }
+  }
+
   async copyConsultationLineBillsToTreatment(
     oldAppointmentId,
     newAppointmentId,
@@ -348,13 +418,31 @@ class VisitsService {
         appointmentId,
         createdAt,
         updatedAt,
-        ...billData
+        billTypeId,
+        billTypeValue,
+        prescribedQuantity,
+        purchaseQuantity,
+        returnQuantity,
+        prescriptionDetails,
+        prescriptionDays,
+        isSpouse,
+        status,
+        createdBy
       } = bill.dataValues;
       await treatmentAppointmentLineBillsAssociations
         .create(
           {
-            ...billData,
-            appointmentId: newAppointmentId
+            appointmentId: newAppointmentId,
+            billTypeId,
+            billTypeValue,
+            prescribedQuantity: prescribedQuantity ?? 1,
+            purchaseQuantity,
+            returnQuantity,
+            prescriptionDetails,
+            prescriptionDays,
+            isSpouse,
+            status,
+            createdBy
           },
           { transaction }
         )
@@ -433,15 +521,15 @@ class VisitsService {
   ) {
     const consultationRows = await this.mysqlConnection.query(
       `
-        SELECT caa.*
+        SELECT caa.*, vca.visitId AS linkedVisitId
         FROM consultation_appointments_associations caa
-        INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
-        WHERE caa.id = :consultationAppointmentId AND vca.visitId = :visitId
+        LEFT JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+        WHERE caa.id = :consultationAppointmentId
         LIMIT 1
       `,
       {
         type: Sequelize.QueryTypes.SELECT,
-        replacements: { consultationAppointmentId, visitId },
+        replacements: { consultationAppointmentId },
         transaction
       }
     );
@@ -453,6 +541,14 @@ class VisitsService {
     }
 
     const consultationData = consultationRows[0];
+    if (
+      consultationData.linkedVisitId &&
+      Number(consultationData.linkedVisitId) !== Number(visitId)
+    ) {
+      throw new createError.BadRequest(
+        "Consultation appointment does not belong to this visit"
+      );
+    }
 
     const treatmentAppointment = await TreatmentAppointmentAssociations.create(
       {
@@ -494,17 +590,6 @@ class VisitsService {
 
     const oldAppointmentId = consultationAppointmentId;
     const newAppointmentId = treatmentAppointment.id;
-    const replacements = { oldAppointmentId, newAppointmentId };
-
-    await this.runOptionalAppointmentMigrationQuery(
-      `
-        UPDATE vitals_appointments_associations
-        SET appointmentId = :newAppointmentId, type = 'Treatment'
-        WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
-      `,
-      replacements,
-      transaction
-    );
 
     await this.copyConsultationLineBillsToTreatment(
       oldAppointmentId,
@@ -516,82 +601,11 @@ class VisitsService {
       newAppointmentId,
       transaction
     );
-
-    const optionalMigrationQueries = [
-      `
-        INSERT INTO treatment_appointment_labtests_associations
-          (appointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt)
-        SELECT :newAppointmentId, labTests, isDone, CreatedBy, createdAt, updatedAt
-        FROM consultation_appointment_labtests_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_appointment_labtests_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        INSERT INTO treatment_appointment_pharmacy_associations
-          (appointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt)
-        SELECT :newAppointmentId, medicinesList, isDone, CreatedBy, createdAt, updatedAt
-        FROM consultation_appointment_pharmacy_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_appointment_pharmacy_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        INSERT INTO treatment_payments_associations
-          (appointmentId, billType, totalAmount, totalAmountPaid, createdBy)
-        SELECT :newAppointmentId, billType, totalAmount, totalAmountPaid, createdBy
-        FROM consultation_payments_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        DELETE FROM consultation_payments_associations
-        WHERE appointmentId = :oldAppointmentId
-      `,
-      `
-        UPDATE lab_test_results
-        SET appointmentId = :newAppointmentId, type = 'Treatment'
-        WHERE appointmentId = :oldAppointmentId
-          AND type IN ('CONSULTATION', 'Consultation')
-      `,
-      `
-        UPDATE scan_results
-        SET appointmentId = :newAppointmentId, type = 'Treatment'
-        WHERE appointmentId = :oldAppointmentId
-          AND type IN ('CONSULTATION', 'Consultation')
-      `,
-      `
-        UPDATE patient_scan_formf_associations
-        SET appointmentId = :newAppointmentId, type = 'Treatment'
-        WHERE appointmentId = :oldAppointmentId AND type = 'Consultation'
-      `,
-      `
-        UPDATE order_details_master
-        SET appointmentId = :newAppointmentId, type = 'TREATMENT'
-        WHERE appointmentId = :oldAppointmentId
-          AND type IN ('CONSULTATION', 'Consultation')
-      `
-    ];
-
-    for (const query of optionalMigrationQueries) {
-      await this.runOptionalAppointmentMigrationQuery(
-        query,
-        replacements,
-        transaction
-      );
-    }
-
-    await consultationAppointmentLineBillsAssociations.destroy({
-      where: { appointmentId: oldAppointmentId },
+    await this.cleanupConsultationAppointmentDependencies(
+      oldAppointmentId,
+      newAppointmentId,
       transaction
-    });
-    await consultationAppointmentNotesAssociations.destroy({
-      where: { appointmentId: oldAppointmentId },
-      transaction
-    });
+    );
 
     await ConsultationAppointmentAssociations.destroy({
       where: { id: oldAppointmentId },
@@ -706,6 +720,14 @@ class VisitsService {
           treatmentTypes[(validatedInfoData?.treatmentTypeId)];
         const isPackageRequired = !!selectedTreatmentTypeConfig?.isPackageExists;
         if (validatedInfoData?.treatmentTypeId && isPackageRequired) {
+          const normalizedPackageAmount = Number(packageAmount);
+          if (
+            !Number.isFinite(normalizedPackageAmount) ||
+            normalizedPackageAmount <= 0
+          ) {
+            throw new createError.BadRequest(Constants.PACKAGE_AMOUNT_REQUIRED);
+          }
+
           const isPackageExist = await VisitPackagesAssociation.findOne({
             where: {
               visitId: visitId
@@ -722,7 +744,7 @@ class VisitsService {
           await VisitPackagesAssociation.create(
             {
               visitId,
-              doctorSuggestedPackage: packageAmount,
+              doctorSuggestedPackage: normalizedPackageAmount,
               registrationDate: null
             },
             { transaction }

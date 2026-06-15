@@ -90,6 +90,7 @@ module.exports = {
   EMBRYOLOGY_RECORD_NOT_FOUND: "Embryology Record Not found",
   CONSULTATION_FEE_ERROR:
     "Consultation Fee Expired/Please Pay Consultation Fee",
+  PACKAGE_AMOUNT_REQUIRED: "Package amount is required for this treatment type",
   PACKAGE_ALREADY_EXIST_FOR_VISIT: "Package Already Exists for Visit",
   PACKAGE_NOT_FOUND: "Package Not Found with given Id",
   PACKAGE_UPDATED_SUCCESSFULLY: "Package Updated Successfully",
