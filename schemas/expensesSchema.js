@@ -87,10 +87,17 @@ const deleteSubCategorySchema = Joi.object({
     .required()
 });
 
+const deleteExpenseSchema = Joi.object({
+  id: Joi.number()
+    .integer()
+    .required()
+});
+
 module.exports = {
   saveExpensesSchema,
   editExpensesSchema,
   deleteReceiptSchema,
+  deleteExpenseSchema,
   saveSubCategorySchema,
   editSubCategorySchema,
   deleteSubCategorySchema

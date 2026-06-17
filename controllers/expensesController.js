@@ -60,6 +60,15 @@ class ExpensesController {
     });
   }
 
+  async deleteExpenseHandler() {
+    const data = await this._service.deleteExpenseService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getSubCategoryByCategoryIdHandler() {
     const data = await this._service.getSubCategoryByCategoryIdService(
       this._request

@@ -49,7 +49,14 @@ class ExpensesRoute {
       checkActiveSession,
       tokenVerified,
       this.deleteReceipt
-    )
+    );
+
+    this._route.delete(
+      "/deleteExpense",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteExpense
+    );
 
     // SubCategory Module
     this._route.get(
@@ -104,6 +111,11 @@ class ExpensesRoute {
   deleteReceipt = asyncHandler(async (req, res, next) => {
     const controllerObj = new ExpensesController(req, res, next);
     await controllerObj.deleteReceiptHandler();
+  });
+
+  deleteExpense = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ExpensesController(req, res, next);
+    await controllerObj.deleteExpenseHandler();
   });
 
   getSubCategoryByCategoryId = asyncHandler(async (req, res, next) => {

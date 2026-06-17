@@ -6,8 +6,12 @@ const {
   deleteSubCategorySchema,
   editSubCategorySchema,
   saveSubCategorySchema,
-  deleteReceiptSchema
+  deleteReceiptSchema,
+  deleteExpenseSchema
 } = require("../schemas/expensesSchema");
+const {
+  assertExpenseDeleteAccess
+} = require("../constants/expenseDeleteAccess");
 const ExpensesMasterModel = require("../models/Master/expensesMaster");
 const ExpenseSubCategoryMasterModel = require("../models/Master/expenseSubCategoryMaster");
 const {
@@ -311,6 +315,66 @@ class ExpensesService {
         transaction: t
       }).catch(err => {
         console.log("Error while deleting receipt", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return Constants.DELETED_SUCCESSFULLY;
+    });
+  }
+
+  async deleteExpenseService() {
+    assertExpenseDeleteAccess(this._request);
+
+    const validatedDeleteExpenseBody = await deleteExpenseSchema.validateAsync(
+      this._request.body
+    );
+
+    const { id } = validatedDeleteExpenseBody;
+    const expense = await ExpensesMasterModel.findByPk(id);
+
+    if (!expense) {
+      throw new createError.NotFound(`Expense not found`);
+    }
+
+    const receipts = await ExpenseReceiptAssociation.findAll({
+      where: { expenseId: id }
+    });
+
+    return await this.mysqlConnection.transaction(async t => {
+      for (const receipt of receipts) {
+        const key = this.resolveReceiptS3Key(receipt.receiptUrl);
+
+        if (key) {
+          try {
+            await this.s3
+              .deleteObject({
+                Bucket: this.bucketName,
+                Key: key
+              })
+              .promise();
+          } catch (err) {
+            console.log("Error while deleting receipt from S3", err.message);
+          }
+        }
+      }
+
+      await ExpenseReceiptAssociation.destroy({
+        where: { expenseId: id },
+        transaction: t
+      }).catch(err => {
+        console.log("Error while deleting expense receipts", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      await ExpensesMasterModel.destroy({
+        where: { id },
+        transaction: t
+      }).catch(err => {
+        console.log("Error while deleting expense", err.message);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
