@@ -266,6 +266,13 @@ const updateTreatmentStatusSchema = Joi.object({
       .required(),
     otherwise: Joi.forbidden()
   }),
+  eraStartTime: Joi.when("stage", {
+    is: "ERA_START",
+    then: Joi.date()
+      .iso()
+      .required(),
+    otherwise: Joi.forbidden()
+  }),
   endedReason: Joi.when("stage", {
     is: Joi.valid("END_ICSI", "END_IUI", "END_OITI"),
     then: Joi.string().required(),

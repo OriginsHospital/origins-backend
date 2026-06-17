@@ -1939,7 +1939,8 @@ class AppointmentsPaymentService extends BaseService {
     triggerTime,
     endedReason,
     fetEndedReason,
-    hysteroscopyTime
+    hysteroscopyTime,
+    eraStartTime
   ) {
     if (updateType == "START_ICSI") {
       /*
@@ -2683,6 +2684,16 @@ class AppointmentsPaymentService extends BaseService {
       if ([1, 2, 3].includes(treatmentType)) {
         throw new createError.BadRequest(Constants.ERA_CANNOT_BE_STARTED);
       }
+      if (isNaN(new Date(eraStartTime).getTime())) {
+        throw new createError.BadRequest("Invalid eraStartTime format.");
+      }
+
+      const eraStartTimestamp = moment(eraStartTime).tz("Asia/Kolkata");
+      const eraStartDateFormatted = eraStartTimestamp.format(
+        "YYYY-MM-DD HH:mm:ss"
+      );
+      const eraDateFormatted = eraStartTimestamp.format("YYYY-MM-DD");
+
       // Check if a record exists in TriggerTimeStampsMaster for the given visitId
       const existingEraRecord = await TriggerTimeStampsMaster.findOne({
         where: {
@@ -2695,9 +2706,7 @@ class AppointmentsPaymentService extends BaseService {
         await TriggerTimeStampsMaster.update(
           {
             visitId: visitId,
-            eraStartDate: moment()
-              .tz("Asia/Kolkata")
-              .format("YYYY-MM-DD HH:mm:ss"),
+            eraStartDate: eraStartDateFormatted,
             eraStartedBy: this._request?.userDetails?.id
           },
           {
@@ -2718,9 +2727,7 @@ class AppointmentsPaymentService extends BaseService {
           {
             visitId: visitId,
             treatmentType,
-            eraStartDate: moment()
-              .tz("Asia/Kolkata")
-              .format("YYYY-MM-DD HH:mm:ss"),
+            eraStartDate: eraStartDateFormatted,
             eraStartedBy: this._request?.userDetails?.id
           },
           {
@@ -2736,9 +2743,7 @@ class AppointmentsPaymentService extends BaseService {
 
       await VisitPackagesAssociation.update(
         {
-          eraDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD")
+          eraDate: eraDateFormatted
         },
         {
           where: {
@@ -2753,9 +2758,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      this._request.params.startDate = moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD");
+      this._request.params.startDate = eraDateFormatted;
       return await this.getEraSheetsService(visitId);
     } else if (
       updateType == "END_ICSI" ||
@@ -2884,7 +2887,8 @@ class AppointmentsPaymentService extends BaseService {
       triggerTime,
       endedReason,
       fetEndedReason,
-      hysteroscopyTime
+      hysteroscopyTime,
+      eraStartTime
     } = await updateTreatmentStatusSchema.validateAsync(this._request.body);
     const stageExists = treatmentConstants[stage] || "";
     if (!stageExists) {
@@ -2918,7 +2922,8 @@ class AppointmentsPaymentService extends BaseService {
         triggerTime,
         endedReason,
         fetEndedReason,
-        hysteroscopyTime
+        hysteroscopyTime,
+        eraStartTime
       );
     });
   }
