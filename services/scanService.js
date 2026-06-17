@@ -8,7 +8,8 @@ const {
   getScanHeaderInformation,
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
-  getOpuSheetsByDateQuery
+  getOpuSheetsByDateQuery,
+  getHysteroLapByDateQuery
 } = require("../queries/scan_queries");
 const { Sequelize } = require("sequelize");
 const ScanTemplatesMaster = require("../models/Master/ScanTemplatesMaster");
@@ -82,6 +83,32 @@ class ScanService extends BaseService {
       })
       .catch(err => {
         console.log("Error while getting prescriptions by date", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data;
+  }
+
+  async getHysteroLapByDateService() {
+    const { appointmentDate } = this._request.params;
+    const { branchId } = this._request.query;
+    if (lodash.isEmpty(String(appointmentDate || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "appointmentDate")
+      );
+    }
+    const data = await this.mysqlConnection
+      .query(getHysteroLapByDateQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          appointmentDate: appointmentDate,
+          branchId: branchId || null
+        }
+      })
+      .catch(err => {
+        console.log("Error while getting Hystero/Lap by date", err);
         throw createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );

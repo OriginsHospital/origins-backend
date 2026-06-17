@@ -502,11 +502,53 @@ WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
 ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 `;
 
+/** Hystero/Lap reports for treatment appointments on a given date and branch. */
+const getHysteroLapByDateQuery = `
+SELECT
+  vha.id AS hysteroscopyId,
+  pm.id AS patientId,
+  pva.id AS visitId,
+  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+  COALESCE(vha.formType, 'Hystero/Lap') AS formType,
+  COALESCE(vha.hospitalBranch, bm.branchCode, bm.name) AS hospitalBranch,
+  COALESCE(vha.gynecologist, '') AS gynecologist,
+  COALESCE(bm.branchCode, bm.name) AS branchCode,
+  COALESCE(
+    TIME_FORMAT(taa.timeStart, '%H:%i'),
+    TIME_FORMAT(tt.hysteroscopyTime, '%H:%i'),
+    ''
+  ) AS timeStart,
+  COALESCE(
+    (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+    ''
+  ) AS appointmentReason,
+  COALESCE(
+    (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+    ''
+  ) AS doctorName,
+  taa.id AS appointmentId,
+  taa.branchId,
+  CASE WHEN vha.id IS NOT NULL THEN 1 ELSE 0 END AS hasReport
+FROM treatment_appointments_associations taa
+INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+INNER JOIN patient_master pm ON pm.id = pva.patientId
+LEFT JOIN visit_hysteroscopy_associations vha
+  ON vha.visitId = pva.id AND vha.patientId = pm.id
+LEFT JOIN treatment_timestamps tt ON tt.visitId = pva.id
+LEFT JOIN branch_master bm ON bm.id = taa.branchId
+WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+  AND (:branchId IS NULL OR taa.branchId = :branchId)
+  AND (vha.id IS NOT NULL OR tt.hysteroscopyTime IS NOT NULL)
+ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
+`;
+
 module.exports = {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
   getScanHeaderInformation,
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
-  getOpuSheetsByDateQuery
+  getOpuSheetsByDateQuery,
+  getHysteroLapByDateQuery
 };
