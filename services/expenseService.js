@@ -196,38 +196,116 @@ class ExpensesService {
     };
   }
 
+  resolveReceiptS3Key(receiptUrl) {
+    if (!receiptUrl || typeof receiptUrl !== "string") {
+      return null;
+    }
+
+    const normalizedUrl = receiptUrl.trim();
+
+    if (normalizedUrl.includes(".com/")) {
+      return decodeURIComponent(normalizedUrl.split(".com/")[1].split("?")[0]);
+    }
+
+    if (normalizedUrl.startsWith("expenses/")) {
+      return decodeURIComponent(normalizedUrl.split("?")[0]);
+    }
+
+    try {
+      const url = new URL(normalizedUrl);
+      return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+    } catch (error) {
+      return decodeURIComponent(normalizedUrl.split("?")[0]);
+    }
+  }
+
+  normalizeReceiptUrl(receiptUrl) {
+    if (!receiptUrl || typeof receiptUrl !== "string") {
+      return "";
+    }
+
+    return decodeURIComponent(receiptUrl.trim().split("?")[0]);
+  }
+
+  async findExpenseReceipt(expenseId, receiptId, receiptUrl) {
+    if (receiptId) {
+      const receiptById = await ExpenseReceiptAssociation.findOne({
+        where: {
+          id: receiptId,
+          expenseId
+        }
+      });
+
+      if (receiptById) {
+        return receiptById;
+      }
+    }
+
+    if (!receiptUrl) {
+      return null;
+    }
+
+    const receiptByUrl = await ExpenseReceiptAssociation.findOne({
+      where: {
+        expenseId,
+        receiptUrl
+      }
+    });
+
+    if (receiptByUrl) {
+      return receiptByUrl;
+    }
+
+    const normalizedReceiptUrl = this.normalizeReceiptUrl(receiptUrl);
+    const receipts = await ExpenseReceiptAssociation.findAll({
+      where: { expenseId }
+    });
+
+    return (
+      receipts.find(
+        receipt =>
+          this.normalizeReceiptUrl(receipt.receiptUrl) === normalizedReceiptUrl
+      ) || null
+    );
+  }
+
   async deleteReceiptService() {
     const validatedDeleteReceiptBody = await deleteReceiptSchema.validateAsync(
       this._request.body
     );
 
-    const { expenseId, receiptUrl } = validatedDeleteReceiptBody;
+    const { expenseId, receiptId, receiptUrl } = validatedDeleteReceiptBody;
     const expense = await ExpensesMasterModel.findByPk(expenseId);
     if (!expense) {
       throw new createError.NotFound(`Expense not found`);
     }
-    const receipt = await ExpenseReceiptAssociation.findOne({
-      where: {
-        expenseId: expenseId,
-        receiptUrl: receiptUrl
-      }
-    });
+
+    const receipt = await this.findExpenseReceipt(
+      expenseId,
+      receiptId,
+      receiptUrl
+    );
 
     if (!receipt) {
       throw new createError.NotFound(`Receipt not found`);
     }
 
     return await this.mysqlConnection.transaction(async t => {
-      // Delete the receipt from S3
-      const key = receiptUrl?.split(".com/")[1];
-      const deleteParams = {
-        Bucket: this.bucketName,
-        Key: key
-      };
+      const key = this.resolveReceiptS3Key(receipt.receiptUrl);
 
-      await this.s3.deleteObject(deleteParams).promise();
+      if (key) {
+        const deleteParams = {
+          Bucket: this.bucketName,
+          Key: key
+        };
 
-      //delete the receipt from DB
+        try {
+          await this.s3.deleteObject(deleteParams).promise();
+        } catch (err) {
+          console.log("Error while deleting receipt from S3", err.message);
+        }
+      }
+
       await ExpenseReceiptAssociation.destroy({
         where: { id: receipt.id },
         transaction: t

@@ -51,8 +51,11 @@ const deleteReceiptSchema = Joi.object({
   expenseId: Joi.number()
     .integer()
     .required(),
-  receiptUrl: Joi.string().required()
-});
+  receiptId: Joi.number()
+    .integer()
+    .optional(),
+  receiptUrl: Joi.string().optional()
+}).or("receiptId", "receiptUrl");
 
 const saveSubCategorySchema = Joi.object({
   categoryId: Joi.number()

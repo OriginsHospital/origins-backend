@@ -20,7 +20,9 @@ SELECT
   em.createdAt,
   em.updatedAt,
   (
-    SELECT JSON_ARRAYAGG(era.receiptUrl)
+    SELECT JSON_ARRAYAGG(
+      JSON_OBJECT('id', era.id, 'receiptUrl', era.receiptUrl)
+    )
     FROM expense_receipts_associations era
     WHERE era.expenseId = em.id
   ) AS invoiceReceipt
@@ -57,7 +59,9 @@ SELECT
   em.createdAt,
   em.updatedAt,
   (
-    SELECT JSON_ARRAYAGG(era.receiptUrl)
+    SELECT JSON_ARRAYAGG(
+      JSON_OBJECT('id', era.id, 'receiptUrl', era.receiptUrl)
+    )
     FROM expense_receipts_associations era
     WHERE era.expenseId = em.id
   ) AS receipts
