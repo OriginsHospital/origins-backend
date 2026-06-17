@@ -28,7 +28,7 @@ module.exports = {
     updates: "START_FET"
   },
   ERA_START: {
-    checks: ["ICSI_NOT_STARTED", "ERA_NOT_STARTED", "ERA_CONSENTS_EXISTS"],
+    checks: ["ICSI_NOT_STARTED", "ERA_NOT_STARTED"],
     updates: "START_ERA"
   },
   END_ICSI: {
