@@ -2316,27 +2316,14 @@ class MasterDataService {
       throw new createError.NotFound("Pharmacy kit not found");
     }
 
-    await this.mysqlConnection
-      .query(
-        `UPDATE pharmacy_kit_master
-         SET kitName = :kitName,
-             kitValue = :kitValue,
-             medicines = :medicines,
-             isActive = :isActive,
-             updatedBy = :updatedBy
-         WHERE id = :id`,
-        {
-          replacements: {
-            kitName: validatedPayload.kitName.trim(),
-            kitValue,
-            medicines: JSON.stringify(normalizedMedicines),
-            isActive: validatedPayload.isActive,
-            updatedBy: this._request?.userDetails?.id,
-            id: validatedPayload.id
-          },
-          type: Sequelize.QueryTypes.UPDATE
-        }
-      )
+    await existingRecord
+      .update({
+        kitName: validatedPayload.kitName.trim(),
+        kitValue,
+        medicines: normalizedMedicines,
+        isActive: validatedPayload.isActive,
+        updatedBy: this._request?.userDetails?.id
+      })
       .catch(err => {
         console.log("Error while updating pharmacy kit", err);
         throw new createError.InternalServerError(
