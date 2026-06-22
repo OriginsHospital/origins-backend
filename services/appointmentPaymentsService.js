@@ -1788,7 +1788,7 @@ class AppointmentsPaymentService extends BaseService {
           );
         });
 
-      if (!lodash.isEmpty(data) && data[0].statusCheck === 0) {
+      if (lodash.isEmpty(data) || !data[0].statusCheck) {
         throw new createError.BadRequest(Constants.FET_NOT_ALREADY_STARETD);
       }
     } else if (validationType == "OITI_NOT_STARTED") {
@@ -2825,28 +2825,72 @@ class AppointmentsPaymentService extends BaseService {
       /*
         1. UpdateEntry in the Trigger TimeStamps
       */
-      await TriggerTimeStampsMaster.update(
-        {
+      const fetEndFields = {
+        fetEndedReason: fetEndedReason,
+        fetEndedDate: moment()
+          .tz("Asia/Kolkata")
+          .format("YYYY-MM-DD HH:mm:ss"),
+        fetEndedBy: this._request?.userDetails?.id
+      };
+
+      const existingFetRecord = await TriggerTimeStampsMaster.findOne({
+        where: {
           visitId: visitId,
-          fetEndedReason: fetEndedReason,
-          fetEndedDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
-          fetEndedBy: this._request?.userDetails?.id
+          treatmentType
         },
-        {
+        transaction: transaction
+      });
+
+      const packageRecord = await VisitPackagesAssociation.findOne({
+        where: { visitId: visitId },
+        attributes: ["fetDate"],
+        transaction: transaction
+      });
+
+      const inferredFetStartDate = packageRecord?.fetDate
+        ? moment(packageRecord.fetDate)
+            .tz("Asia/Kolkata")
+            .format("YYYY-MM-DD HH:mm:ss")
+        : moment()
+            .tz("Asia/Kolkata")
+            .format("YYYY-MM-DD HH:mm:ss");
+
+      if (existingFetRecord) {
+        const updateFields = { ...fetEndFields };
+        if (!existingFetRecord.fetStartDate) {
+          updateFields.fetStartDate = inferredFetStartDate;
+        }
+
+        await TriggerTimeStampsMaster.update(updateFields, {
           where: {
             visitId: visitId,
             treatmentType
           },
           transaction: transaction
-        }
-      ).catch(err => {
-        console.log("Error while adding record in timestamps master", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
+        }).catch(err => {
+          console.log("Error while updating record in timestamps master", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      } else {
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId: visitId,
+            treatmentType,
+            fetStartDate: inferredFetStartDate,
+            ...fetEndFields
+          },
+          {
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while adding record in timestamps master", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
     } else if (updateType === "END_ERA") {
       /*
         1. UpdateEntry in the Trigger TimeStamps

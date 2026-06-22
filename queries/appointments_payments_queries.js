@@ -574,11 +574,14 @@ from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :trea
 const fetStartedCheckQuery = `
 SELECT (
 	CASE 
-		WHEN tt.fetStartDate IS NOT NULL THEN TRUE
+		WHEN tt.fetStartDate IS NOT NULL OR vpa.fetDate IS NOT NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 
-from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :treatmentType
+FROM visit_treatment_cycles_associations vtca
+LEFT JOIN treatment_timestamps tt ON tt.visitId = vtca.visitId AND tt.treatmentType = :treatmentType
+LEFT JOIN visit_packages_associations vpa ON vpa.visitId = vtca.visitId
+WHERE vtca.visitId = :id
 `;
 
 const icsiConsentsExistsQuery = `
@@ -751,11 +754,14 @@ where arm.visit_type = :patientTypeId and arm.isOther !=1
 const fetNotStartedCheckQuery = `
 SELECT (
 	CASE 
-		WHEN tt.fetStartDate IS NULL THEN TRUE
+		WHEN tt.fetStartDate IS NULL AND vpa.fetDate IS NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 
-from treatment_timestamps tt where tt.visitId = :id and tt.treatmentType = :treatmentType
+FROM visit_treatment_cycles_associations vtca
+LEFT JOIN treatment_timestamps tt ON tt.visitId = vtca.visitId AND tt.treatmentType = :treatmentType
+LEFT JOIN visit_packages_associations vpa ON vpa.visitId = vtca.visitId
+WHERE vtca.visitId = :id
 `;
 
 const eraNotStartedCheckQuery = `
