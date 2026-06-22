@@ -542,7 +542,7 @@ WITH BillDetails AS (
     LEFT JOIN 
         scan_master AS sm ON lb.billTypeValue = sm.id AND lb.billTypeId = 2
     LEFT JOIN
-    	scan_master_branch_association smba ON smba.scanId = sm.id and smba.branchId = caa.branchId
+    	scan_master_branch_association smba ON smba.scanId = sm.id and smba.branchId = caa.branchId AND smba.isActive = 1
     LEFT JOIN 
         embryology_master AS elm ON lb.billTypeValue = elm.id AND lb.billTypeId = 4
     LEFT JOIN 
@@ -666,7 +666,7 @@ WITH BillDetails AS (
     LEFT JOIN 
         scan_master AS sm ON lb.billTypeValue = sm.id AND lb.billTypeId = 2
     LEFT JOIN 
-        scan_master_branch_association smba ON smba.scanId = sm.id AND smba.branchId = taa.branchId
+        scan_master_branch_association smba ON smba.scanId = sm.id AND smba.branchId = taa.branchId AND smba.isActive = 1
     LEFT JOIN 
         embryology_master AS elm ON lb.billTypeValue = elm.id AND lb.billTypeId = 4
     LEFT JOIN 

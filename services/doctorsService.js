@@ -191,15 +191,23 @@ class DoctorsService {
           transaction: t
         });
 
-        // Only DUE rows are mutable; PAID rows remain immutable history.
-        const existingDueMap = new Map(
-          existingLineBills
-            .filter(record => record.status === "DUE")
-            .map(record => [
-              `${record.billTypeId}-${record.billTypeValue}-${record.isSpouse}`,
-              record
-            ])
-        );
+        // Unpaid rows are mutable; PAID / OPT_OUT rows remain immutable history.
+        const isMutableLineBill = record =>
+          record.status !== "PAID" && record.status !== "OPT_OUT";
+
+        const existingDueMap = new Map();
+        const duplicateRecordIds = [];
+
+        existingLineBills.filter(isMutableLineBill).forEach(record => {
+          const key = `${record.billTypeId}-${
+            record.billTypeValue
+          }-${record.isSpouse ?? normalizedIsSpouse}`;
+          if (existingDueMap.has(key)) {
+            duplicateRecordIds.push(record.id);
+          } else {
+            existingDueMap.set(key, record);
+          }
+        });
 
         const incomingMap = new Map(); // To track incoming records for deletion check
         const updatePromises = [];
@@ -218,28 +226,30 @@ class DoctorsService {
 
             if (existingDueMap.has(key)) {
               const existingRecord = existingDueMap.get(key);
+              const fieldsToUpdate = {
+                prescribedQuantity,
+                prescriptionDetails: value.prescriptionDetails,
+                prescriptionDays,
+                createdBy: createdByUserId
+              };
+
+              if (existingRecord.status !== "DUE") {
+                fieldsToUpdate.status = "DUE";
+              }
 
               // Check if any field needs an update
               if (
                 existingRecord.prescribedQuantity !== prescribedQuantity ||
                 existingRecord.prescriptionDetails !==
                   value.prescriptionDetails ||
-                existingRecord.prescriptionDays !== prescriptionDays
+                existingRecord.prescriptionDays !== prescriptionDays ||
+                existingRecord.status !== "DUE"
               ) {
-                // Update record
                 updatePromises.push(
-                  LineBillsModel.update(
-                    {
-                      prescribedQuantity,
-                      prescriptionDetails: value.prescriptionDetails,
-                      prescriptionDays,
-                      createdBy: createdByUserId
-                    },
-                    {
-                      where: { id: existingRecord.id },
-                      transaction: t
-                    }
-                  )
+                  LineBillsModel.update(fieldsToUpdate, {
+                    where: { id: existingRecord.id },
+                    transaction: t
+                  })
                 );
               }
 
@@ -255,21 +265,28 @@ class DoctorsService {
                 prescriptionDetails: value.prescriptionDetails,
                 prescriptionDays,
                 isSpouse: normalizedIsSpouse,
+                status: "DUE",
                 createdBy: createdByUserId
               });
             }
           });
         });
 
-        // DUE rows not present in incoming payload should be removed.
-        const deletePromises = Array.from(existingDueMap.values()).map(
-          record => {
-            return LineBillsModel.destroy({
+        // Unpaid rows not present in incoming payload should be removed.
+        const deletePromises = [
+          ...Array.from(existingDueMap.values()).map(record =>
+            LineBillsModel.destroy({
               where: { id: record.id },
               transaction: t
-            });
-          }
-        );
+            })
+          ),
+          ...duplicateRecordIds.map(id =>
+            LineBillsModel.destroy({
+              where: { id },
+              transaction: t
+            })
+          )
+        ];
 
         // Insert new records
         const createdEntries = await LineBillsModel.bulkCreate(insertEntries, {
