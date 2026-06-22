@@ -1991,9 +1991,6 @@ class AppointmentsPaymentService extends BaseService {
         .tz("Asia/Kolkata")
         .format("YYYY-MM-DD");
 
-      if ([6, 7].includes(treatmentType)) {
-        return [];
-      }
       return await this.getTreatmentSheetsService(visitId);
     } else if (updateType == "START_IUI") {
       /*
