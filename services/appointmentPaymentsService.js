@@ -95,6 +95,11 @@ const AppointmentChargesBranchAssociation = require("../models/Associations/appo
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
 const VisitDonarsAssociation = require("../models/Associations/visitDonarsAssociation");
+const {
+  DEFAULT_FET_MEDICATION_ROWS,
+  applyPrescribedMedicationsToFetTemplate,
+  getPrescribedMedicationRowsForCycle
+} = require("../utils/fetSheetMedicationUtils");
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -596,31 +601,7 @@ class AppointmentsPaymentService extends BaseService {
       { value: ">=20", label: ">=20", color: "dark" }
     ];
 
-    const medicationsRows = [
-      { label: "Endofert-H", value: "Endofert-H" },
-      { label: "ESTRABET GEL", value: "ESTRABET GEL" },
-      { label: "ASVIT-E", value: "ASVIT-E" },
-      {
-        label: "Nicardia retard 20 mg tab",
-        value: "Nicardia retard 20 mg tab"
-      },
-      { label: "BIFOLATE", value: "BIFOLATE" },
-      { label: "PREGNASURE", value: "PREGNASURE" },
-      { label: "DOLONEX DT 20MG TAB", value: "DOLONEX DT 20MG TAB" },
-      { label: "SUSTEN 100 INJ", value: "SUSTEN 100 INJ" },
-      { label: "MICHELLE 200 TAB", value: "MICHELLE 200 TAB" },
-      { label: "DYDROPREG", value: "DYDROPREG" }
-    ];
-
     const scansRows = [];
-
-    const template = {
-      columns: dateRange,
-      medicationRows: medicationsRows,
-      medicationSheet: { rows: medicationsRows },
-      scanRows: scansRows,
-      scanSheet: []
-    };
 
     let treamentCycleInfo = await VisitTreatmentsAssociations.findOne({
       where: {
@@ -634,11 +615,34 @@ class AppointmentsPaymentService extends BaseService {
       );
     });
 
+    const treatmentCycleId = treamentCycleInfo?.dataValues?.id;
+    const prescribedRows = treatmentCycleId
+      ? await getPrescribedMedicationRowsForCycle(
+          this.mysqlConnection,
+          treatmentCycleId
+        )
+      : [];
+
+    const {
+      template,
+      medicationRows: medicationsRows
+    } = applyPrescribedMedicationsToFetTemplate(
+      {
+        columns: dateRange,
+        medicationRows: DEFAULT_FET_MEDICATION_ROWS,
+        medicationSheet: { rows: DEFAULT_FET_MEDICATION_ROWS },
+        scanRows: scansRows,
+        scanSheet: []
+      },
+      prescribedRows,
+      { includeDefaults: true }
+    );
+
     if (!lodash.isEmpty(treamentCycleInfo)) {
       // Adding default row into FET sheet table
       await TreatmentFetSheetAssociations.create({
         template: JSON.stringify(template),
-        treatmentCycleId: treamentCycleInfo?.dataValues?.id
+        treatmentCycleId
       }).catch(err => {
         console.log("Error while creating the treatment fet sheet", err);
         throw new createError.InternalServerError(
@@ -3425,7 +3429,7 @@ class AppointmentsPaymentService extends BaseService {
       );
     }
 
-    return TreatmentFetSheetAssociations.findOne({
+    const sheet = await TreatmentFetSheetAssociations.findOne({
       where: {
         treatmentCycleId: id
       },
@@ -3436,6 +3440,41 @@ class AppointmentsPaymentService extends BaseService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
+
+    if (!sheet?.template) {
+      return sheet;
+    }
+
+    const prescribedRows = await getPrescribedMedicationRowsForCycle(
+      this.mysqlConnection,
+      id
+    );
+    const { updated, template } = applyPrescribedMedicationsToFetTemplate(
+      sheet.template,
+      prescribedRows
+    );
+
+    if (!updated) {
+      return sheet;
+    }
+
+    const updatedTemplate = JSON.stringify(template);
+    await TreatmentFetSheetAssociations.update(
+      { template: updatedTemplate },
+      { where: { treatmentCycleId: id } }
+    ).catch(err => {
+      console.log("Error while updating the treatment fet sheet", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    sheet.template = updatedTemplate;
+    if (sheet.dataValues) {
+      sheet.dataValues.template = updatedTemplate;
+    }
+
+    return sheet;
   }
 
   async updateTreatmentFetSheetHandler() {
