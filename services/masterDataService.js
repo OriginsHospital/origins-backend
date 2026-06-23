@@ -2321,7 +2321,7 @@ class MasterDataService {
         `UPDATE pharmacy_kit_master
          SET kitName = :kitName,
              kitValue = :kitValue,
-             medicines = :medicines,
+             medicines = CAST(:medicines AS JSON),
              isActive = :isActive,
              updatedBy = :updatedBy
          WHERE id = :id`,
@@ -2343,6 +2343,44 @@ class MasterDataService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+    const updatedRows = await this.mysqlConnection
+      .query(
+        `SELECT medicines
+         FROM pharmacy_kit_master
+         WHERE id = :id
+         LIMIT 1`,
+        {
+          replacements: { id: validatedPayload.id },
+          type: Sequelize.QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("Error while verifying pharmacy kit update", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const updatedRow = updatedRows?.[0];
+    if (!updatedRow) {
+      throw new createError.NotFound("Pharmacy kit not found after update");
+    }
+
+    const persistedMedicines = this.normalizeKitMedicines(updatedRow.medicines);
+    const expectedJson = JSON.stringify(normalizedMedicines);
+    const persistedJson = JSON.stringify(persistedMedicines);
+
+    if (expectedJson !== persistedJson) {
+      console.log("Pharmacy kit medicines mismatch after update", {
+        id: validatedPayload.id,
+        expected: normalizedMedicines,
+        persisted: persistedMedicines
+      });
+      throw new createError.InternalServerError(
+        "Pharmacy kit quantities did not save correctly"
+      );
+    }
 
     return Constants.DATA_UPDATED_SUCCESS;
   }
