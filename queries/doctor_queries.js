@@ -330,7 +330,14 @@ const getTreatmentCycleHistoryByPatientId = `
     vtca.type as treatmentType,
     vtca.id as treatmentCycleId,
     'Treatment' as type,
-    DATE_FORMAT(vtca.createdAt,'%Y-%m-%d') as treatmentDate 
+    DATE_FORMAT(vtca.createdAt,'%Y-%m-%d') as treatmentDate,
+    pva.visitClosedStatus,
+    pva.visitClosedReason,
+    COALESCE(
+        NULLIF(TRIM(tt.endedReason), ''),
+        NULLIF(TRIM(tt.fetEndedReason), ''),
+        NULLIF(TRIM(tt.eraEndedReason), '')
+    ) as closeCancelReason
     from
     visit_treatment_cycles_associations vtca
     INNER JOIN patient_visits_association pva 
@@ -338,6 +345,9 @@ const getTreatmentCycleHistoryByPatientId = `
     pva.id = vtca.visitId
     INNER JOIN patient_master pm on
     pm.id = pva.patientId
+    LEFT JOIN treatment_timestamps tt
+        ON tt.visitId = vtca.visitId
+        AND tt.treatmentType = vtca.treatmentTypeId
     where
     pm.patientId = :patientId
 `;
