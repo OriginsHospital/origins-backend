@@ -22,12 +22,15 @@ const dischargeSummarySheet = `
     </tr>
     <tr>
         <td style="border: 1px solid black; padding: 5px; ">DOCTOR NAME</td>
-        <td style="border: 1px solid black; padding: 5px;"></td>
+        <td style="border: 1px solid black; padding: 5px;">{{doctorName}}</td>
         <td style="border: 1px solid black; padding: 5px; ">EMBRYOLOGIST NAME</td>
-        <td style="border: 1px solid black; padding: 5px;"></td>
+        <td style="border: 1px solid black; padding: 5px;">{{embryologistName}}</td>
     </tr>
     <tr>
         <td colspan="4" style="border: 1px solid black; padding: 5px; ">PLAN OF CYCLE </td>
+    </tr>
+    <tr>
+        <td colspan="4" style="border: 1px solid black; padding: 5px;">{{planOfCycle}}</td>
     </tr>
     <tr>
         <td style="border: 1px solid black; padding: 5px; ">TOTAL NO OF OOCYTES</td>
@@ -139,17 +142,17 @@ const dischargeSummarySheet = `
     <tr>
         <td colspan="4" style="border: 1px solid black; padding: 5px;font-size:10px ">
             <div>COMMENTS: A) OOCYTE QUALITIES - (AVERAGE / PRESENT OF DYSMORPHIC BODIES, MODERATE GRANULAR CYTOPLASM, CENTRALLY PITTED OOCYTES, FRAGMENTED POLAR BODIES)</div>
-            <p></p>
+            <p>{{comments}}</p>
         </td>
     </tr>
     <tr>
         <td colspan="2" style="border: 1px solid black; padding: 5px; ">
             <div>EMBRYOLOGIST NAME</div>
-            <div></div>
+            <div>{{embryologistName}}</div>
         </td>
         <td colspan="2" style="border: 1px solid black; padding: 5px; ">
             <div>DOCTOR NAME</div>
-            <div></div>
+            <div>{{doctorName}}</div>
         </td>
     </tr>
     <tr>
@@ -159,6 +162,6 @@ const dischargeSummarySheet = `
 </table>
 </body>
 </html>
-`
+`;
 
 module.exports = dischargeSummarySheet;

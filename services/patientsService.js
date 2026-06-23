@@ -23,6 +23,8 @@ const {
   getDateFilteredPatientsQuery,
   getPatientsQuery,
   getPatientInfoForDischargeSheet,
+  getDischargeSummaryContextQuery,
+  getEmbryologyReportsByTreatmentCycleIdQuery,
   getPatientTreatmentCYclesQuery,
   getPatientDetailsForOpdSheetQuery,
   searchPatientByAadhaarQuery,
@@ -54,6 +56,9 @@ const dischargeSummaryTemplate = require("../templates/dischargeSummarySheet");
 const TreatmentDischargeSummarySheetAssociations = require("../models/Associations/treatmentDischargeSheetAssociations");
 const TreatmentPickUpSheetAssociations = require("../models/Associations/treatmentPickUpSheetAssociations");
 const pickUpSheetTemplate = require("../templates/pickUpSheetTemplate");
+const {
+  applyDischargeSummaryContext
+} = require("../utils/dischargeSummaryUtils");
 const BaseService = require("../services/baseService");
 
 class PatientsService extends BaseService {
@@ -941,6 +946,26 @@ class PatientsService extends BaseService {
       );
     }
 
+    const contextRows = await this.mysqlConnection
+      .query(getDischargeSummaryContextQuery, {
+        type: QueryTypes.SELECT,
+        replacements: {
+          treatmentCycleId: id
+        }
+      })
+      .catch(err => {
+        console.log("Error during fetching discharge summary context", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (lodash.isEmpty(contextRows)) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const context = contextRows[0];
+
     let data = await TreatmentDischargeSummarySheetAssociations.findOne({
       where: {
         treatmentCycleId: id
@@ -953,39 +978,53 @@ class PatientsService extends BaseService {
       );
     });
 
-    if (lodash.isEmpty(data)) {
-      // Sending the default Template
-      let defaultDischargeTemplate = dischargeSummaryTemplate;
-      const patientInfo = await this.mysqlConnection
-        .query(getPatientInfoForDischargeSheet, {
-          type: QueryTypes.SELECT,
-          replacements: {
-            treatmentCycleId: id
-          }
-        })
-        .catch(err => {
-          console.log("Error during fetching of patientDetails", err);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
+    const template = lodash.isEmpty(data)
+      ? dischargeSummaryTemplate
+      : data.template;
 
-      if (lodash.isEmpty(patientInfo)) {
-        throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
-      }
+    return {
+      treatmentCycleId: id,
+      template: applyDischargeSummaryContext(template, context),
+      hasSavedDischarge: !lodash.isEmpty(data)
+    };
+  }
 
-      defaultDischargeTemplate = defaultDischargeTemplate
-        .replaceAll("{{patientName}}", patientInfo[0].patientName)
-        .replaceAll("{{husbandName}}", patientInfo[0].husbandName)
-        .replaceAll("{{husbandAge}}", patientInfo[0].husbandAge)
-        .replaceAll("{{patientAge}}", patientInfo[0].patientAge);
-
-      data = {
-        treatmentCycleId: id,
-        template: defaultDischargeTemplate
-      };
+  async getEmbryologyReportsByTreatmentCycleIdService() {
+    const { id } = this._request.params;
+    if (!id) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{{params}}", "TreatmentCycle Id")
+      );
     }
-    return data;
+
+    const reports = await this.mysqlConnection
+      .query(getEmbryologyReportsByTreatmentCycleIdQuery, {
+        type: QueryTypes.SELECT,
+        replacements: {
+          treatmentCycleId: id
+        }
+      })
+      .catch(err => {
+        console.log(
+          "Error while fetching embryology reports for treatment cycle",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return reports.map(report => ({
+      ...report,
+      embryologyDetails: report.template
+        ? [
+            {
+              categoryType: report.categoryType,
+              template: report.template
+            }
+          ]
+        : []
+    }));
   }
 
   async saveDischargeSummarySheetService() {

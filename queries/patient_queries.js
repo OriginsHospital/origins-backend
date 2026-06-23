@@ -119,6 +119,66 @@ LEFT JOIN patient_guardian_associations pga on pga.patientId = pm.id
 WHERE vtca.id  = :treatmentCycleId
 `;
 
+const getDischargeSummaryContextQuery = `
+SELECT
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName,'')) AS patientName,
+    COALESCE(pga.name, '') AS husbandName,
+    CONCAT(YEAR(NOW()) - YEAR(pm.dateOfBirth)) AS patientAge,
+    COALESCE(pga.age, '') AS husbandAge,
+    COALESCE(
+        NULLIF(TRIM(vtca.type), ''),
+        (SELECT ttm.name FROM treatment_type_master ttm WHERE ttm.id = vtca.treatmentTypeId)
+    ) AS planOfCycle,
+    (
+        SELECT cdm.name
+        FROM treatment_appointments_associations taa
+        INNER JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
+        WHERE taa.treatmentCycleId = vtca.id
+        ORDER BY taa.appointmentDate DESC, taa.id DESC
+        LIMIT 1
+    ) AS doctorName,
+    (
+        SELECT u.fullName
+        FROM ot_list_master olm
+        INNER JOIN users u ON u.id = olm.embryologistId
+        WHERE olm.treatmentCycleId = vtca.id
+        ORDER BY olm.procedureDate DESC, olm.id DESC
+        LIMIT 1
+    ) AS embryologistName,
+    pva.visitClosedReason AS comments
+FROM visit_treatment_cycles_associations vtca
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+INNER JOIN patient_master pm ON pm.id = pva.patientId
+LEFT JOIN patient_guardian_associations pga ON pga.patientId = pm.id
+WHERE vtca.id = :treatmentCycleId
+`;
+
+const getEmbryologyReportsByTreatmentCycleIdQuery = `
+SELECT
+    em.name AS embryologyName,
+    tea.categoryType,
+    tea.template,
+    taa.id AS appointmentId,
+    taa.appointmentDate,
+    (
+        SELECT cdm.name
+        FROM consultation_doctor_master cdm
+        WHERE cdm.userId = taa.consultationDoctorId
+        LIMIT 1
+    ) AS doctorName
+FROM treatment_appointments_associations taa
+INNER JOIN treatment_appointment_line_bills_associations talba
+    ON talba.appointmentId = taa.id
+    AND talba.billTypeId = 4
+    AND talba.status = 'PAID'
+INNER JOIN treatement_embryology_association tea
+    ON tea.treatmentCycleId = taa.id
+    AND tea.embryologyType = talba.billTypeValue
+INNER JOIN embryology_master em ON em.id = tea.embryologyType
+WHERE taa.treatmentCycleId = :treatmentCycleId
+ORDER BY taa.appointmentDate DESC, em.name ASC, tea.categoryType ASC
+`;
+
 const getPatientTreatmentCYclesQuery = `
 SELECT 
 	(SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
@@ -321,6 +381,8 @@ module.exports = {
   getDateFilteredPatientsQuery,
   getPatientsQuery,
   getPatientInfoForDischargeSheet,
+  getDischargeSummaryContextQuery,
+  getEmbryologyReportsByTreatmentCycleIdQuery,
   getPatientTreatmentCYclesQuery,
   getPatientDetailsForOpdSheetQuery,
   searchPatientByAadhaarQuery,

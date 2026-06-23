@@ -168,6 +168,17 @@ class PatientsController {
     });
   }
 
+  async getEmbryologyReportsByTreatmentCycleIdHandler() {
+    const data = await this._service.getEmbryologyReportsByTreatmentCycleIdService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async savePickUpSheetHandler() {
     const data = await this._service.savePickUpSheetService(this._request);
     this._response.status(200).send({

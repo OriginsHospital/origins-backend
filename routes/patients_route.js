@@ -123,6 +123,13 @@ class PatientsRoute {
       this.getPickUpSheetByTreatmentId
     );
 
+    this._route.get(
+      "/getEmbryologyReportsByTreatmentCycleId/:id",
+      checkActiveSession,
+      tokenVerified,
+      this.getEmbryologyReportsByTreatmentCycleId
+    );
+
     this._route.post(
       "/savePickUpSheet",
       checkActiveSession,
@@ -267,6 +274,11 @@ class PatientsRoute {
     const controllerObj = new PatientsController(req, res, next);
     await controllerObj.getPickUpSheetByTreatmentIdHandler();
   })
+
+  getEmbryologyReportsByTreatmentCycleId = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.getEmbryologyReportsByTreatmentCycleIdHandler();
+  });
 
   savePickUpSheet = asyncHandler(async (req,res,next) =>{
     const controllerObj = new PatientsController(req, res, next);
