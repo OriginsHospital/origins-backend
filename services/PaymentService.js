@@ -44,6 +44,8 @@ const {
 let { invoiceTemplate } = require("../templates/invoiceTemplate");
 let { patientHeaderForInvoice } = require("../templates/headerTemplates");
 const GrnDetailsMasterModel = require("../models/Master/grnDetailsMaster");
+const BranchMasterModel = require("../models/Master/branchMaster");
+const { getGrnItemLineForRefundQuery } = require("../queries/pharmacy_queries");
 const formFTemplate = require("../templates/formFTemplate");
 const patientScanFormFAssociationsModel = require("../models/Associations/patientScanFormFAssociation");
 const BaseService = require("../services/baseService");
@@ -104,6 +106,321 @@ class PaymentService extends BaseService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     }
+  }
+
+  resolveRefundBranchId(payload) {
+    const userBranches = this._request?.userDetails?.branchDetails || [];
+    const branchIds = userBranches
+      .map(branch => Number(branch.id))
+      .filter(id => !Number.isNaN(id) && id > 0);
+
+    if (payload?.refundBranchId) {
+      const refundBranchId = Number(payload.refundBranchId);
+      if (!branchIds.includes(refundBranchId)) {
+        throw new createError.Forbidden(
+          "You do not have access to the selected refund branch."
+        );
+      }
+      return refundBranchId;
+    }
+
+    if (branchIds.length === 1) {
+      return branchIds[0];
+    }
+
+    if (branchIds.length > 1) {
+      throw new createError.BadRequest(
+        "refundBranchId is required when user has access to multiple branches."
+      );
+    }
+
+    throw new createError.BadRequest("Unable to resolve refund branch.");
+  }
+
+  buildCrossBranchRefundInvoiceNumber(sourceInvoiceNumber, refundBranchCode) {
+    const sourceInvoice =
+      (sourceInvoiceNumber || "").toString().trim() ||
+      `INV${String(Date.now()).slice(-5)}`;
+    const branchCode = (refundBranchCode || "BRN")
+      .toString()
+      .trim()
+      .toUpperCase()
+      .slice(0, 3);
+    return `${sourceInvoice} - ${branchCode}`;
+  }
+
+  async findOrCreateUniqueRefundInvoiceNumber(invoiceBase, transaction) {
+    let refundInvoiceNumber = invoiceBase;
+    let invoiceSuffix = 1;
+
+    while (true) {
+      const existingInvoice = await GrnDetailsMasterModel.findOne({
+        where: { invoiceNumber: refundInvoiceNumber },
+        transaction
+      });
+      if (!existingInvoice) {
+        break;
+      }
+      refundInvoiceNumber = `${invoiceBase}-${invoiceSuffix}`;
+      invoiceSuffix += 1;
+    }
+
+    return refundInvoiceNumber;
+  }
+
+  async addCrossBranchRefundStock({
+    sourceGrnId,
+    itemId,
+    refundBranchId,
+    qty,
+    transaction
+  }) {
+    const sourceRows = await this.stockMySqlConnection
+      .query(getGrnItemLineForRefundQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { grnId: sourceGrnId, itemId },
+        transaction
+      })
+      .catch(err => {
+        console.log("Error while fetching source GRN item for refund", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!sourceRows?.length) {
+      throw new createError.BadRequest(
+        `Invalid source GRN ${sourceGrnId} for item ${itemId}.`
+      );
+    }
+
+    const source = sourceRows[0];
+    const refundBranch = await BranchMasterModel.findOne({
+      where: { id: refundBranchId, isActive: 1 }
+    }).catch(err => {
+      console.log("Error while fetching refund branch", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!refundBranch) {
+      throw new createError.BadRequest("Refund branch not found.");
+    }
+
+    const invoiceBase = this.buildCrossBranchRefundInvoiceNumber(
+      source.sourceInvoiceNumber,
+      refundBranch.branchCode
+    );
+
+    const existingRefundGrnRows = await this.stockMySqlConnection
+      .query(
+        `SELECT id, invoiceNumber, grnNo
+         FROM stockmanagement.grn_master
+         WHERE branchId = :refundBranchId
+           AND (invoiceNumber = :invoiceBase OR invoiceNumber LIKE :invoiceLike)
+         ORDER BY id ASC
+         LIMIT 1`,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            refundBranchId,
+            invoiceBase,
+            invoiceLike: `${invoiceBase}%`
+          },
+          transaction
+        }
+      )
+      .catch(err => {
+        console.log("Error while finding cross-branch refund GRN", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    let refundGrn = existingRefundGrnRows?.length
+      ? await GrnDetailsMasterModel.findOne({
+          where: { id: existingRefundGrnRows[0].id },
+          transaction
+        })
+      : null;
+
+    if (!refundGrn) {
+      const refundInvoiceNumber = await this.findOrCreateUniqueRefundInvoiceNumber(
+        invoiceBase,
+        transaction
+      );
+
+      refundGrn = await GrnDetailsMasterModel.create(
+        {
+          branchId: refundBranchId,
+          date: moment()
+            .tz("Asia/Kolkata")
+            .format("YYYY-MM-DD"),
+          supplierId: source.supplierId,
+          supplierEmail: source.supplierEmail,
+          supplierAddress: source.supplierAddress,
+          supplierGstNumber: source.supplierGstNumber,
+          invoiceNumber: refundInvoiceNumber
+        },
+        { transaction }
+      ).catch(err => {
+        console.log("Error while creating cross-branch refund GRN", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      await GrnDetailsMasterModel.update(
+        { grnNo: String(refundGrn.id) },
+        { where: { id: refundGrn.id }, transaction }
+      ).catch(err => {
+        console.log("Error while updating cross-branch refund GRN number", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+
+    const matchingRows = await this.stockMySqlConnection
+      .query(
+        `SELECT id, totalQuantity
+         FROM stockmanagement.grn_items_associations
+         WHERE grnId = :grnId
+           AND itemId = :itemId
+           AND IFNULL(batchNo, '') = IFNULL(:batchNo, '')
+           AND expiryDate = :expiryDate
+         ORDER BY id DESC
+         LIMIT 1`,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            grnId: refundGrn.id,
+            itemId,
+            batchNo: source.batchNo || "",
+            expiryDate: source.expiryDate
+          },
+          transaction
+        }
+      )
+      .catch(err => {
+        console.log("Error while finding refund GRN stock line", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (matchingRows?.length) {
+      await this.stockMySqlConnection.query(
+        `UPDATE stockmanagement.grn_items_associations
+         SET totalQuantity = totalQuantity + :qty
+         WHERE id = :id
+         LIMIT 1`,
+        {
+          replacements: {
+            qty,
+            id: Number(matchingRows[0].id)
+          },
+          transaction
+        }
+      );
+    } else {
+      await GrnItemsAssociationsModel.create(
+        {
+          grnId: refundGrn.id,
+          itemId: source.itemId,
+          batchNo: source.batchNo,
+          expiryDate: source.expiryDate,
+          pack: source.pack,
+          quantity: source.quantity,
+          freeQuantity: source.freeQuantity,
+          intialQuantity: qty,
+          totalQuantity: qty,
+          mrp: source.mrp,
+          rate: source.rate,
+          mrpPerTablet: source.mrpPerTablet,
+          ratePerTablet: source.ratePerTablet,
+          discountPercentage: source.discountPercentage,
+          taxPercentage: source.taxPercentage,
+          discountAmount: source.discountAmount,
+          taxAmount: source.taxAmount,
+          amount: source.amount,
+          isReturned: 0
+        },
+        { transaction }
+      ).catch(err => {
+        console.log("Error while creating refund GRN stock line", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+
+    return {
+      sourceGrnId,
+      refundGrnId: refundGrn.id,
+      refundInvoiceNumber: refundGrn.invoiceNumber || invoiceBase
+    };
+  }
+
+  async addSameBranchRefundStock({
+    grnId,
+    itemId,
+    branchId,
+    qty,
+    transaction
+  }) {
+    const eligibleGrnQuery = `SELECT gia.id
+       FROM stockmanagement.grn_items_associations gia
+       INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+       WHERE gia.grnId = :grnId
+         AND gia.itemId = :itemId
+         AND gm.branchId = :branchId
+         {returnedFilter}
+       ORDER BY gia.id DESC
+       LIMIT 1`;
+    const grnQueryReplacements = { grnId, itemId, branchId };
+    let eligibleRows = await this.stockMySqlConnection.query(
+      eligibleGrnQuery.replace(
+        "{returnedFilter}",
+        "AND IFNULL(gia.isReturned, 0) = 0"
+      ),
+      {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: grnQueryReplacements,
+        transaction
+      }
+    );
+    if (!eligibleRows?.length) {
+      eligibleRows = await this.stockMySqlConnection.query(
+        eligibleGrnQuery.replace("{returnedFilter}", ""),
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: grnQueryReplacements,
+          transaction
+        }
+      );
+    }
+
+    if (!eligibleRows?.length) {
+      throw new createError.BadRequest(
+        `Invalid GRN ${grnId} for item ${itemId} at branch ${branchId}.`
+      );
+    }
+
+    await this.stockMySqlConnection.query(
+      `UPDATE stockmanagement.grn_items_associations
+       SET totalQuantity = totalQuantity + :qty
+       WHERE id = :grnItemAssociationId
+       LIMIT 1`,
+      {
+        replacements: {
+          qty,
+          grnItemAssociationId: Number(eligibleRows[0].id)
+        },
+        transaction
+      }
+    );
   }
 
   async getOrderIdHandlerservice() {
@@ -1541,6 +1858,12 @@ class PaymentService extends BaseService {
       returnedBy: isNewFormat
         ? parsedReturnDetails.returnedByName || "N/A"
         : "N/A",
+      refundBranchId: isNewFormat
+        ? parsedReturnDetails.refundBranchId || null
+        : null,
+      crossBranchStockUpdates: isNewFormat
+        ? parsedReturnDetails.crossBranchStockUpdates || []
+        : [],
       returnDetails: returnItems
     };
   }
@@ -1815,73 +2138,52 @@ class PaymentService extends BaseService {
       throw new createError.BadRequest(Constants.PAYABLE_AMOUNT_WRONG);
     }
 
+    const refundBranchId = this.resolveRefundBranchId(payload);
+    const crossBranchStockUpdates = [];
+
     await this.stockMySqlConnection.transaction(async stockTransaction => {
       for (const detail of returnDetails) {
         const refId = Number(detail.refId);
         const itemId = Number(detail.itemId);
-        const branchId = branchByRefId.get(refId);
-        if (!branchId) {
+        const purchaseBranchId = branchByRefId.get(refId);
+        if (!purchaseBranchId) {
           throw new createError.BadRequest(
             `Unable to resolve branch for refund refId ${refId}.`
           );
         }
 
+        const isCrossBranchRefund =
+          Number(refundBranchId) !== Number(purchaseBranchId);
+
         for (const row of detail.returnInfo) {
           const qty = Number(row.returnQuantity);
           const grnId = Number(row.grnId);
 
-          // Validate GRN belongs to the same branch and item exists in GRN stock rows.
-          const eligibleGrnQuery = `SELECT gia.id
-             FROM stockmanagement.grn_items_associations gia
-             INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-             WHERE gia.grnId = :grnId
-               AND gia.itemId = :itemId
-               AND gm.branchId = :branchId
-               {returnedFilter}
-             ORDER BY gia.id DESC
-             LIMIT 1`;
-          const grnQueryReplacements = { grnId, itemId, branchId };
-          let eligibleRows = await this.stockMySqlConnection.query(
-            eligibleGrnQuery.replace(
-              "{returnedFilter}",
-              "AND IFNULL(gia.isReturned, 0) = 0"
-            ),
-            {
-              type: Sequelize.QueryTypes.SELECT,
-              replacements: grnQueryReplacements,
+          if (isCrossBranchRefund) {
+            const stockUpdate = await this.addCrossBranchRefundStock({
+              sourceGrnId: grnId,
+              itemId,
+              refundBranchId,
+              qty,
               transaction: stockTransaction
-            }
-          );
-          if (!eligibleRows?.length) {
-            eligibleRows = await this.stockMySqlConnection.query(
-              eligibleGrnQuery.replace("{returnedFilter}", ""),
-              {
-                type: Sequelize.QueryTypes.SELECT,
-                replacements: grnQueryReplacements,
-                transaction: stockTransaction
-              }
-            );
-          }
-
-          if (!eligibleRows?.length) {
-            throw new createError.BadRequest(
-              `Invalid GRN ${grnId} for item ${itemId} at branch ${branchId}.`
-            );
-          }
-
-          await this.stockMySqlConnection.query(
-            `UPDATE stockmanagement.grn_items_associations
-             SET totalQuantity = totalQuantity + :qty
-             WHERE id = :grnItemAssociationId
-             LIMIT 1`,
-            {
-              replacements: {
-                qty,
-                grnItemAssociationId: Number(eligibleRows[0].id)
-              },
+            });
+            crossBranchStockUpdates.push({
+              refId,
+              itemId,
+              purchaseBranchId,
+              refundBranchId,
+              ...stockUpdate,
+              returnQuantity: qty
+            });
+          } else {
+            await this.addSameBranchRefundStock({
+              grnId,
+              itemId,
+              branchId: purchaseBranchId,
+              qty,
               transaction: stockTransaction
-            }
-          );
+            });
+          }
         }
       }
     });
@@ -1943,7 +2245,9 @@ class PaymentService extends BaseService {
         returnDetails: JSON.stringify({
           items: returnDetails,
           refundMethod,
-          returnedByName
+          returnedByName,
+          refundBranchId,
+          crossBranchStockUpdates
         }),
         totalAmount: roundedComputedAmount
       };
@@ -1956,8 +2260,10 @@ class PaymentService extends BaseService {
         returnId: createdReturn?.id || null,
         orderId,
         refundMethod,
+        refundBranchId,
         returnedBy: returnedByName,
         totalAmount: roundedComputedAmount,
+        crossBranchStockUpdates,
         returnDetails
       };
     });

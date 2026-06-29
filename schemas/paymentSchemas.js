@@ -42,6 +42,9 @@ const returnPharmacyItemSchema = Joi.object({
   orderId: Joi.string().required(),
   totalAmount: Joi.number().required(),
   type: Joi.string().required(),
+  refundBranchId: Joi.number()
+    .integer()
+    .optional(),
   refundMethod: Joi.string()
     .valid("CASH", "CARD", "BANK_TRANSFER", "WALLET", "CREDIT_NOTE")
     .optional(),

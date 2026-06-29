@@ -401,6 +401,39 @@ const getGrnItemStockLinesForTransferQuery = `
   ORDER BY gia.expiryDate ASC, gia.id ASC;
 `;
 
+const getGrnItemLineForRefundQuery = `
+  SELECT
+    gia.id,
+    gia.grnId,
+    gia.itemId,
+    gia.batchNo,
+    gia.expiryDate,
+    gia.pack,
+    gia.quantity,
+    gia.freeQuantity,
+    gia.mrp,
+    gia.rate,
+    gia.mrpPerTablet,
+    gia.ratePerTablet,
+    gia.discountPercentage,
+    gia.taxPercentage,
+    gia.discountAmount,
+    gia.taxAmount,
+    gia.amount,
+    gm.branchId AS sourceBranchId,
+    gm.invoiceNumber AS sourceInvoiceNumber,
+    gm.supplierId,
+    gm.supplierEmail,
+    gm.supplierAddress,
+    gm.supplierGstNumber,
+    gm.grnNo AS sourceGrnNo
+  FROM stockmanagement.grn_items_associations gia
+  INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+  WHERE gia.grnId = :grnId AND gia.itemId = :itemId
+  ORDER BY gia.id DESC
+  LIMIT 1
+`;
+
 const getGrnBranchTransferHistoryQuery = `
   SELECT
     gbtm.id,
@@ -450,5 +483,6 @@ module.exports = {
   reassignGrnStockItemIdForBranchQuery,
   getGrnTransferPreviewByIdQuery,
   getGrnItemStockLinesForTransferQuery,
+  getGrnItemLineForRefundQuery,
   getGrnBranchTransferHistoryQuery
 };
