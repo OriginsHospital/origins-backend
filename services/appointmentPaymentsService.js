@@ -95,11 +95,6 @@ const AppointmentChargesBranchAssociation = require("../models/Associations/appo
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
 const VisitDonarsAssociation = require("../models/Associations/visitDonarsAssociation");
-const {
-  DEFAULT_FET_MEDICATION_ROWS,
-  applyPrescribedMedicationsToFetTemplate,
-  getPrescribedMedicationRowsForCycle
-} = require("../utils/fetSheetMedicationUtils");
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -616,27 +611,15 @@ class AppointmentsPaymentService extends BaseService {
     });
 
     const treatmentCycleId = treamentCycleInfo?.dataValues?.id;
-    const prescribedRows = treatmentCycleId
-      ? await getPrescribedMedicationRowsForCycle(
-          this.mysqlConnection,
-          treatmentCycleId
-        )
-      : [];
 
-    const {
-      template,
-      medicationRows: medicationsRows
-    } = applyPrescribedMedicationsToFetTemplate(
-      {
-        columns: dateRange,
-        medicationRows: DEFAULT_FET_MEDICATION_ROWS,
-        medicationSheet: { rows: DEFAULT_FET_MEDICATION_ROWS },
-        scanRows: scansRows,
-        scanSheet: []
-      },
-      prescribedRows,
-      { includeDefaults: true }
-    );
+    const template = {
+      columns: dateRange,
+      medicationRows: [],
+      medicationSheet: { rows: [] },
+      scanRows: scansRows,
+      scanSheet: []
+    };
+    const medicationsRows = [];
 
     if (!lodash.isEmpty(treamentCycleInfo)) {
       // Adding default row into FET sheet table
@@ -3440,39 +3423,6 @@ class AppointmentsPaymentService extends BaseService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     });
-
-    if (!sheet?.template) {
-      return sheet;
-    }
-
-    const prescribedRows = await getPrescribedMedicationRowsForCycle(
-      this.mysqlConnection,
-      id
-    );
-    const { updated, template } = applyPrescribedMedicationsToFetTemplate(
-      sheet.template,
-      prescribedRows
-    );
-
-    if (!updated) {
-      return sheet;
-    }
-
-    const updatedTemplate = JSON.stringify(template);
-    await TreatmentFetSheetAssociations.update(
-      { template: updatedTemplate },
-      { where: { treatmentCycleId: id } }
-    ).catch(err => {
-      console.log("Error while updating the treatment fet sheet", err);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
-
-    sheet.template = updatedTemplate;
-    if (sheet.dataValues) {
-      sheet.dataValues.template = updatedTemplate;
-    }
 
     return sheet;
   }
