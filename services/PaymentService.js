@@ -1101,8 +1101,8 @@ class PaymentService extends BaseService {
           productType: productType
         }
       });
-      if (!lodash.isEmpty(itemInfo)) {
-        return itemInfo[0]?.itemDetails;
+      if (!lodash.isEmpty(itemInfo) && itemInfo[0]?.itemDetails) {
+        return itemInfo[0].itemDetails;
       }
     }
     return [];
@@ -1232,12 +1232,12 @@ class PaymentService extends BaseService {
     ) {
       let orderDetails = JSON.parse(purchaseDetails?.orderDetails);
       orderDetails = await this.getOrderDetailsForInvoiceWithSpouseFlag(
-        JSON.parse(purchaseDetails?.orderDetails),
+        orderDetails,
         type,
         productType,
         appointmentId
       );
-      return orderDetails.map((item, index) => ({
+      return (orderDetails || []).map((item, index) => ({
         serialNumber: index + 1,
         ...item
       }));
@@ -1479,6 +1479,9 @@ class PaymentService extends BaseService {
       }
     }
     let finalTemplate = invoiceTemplates.join("");
+    if (!finalTemplate.trim()) {
+      throw new createError.BadRequest(Constants.PAYMENT_DETAILS_NOT_FOUND);
+    }
     return `
       <html>
         <head>
