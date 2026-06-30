@@ -66,7 +66,8 @@ class OTModuleService {
     return await OTPersonMasterModel.create({
       personName,
       designationId,
-      phoneNumber
+      phoneNumber,
+      isActive: 1
     }).catch(err => {
       console.log("Error while saving details of OT person ", err);
       throw new createError.InternalServerError(
@@ -80,7 +81,8 @@ class OTModuleService {
       id,
       personName,
       designationId,
-      phoneNumber
+      phoneNumber,
+      isActive
     } = await editPersonListSchema.validateAsync(this._request.body);
     const data = await OTPersonMasterModel.findOne({
       where: {
@@ -98,7 +100,12 @@ class OTModuleService {
     }
 
     await OTPersonMasterModel.update(
-      { personName, designationId, phoneNumber },
+      {
+        personName,
+        designationId,
+        phoneNumber,
+        ...(isActive !== undefined ? { isActive } : {})
+      },
       {
         where: {
           id: id
@@ -122,7 +129,8 @@ class OTModuleService {
     const data = await OTPersonMasterModel.findAll({
       where: {
         personName: { [Op.like]: "" + `%${searchText}%` + "" },
-        designationId: designationId
+        designationId: designationId,
+        isActive: 1
       },
       attributes: ["id", "personName"]
     }).catch(err => {

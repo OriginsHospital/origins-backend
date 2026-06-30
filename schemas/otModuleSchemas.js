@@ -27,7 +27,11 @@ const editPersonListSchema = Joi.object({
     .optional(),
   phoneNumber: Joi.string()
     .max(100)
-    .required()
+    .required(),
+  isActive: Joi.number()
+    .integer()
+    .valid(0, 1)
+    .optional()
 });
 
 const saveOtListSchema = Joi.object({

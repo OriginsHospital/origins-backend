@@ -21,6 +21,11 @@ const OTPersonMasterModel = MySqlConnection._instance.define(
     designationId: {
       type: Sequelize.INTEGER,
       allowNull: false
+    },
+    isActive: {
+      type: Sequelize.TINYINT,
+      allowNull: false,
+      defaultValue: 1
     }
   },
   {

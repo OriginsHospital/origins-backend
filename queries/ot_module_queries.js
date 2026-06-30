@@ -1,5 +1,5 @@
 const getAllPersonsListQuery = `
-    select opm.id, opm.personName, opm.designationId, opdm.name, opm.phoneNumber, opm.createdAt , opm.updatedAt  from ot_person_master opm INNER JOIN ot_person_designation_master opdm 
+    select opm.id, opm.personName, opm.designationId, opdm.name, opm.phoneNumber, opm.isActive, opm.createdAt , opm.updatedAt  from ot_person_master opm INNER JOIN ot_person_designation_master opdm 
     on opdm.id = opm.designationId ;
 `;
 
@@ -80,6 +80,8 @@ const getAllPersonsListDesignationWiseQuery = `
         ot_person_master opm
     INNER JOIN ot_person_designation_master opdm on
         opm.designationId = opdm.id
+    WHERE
+        opm.isActive = 1
     GROUP by
         opdm.mappingId;
 `;
