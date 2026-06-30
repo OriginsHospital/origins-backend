@@ -1921,6 +1921,29 @@ class AppointmentsPaymentService extends BaseService {
     }
   }
 
+  resolveTreatmentStartMoment(treatmentStartDate) {
+    const tz = "Asia/Kolkata";
+    const today = moment()
+      .tz(tz)
+      .startOf("day");
+    const selected = treatmentStartDate
+      ? moment.tz(treatmentStartDate, "YYYY-MM-DD", true, tz)
+      : moment().tz(tz);
+
+    if (!selected.isValid()) {
+      throw new createError.BadRequest("Invalid treatmentStartDate format.");
+    }
+
+    const selectedDay = selected.clone().startOf("day");
+    if (selectedDay.isAfter(today)) {
+      throw new createError.BadRequest(
+        "Treatment start date cannot be in the future."
+      );
+    }
+
+    return selectedDay;
+  }
+
   async updateTreatmentStatusModifications(
     updateType,
     visitId,
@@ -1930,7 +1953,8 @@ class AppointmentsPaymentService extends BaseService {
     endedReason,
     fetEndedReason,
     hysteroscopyTime,
-    eraStartTime
+    eraStartTime,
+    treatmentStartDate
   ) {
     if (updateType == "START_ICSI") {
       /*
@@ -1938,14 +1962,34 @@ class AppointmentsPaymentService extends BaseService {
         2. Update DAY 1 Date in packages
         3. Generate the Follicular Sheet and Return it. For some treatments we dont need sheet
       */
+      const tz = "Asia/Kolkata";
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = treatmentStartMoment
+        .clone()
+        .startOf("day")
+        .isSame(
+          moment()
+            .tz(tz)
+            .startOf("day")
+        )
+        ? moment()
+            .tz(tz)
+            .format("YYYY-MM-DD HH:mm:ss")
+        : treatmentStartMoment
+            .clone()
+            .startOf("day")
+            .format("YYYY-MM-DD HH:mm:ss");
 
       await TriggerTimeStampsMaster.create(
         {
           visitId: visitId,
           treatmentType,
-          startDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
+          startDate: treatmentStartTimestamp,
           startedBy: this._request?.userDetails?.id
         },
         {
@@ -1960,9 +2004,7 @@ class AppointmentsPaymentService extends BaseService {
 
       await VisitPackagesAssociation.update(
         {
-          day1Date: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD")
+          day1Date: treatmentStartDateFormatted
         },
         {
           where: {
@@ -1977,9 +2019,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      this._request.params.startDate = moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD");
+      this._request.params.startDate = treatmentStartDateFormatted;
 
       return await this.getTreatmentSheetsService(visitId);
     } else if (updateType == "START_IUI") {
@@ -2588,6 +2628,29 @@ class AppointmentsPaymentService extends BaseService {
       if ([1, 2, 3].includes(treatmentType)) {
         throw new createError.BadRequest(Constants.FET_CANNOT_BE_STARTED);
       }
+      const tz = "Asia/Kolkata";
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = treatmentStartMoment
+        .clone()
+        .startOf("day")
+        .isSame(
+          moment()
+            .tz(tz)
+            .startOf("day")
+        )
+        ? moment()
+            .tz(tz)
+            .format("YYYY-MM-DD HH:mm:ss")
+        : treatmentStartMoment
+            .clone()
+            .startOf("day")
+            .format("YYYY-MM-DD HH:mm:ss");
+
       const existingFetRecord = await TriggerTimeStampsMaster.findOne({
         where: {
           visitId: visitId,
@@ -2600,9 +2663,7 @@ class AppointmentsPaymentService extends BaseService {
         await TriggerTimeStampsMaster.update(
           {
             visitId: visitId,
-            fetStartDate: moment()
-              .tz("Asia/Kolkata")
-              .format("YYYY-MM-DD HH:mm:ss"),
+            fetStartDate: treatmentStartTimestamp,
             fetStartedBy: this._request?.userDetails?.id
           },
           {
@@ -2623,9 +2684,7 @@ class AppointmentsPaymentService extends BaseService {
           {
             visitId: visitId,
             treatmentType,
-            fetStartDate: moment()
-              .tz("Asia/Kolkata")
-              .format("YYYY-MM-DD HH:mm:ss"),
+            fetStartDate: treatmentStartTimestamp,
             fetStartedBy: this._request?.userDetails?.id
           },
           {
@@ -2641,9 +2700,7 @@ class AppointmentsPaymentService extends BaseService {
 
       await VisitPackagesAssociation.update(
         {
-          fetDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD")
+          fetDate: treatmentStartDateFormatted
         },
         {
           where: {
@@ -2658,9 +2715,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      this._request.params.startDate = moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD");
+      this._request.params.startDate = treatmentStartDateFormatted;
       return await this.getFetSheetsService(visitId);
     } else if (updateType == "START_ERA") {
       /*  //Same as FET but with ERA treatmentType//
@@ -2919,7 +2974,8 @@ class AppointmentsPaymentService extends BaseService {
       endedReason,
       fetEndedReason,
       hysteroscopyTime,
-      eraStartTime
+      eraStartTime,
+      treatmentStartDate
     } = await updateTreatmentStatusSchema.validateAsync(this._request.body);
     const stageExists = treatmentConstants[stage] || "";
     if (!stageExists) {
@@ -2954,7 +3010,8 @@ class AppointmentsPaymentService extends BaseService {
         endedReason,
         fetEndedReason,
         hysteroscopyTime,
-        eraStartTime
+        eraStartTime,
+        treatmentStartDate
       );
     });
   }
