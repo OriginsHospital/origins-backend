@@ -674,7 +674,8 @@ class AppointmentsPaymentService extends BaseService {
       { value: "18.5", label: "18.5", color: "dark" },
       { value: "19", label: "19", color: "dark" },
       { value: "19.5", label: "19.5", color: "dark" },
-      { value: ">=20", label: ">=20", color: "dark" }
+      { value: ">=20", label: ">=20", color: "dark" },
+      { value: "ET", label: "ET", color: "extra-dark" }
     ];
 
     const medicationsRows = [
@@ -695,6 +696,8 @@ class AppointmentsPaymentService extends BaseService {
 
     const template = {
       columns: dateRange,
+      rows: follicularRows,
+      follicularSheet: {},
       medicationRows: [],
       medicationSheet: [],
       scanRows: scansRows,
@@ -714,7 +717,7 @@ class AppointmentsPaymentService extends BaseService {
     });
 
     if (!lodash.isEmpty(treamentCycleInfo)) {
-      // Adding default row into FET sheet table
+      // Adding default row into ERA sheet table
       await TreatmentEraSheetAssociations.create({
         template: JSON.stringify(template),
         treatmentCycleId: treamentCycleInfo?.dataValues?.id
