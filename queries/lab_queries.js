@@ -178,8 +178,14 @@ ORDER BY appointmentDate DESC ;
 const getAllOutsourcingLabtestsQuery = `
 WITH OutsourcingLabs AS (
     SELECT 
-        CONCAT(pm.lastName, ' ', pm.firstName) AS patientName,
-        COALESCE(pm.firstName, '') AS firstName,
+        CASE 
+            WHEN calba.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, ''))
+            ELSE COALESCE(pga.name, '')
+        END AS patientName,
+        CASE 
+            WHEN calba.isSpouse = 0 THEN COALESCE(pm.firstName, '')
+            ELSE COALESCE(pga.name, '')
+        END AS firstName,
         pm.photoPath AS patientPhoto,
         caa.branchId,
         (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = caa.branchId) AS branchCode,
@@ -212,6 +218,7 @@ WITH OutsourcingLabs AS (
     INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
     INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
     INNER JOIN patient_master pm ON pm.id = pva.patientId
+    LEFT JOIN patient_guardian_associations pga ON pm.id = pga.patientId
     INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
     WHERE calba.status = 'PAID' AND calba.billTypeId = 1 AND ltmba.isOutSourced = 1
@@ -219,8 +226,14 @@ WITH OutsourcingLabs AS (
     UNION ALL
 
     SELECT 
-        CONCAT(pm.lastName, ' ', pm.firstName) AS patientName,
-        COALESCE(pm.firstName, '') AS firstName,
+        CASE 
+            WHEN talba.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, ''))
+            ELSE COALESCE(pga.name, '')
+        END AS patientName,
+        CASE 
+            WHEN talba.isSpouse = 0 THEN COALESCE(pm.firstName, '')
+            ELSE COALESCE(pga.name, '')
+        END AS firstName,
         pm.photoPath AS patientPhoto,
         taa.branchId,
         (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = taa.branchId) AS branchCode,
@@ -253,6 +266,7 @@ WITH OutsourcingLabs AS (
     INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
     INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
     INNER JOIN patient_master pm ON pm.id = pva.patientId
+    LEFT JOIN patient_guardian_associations pga ON pm.id = pga.patientId
     INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
     WHERE talba.status = 'PAID' AND talba.billTypeId = 1 AND ltmba.isOutSourced = 1
