@@ -2088,6 +2088,10 @@ class AppointmentsPaymentService extends BaseService {
         2. Calculate 35th hour time based on input and create a OT Record accordingly
         3.//update pickup time in packages table with OT procedure date
       */
+      if (treatmentType === 2 || treatmentType === 3) {
+        throw new createError.BadRequest("Invalid operation to be performed");
+      }
+
       if (isNaN(new Date(triggerTime).getTime())) {
         throw new createError.BadRequest("Invalid triggerTime format.");
       }

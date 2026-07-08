@@ -14,8 +14,8 @@ module.exports = {
   TRIGGER_START: {
     checks: {
       1: ["OITI_STARTED", "TRIGGER_NOT_STARTED"], //  OI TI
-      2: ["IUI_STARTED", "TRIGGER_NOT_STARTED"], // IUI Self
-      3: ["IUI_STARTED", "TRIGGER_NOT_STARTED"], //  IUI Donor
+      2: [], // IUI Self — trigger not applicable
+      3: [], // IUI Donor — trigger not applicable
       4: ["ICSI_CONSENTS_EXISTS", "ICSI_STARTED", "TRIGGER_NOT_STARTED"], // ICSI
       5: ["ICSI_CONSENTS_EXISTS", "ICSI_STARTED", "TRIGGER_NOT_STARTED"], // ICSI Self Oocyte + Donor Sperm
       6: ["ICSI_CONSENTS_EXISTS", "ICSI_STARTED", "TRIGGER_NOT_STARTED"], // ICSI Donor Oocyte + Self Sperm

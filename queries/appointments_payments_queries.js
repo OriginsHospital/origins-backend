@@ -431,7 +431,7 @@ SELECT JSON_OBJECT(
     END,
     'TRIGGER_START', 
     CASE 
-        WHEN :treatmentType IN (4, 5) THEN 
+        WHEN :treatmentType IN (1, 4, 5) THEN 
             CASE WHEN tt.triggerStartDate IS NULL THEN 0 ELSE 1 END
         WHEN :treatmentType IN (6,7) THEN 
         	CASE WHEN tt.triggerStartDate IS NULL THEN -1 ELSE 1 END
