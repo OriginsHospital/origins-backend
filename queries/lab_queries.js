@@ -178,13 +178,20 @@ ORDER BY appointmentDate DESC ;
 const getAllOutsourcingLabtestsQuery = `
 WITH OutsourcingLabs AS (
     SELECT 
+        calba.id AS lineBillId,
         CASE 
             WHEN calba.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, ''))
-            ELSE COALESCE(pga.name, '')
+            ELSE COALESCE(
+                (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+                ''
+            )
         END AS patientName,
         CASE 
             WHEN calba.isSpouse = 0 THEN COALESCE(pm.firstName, '')
-            ELSE COALESCE(pga.name, '')
+            ELSE COALESCE(
+                (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+                ''
+            )
         END AS firstName,
         pm.photoPath AS patientPhoto,
         caa.branchId,
@@ -218,7 +225,6 @@ WITH OutsourcingLabs AS (
     INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
     INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
     INNER JOIN patient_master pm ON pm.id = pva.patientId
-    LEFT JOIN patient_guardian_associations pga ON pm.id = pga.patientId
     INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
     WHERE calba.status = 'PAID' AND calba.billTypeId = 1 AND ltmba.isOutSourced = 1
@@ -226,13 +232,20 @@ WITH OutsourcingLabs AS (
     UNION ALL
 
     SELECT 
+        talba.id AS lineBillId,
         CASE 
             WHEN talba.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, ''))
-            ELSE COALESCE(pga.name, '')
+            ELSE COALESCE(
+                (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+                ''
+            )
         END AS patientName,
         CASE 
             WHEN talba.isSpouse = 0 THEN COALESCE(pm.firstName, '')
-            ELSE COALESCE(pga.name, '')
+            ELSE COALESCE(
+                (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+                ''
+            )
         END AS firstName,
         pm.photoPath AS patientPhoto,
         taa.branchId,
@@ -266,7 +279,6 @@ WITH OutsourcingLabs AS (
     INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
     INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
     INNER JOIN patient_master pm ON pm.id = pva.patientId
-    LEFT JOIN patient_guardian_associations pga ON pm.id = pga.patientId
     INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
     WHERE talba.status = 'PAID' AND talba.billTypeId = 1 AND ltmba.isOutSourced = 1
