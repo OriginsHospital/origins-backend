@@ -70,6 +70,7 @@ const {
   checkIsFirstAppointmentInVisit,
   getAllActiveVisitAppointmentsQuery,
   eraNotStartedCheckQuery,
+  eraStartedCheckQuery,
   eraConsentsExistsQuery
 } = require("../queries/appointments_payments_queries");
 const visitConsultationsAssociations = require("../models/Associations/visitConsultationsAssociations");
@@ -1918,6 +1919,24 @@ class AppointmentsPaymentService extends BaseService {
       if (!lodash.isEmpty(data) && data[0].statusCheck == 0) {
         throw new createError.BadRequest(Constants.ERA_ALREADY_STARTED);
       }
+    } else if (validationType == "ERA_STARTED") {
+      const data = await this.mysqlConnection
+        .query(eraStartedCheckQuery, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            id: visitId
+          }
+        })
+        .catch(err => {
+          console.log("Error while getting the era started check status", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      if (lodash.isEmpty(data) || !data[0].statusCheck) {
+        throw new createError.BadRequest("ERA has not been started yet.");
+      }
     }
   }
 
@@ -2730,15 +2749,18 @@ class AppointmentsPaymentService extends BaseService {
       if ([1, 2, 3].includes(treatmentType)) {
         throw new createError.BadRequest(Constants.ERA_CANNOT_BE_STARTED);
       }
-      if (isNaN(new Date(eraStartTime).getTime())) {
-        throw new createError.BadRequest("Invalid eraStartTime format.");
-      }
 
-      const eraStartTimestamp = moment(eraStartTime).tz("Asia/Kolkata");
-      const eraStartDateFormatted = eraStartTimestamp.format(
-        "YYYY-MM-DD HH:mm:ss"
-      );
-      const eraDateFormatted = eraStartTimestamp.format("YYYY-MM-DD");
+      const tz = "Asia/Kolkata";
+      const today = moment().tz(tz);
+      const todayDateFormatted = today.format("YYYY-MM-DD");
+      let eraStartDateFormatted = null;
+      let eraDateFormatted = todayDateFormatted;
+
+      if (eraStartTime && !isNaN(new Date(eraStartTime).getTime())) {
+        const eraStartTimestamp = moment(eraStartTime).tz(tz);
+        eraStartDateFormatted = eraStartTimestamp.format("YYYY-MM-DD HH:mm:ss");
+        eraDateFormatted = eraStartTimestamp.format("YYYY-MM-DD");
+      }
 
       // Check if a record exists in TriggerTimeStampsMaster for the given visitId
       const existingEraRecord = await TriggerTimeStampsMaster.findOne({
@@ -2806,6 +2828,133 @@ class AppointmentsPaymentService extends BaseService {
 
       this._request.params.startDate = eraDateFormatted;
       return await this.getEraSheetsService(visitId);
+    } else if (updateType == "UPDATE_ERA_START_TIME") {
+      if (isNaN(new Date(eraStartTime).getTime())) {
+        throw new createError.BadRequest("Invalid eraStartTime format.");
+      }
+
+      const eraStartTimestamp = moment(eraStartTime).tz("Asia/Kolkata");
+      const eraStartDateFormatted = eraStartTimestamp.format(
+        "YYYY-MM-DD HH:mm:ss"
+      );
+      const eraDateFormatted = eraStartTimestamp.format("YYYY-MM-DD");
+
+      const existingEraRecord = await TriggerTimeStampsMaster.findOne({
+        where: {
+          visitId: visitId,
+          treatmentType
+        },
+        transaction: transaction
+      });
+
+      if (existingEraRecord) {
+        await TriggerTimeStampsMaster.update(
+          {
+            eraStartDate: eraStartDateFormatted,
+            eraStartedBy: this._request?.userDetails?.id
+          },
+          {
+            where: {
+              visitId: visitId,
+              treatmentType
+            },
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while updating era start time", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      } else {
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId: visitId,
+            treatmentType,
+            eraStartDate: eraStartDateFormatted,
+            eraStartedBy: this._request?.userDetails?.id
+          },
+          {
+            transaction: transaction
+          }
+        ).catch(err => {
+          console.log("Error while creating era timestamp record", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+
+      await VisitPackagesAssociation.update(
+        {
+          eraDate: eraDateFormatted
+        },
+        {
+          where: {
+            visitId: visitId
+          },
+          transaction: transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating era date in visit packages", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      const dateRange = await this.generateDateRange(eraDateFormatted, 15);
+      const treatmentCycleInfo = await VisitTreatmentsAssociations.findOne({
+        where: {
+          visitId: visitId
+        },
+        attributes: ["id"],
+        transaction: transaction
+      }).catch(err => {
+        console.log("Error while fetching treatment cycle id", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (!lodash.isEmpty(treatmentCycleInfo)) {
+        const existingSheet = await TreatmentEraSheetAssociations.findOne({
+          where: {
+            treatmentCycleId: treatmentCycleInfo.id
+          },
+          transaction: transaction
+        }).catch(err => {
+          console.log("Error while fetching era sheet", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+        if (!lodash.isEmpty(existingSheet)) {
+          const template = JSON.parse(existingSheet.template || "{}");
+          template.columns = dateRange;
+          await TreatmentEraSheetAssociations.update(
+            {
+              template: JSON.stringify(template)
+            },
+            {
+              where: {
+                treatmentCycleId: treatmentCycleInfo.id
+              },
+              transaction: transaction
+            }
+          ).catch(err => {
+            console.log("Error while updating era sheet columns", err);
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+        }
+      }
+
+      return {
+        date: dateRange,
+        eraStartDate: eraStartDateFormatted
+      };
     } else if (
       updateType == "END_ICSI" ||
       updateType == "END_IUI" ||

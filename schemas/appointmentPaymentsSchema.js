@@ -245,6 +245,7 @@ const updateTreatmentStatusSchema = Joi.object({
       "START_HYSTEROSCOPY",
       "FET_START",
       "ERA_START",
+      "UPDATE_ERA_START_TIME",
       "END_ICSI",
       "END_IUI",
       "END_OITI",
@@ -267,11 +268,17 @@ const updateTreatmentStatusSchema = Joi.object({
     otherwise: Joi.forbidden()
   }),
   eraStartTime: Joi.when("stage", {
-    is: "ERA_START",
+    is: "UPDATE_ERA_START_TIME",
     then: Joi.date()
       .iso()
       .required(),
-    otherwise: Joi.forbidden()
+    otherwise: Joi.when("stage", {
+      is: "ERA_START",
+      then: Joi.date()
+        .iso()
+        .optional(),
+      otherwise: Joi.forbidden()
+    })
   }),
   endedReason: Joi.when("stage", {
     is: Joi.valid("END_ICSI", "END_IUI", "END_OITI"),

@@ -480,12 +480,13 @@ SELECT JSON_OBJECT(
     CASE 
         WHEN :treatmentType IN (4, 5, 6, 7) THEN 
             CASE 
-                WHEN tt.eraStartDate IS NULL AND tt.fetStartDate IS NULL THEN 0
-                WHEN tt.eraStartDate IS NOT NULL THEN 1
+                WHEN vpa.eraDate IS NULL AND tt.eraStartDate IS NULL AND tt.fetStartDate IS NULL THEN 0
                 WHEN tt.fetStartDate IS NOT NULL THEN -1
+                ELSE 1
             END
         ELSE -1
     END,
+    'eraStartDate', tt.eraStartDate,
     'END_ERA',
     CASE 
         WHEN :treatmentType IN (4, 5, 6, 7) THEN 
@@ -768,6 +769,16 @@ const eraNotStartedCheckQuery = `
 SELECT (
 	CASE 
 		WHEN vpa.eraDate IS NULL THEN TRUE
+		ELSE FALSE
+	END
+) as statusCheck 
+from visit_packages_associations vpa where vpa.visitId = :id
+`;
+
+const eraStartedCheckQuery = `
+SELECT (
+	CASE 
+		WHEN vpa.eraDate IS NOT NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 
@@ -1559,6 +1570,7 @@ module.exports = {
   fetNotStartedCheckQuery,
   fetConsentsExistsQuery,
   eraNotStartedCheckQuery,
+  eraStartedCheckQuery,
   eraConsentsExistsQuery,
   appointmentChargesQuery,
   fetStartedCheckQuery,

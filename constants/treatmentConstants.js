@@ -31,6 +31,10 @@ module.exports = {
     checks: ["ICSI_NOT_STARTED", "ERA_NOT_STARTED"],
     updates: "START_ERA"
   },
+  UPDATE_ERA_START_TIME: {
+    checks: ["ERA_STARTED"],
+    updates: "UPDATE_ERA_START_TIME"
+  },
   END_ICSI: {
     checks: ["ICSI_CONSENTS_EXISTS", "ICSI_STARTED"],
     updates: "END_ICSI"
