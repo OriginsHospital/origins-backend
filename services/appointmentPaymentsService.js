@@ -2048,13 +2048,31 @@ class AppointmentsPaymentService extends BaseService {
         3. Generate the Follicular Sheet and Return it
       */
 
+      const tz = "Asia/Kolkata";
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = treatmentStartMoment
+        .clone()
+        .startOf("day")
+        .isSame(
+          moment()
+            .tz(tz)
+            .startOf("day")
+        )
+        ? moment()
+            .tz(tz)
+            .format("YYYY-MM-DD HH:mm:ss")
+        : treatmentStartMoment.format("YYYY-MM-DD HH:mm:ss");
+
       await TriggerTimeStampsMaster.create(
         {
           visitId: visitId,
           treatmentType,
-          startDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
+          startDate: treatmentStartTimestamp,
           startedBy: this._request?.userDetails?.id
         },
         {
@@ -2067,9 +2085,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      this._request.params.startDate = moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD");
+      this._request.params.startDate = treatmentStartDateFormatted;
       return await this.getTreatmentSheetsService(visitId);
     } else if (updateType == "START_OITI") {
       /*
@@ -2078,13 +2094,31 @@ class AppointmentsPaymentService extends BaseService {
         3. Generate the Follicular Sheet and Return it
       */
 
+      const tz = "Asia/Kolkata";
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = treatmentStartMoment
+        .clone()
+        .startOf("day")
+        .isSame(
+          moment()
+            .tz(tz)
+            .startOf("day")
+        )
+        ? moment()
+            .tz(tz)
+            .format("YYYY-MM-DD HH:mm:ss")
+        : treatmentStartMoment.format("YYYY-MM-DD HH:mm:ss");
+
       await TriggerTimeStampsMaster.create(
         {
           visitId: visitId,
           treatmentType,
-          startDate: moment()
-            .tz("Asia/Kolkata")
-            .format("YYYY-MM-DD HH:mm:ss"),
+          startDate: treatmentStartTimestamp,
           startedBy: this._request?.userDetails?.id
         },
         {
@@ -2097,9 +2131,7 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      this._request.params.startDate = moment()
-        .tz("Asia/Kolkata")
-        .format("YYYY-MM-DD");
+      this._request.params.startDate = treatmentStartDateFormatted;
       return await this.getTreatmentSheetsService(visitId);
     } else if (updateType == "START_TRIGGER") {
       /*
@@ -2498,6 +2530,21 @@ class AppointmentsPaymentService extends BaseService {
         throw new createError.BadRequest("Invalid HysteroscopyTime format.");
       }
 
+      const tz = "Asia/Kolkata";
+      const hysteroscopyMoment = moment(hysteroscopyTime).tz(tz);
+      const selectedStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate || hysteroscopyMoment.format("YYYY-MM-DD")
+      );
+
+      if (
+        hysteroscopyMoment.format("YYYY-MM-DD") !==
+        selectedStartMoment.format("YYYY-MM-DD")
+      ) {
+        throw new createError.BadRequest(
+          "Hysteroscopy time must match the treatment start date."
+        );
+      }
+
       const patientData = await this.mysqlConnection
         .query(
           getPatientFromVisitId,
@@ -2548,9 +2595,9 @@ class AppointmentsPaymentService extends BaseService {
         branch => branch.id
       );
 
-      const currentTimestamp = new Date(hysteroscopyTime);
-      const procedureDate = currentTimestamp.toISOString().split("T")[0]; // 'YYYY-MM-DD'
-      const procedureTime = currentTimestamp.toTimeString().slice(0, 5); // 'HH:mm'
+      const currentTimestamp = hysteroscopyMoment.toDate();
+      const procedureDate = hysteroscopyMoment.format("YYYY-MM-DD");
+      const procedureTime = hysteroscopyMoment.format("HH:mm");
 
       await TriggerTimeStampsMaster.update(
         {
@@ -2751,15 +2798,34 @@ class AppointmentsPaymentService extends BaseService {
       }
 
       const tz = "Asia/Kolkata";
-      const today = moment().tz(tz);
-      const todayDateFormatted = today.format("YYYY-MM-DD");
-      let eraStartDateFormatted = null;
-      let eraDateFormatted = todayDateFormatted;
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const eraDateFormatted = treatmentStartMoment.format("YYYY-MM-DD");
+      let eraStartDateFormatted = treatmentStartMoment
+        .clone()
+        .startOf("day")
+        .isSame(
+          moment()
+            .tz(tz)
+            .startOf("day")
+        )
+        ? moment()
+            .tz(tz)
+            .format("YYYY-MM-DD HH:mm:ss")
+        : treatmentStartMoment.format("YYYY-MM-DD HH:mm:ss");
 
-      if (eraStartTime && !isNaN(new Date(eraStartTime).getTime())) {
+      if (eraStartTime) {
+        if (isNaN(new Date(eraStartTime).getTime())) {
+          throw new createError.BadRequest("Invalid eraStartTime format.");
+        }
         const eraStartTimestamp = moment(eraStartTime).tz(tz);
+        if (eraStartTimestamp.format("YYYY-MM-DD") !== eraDateFormatted) {
+          throw new createError.BadRequest(
+            "ERA start time must match the treatment start date."
+          );
+        }
         eraStartDateFormatted = eraStartTimestamp.format("YYYY-MM-DD HH:mm:ss");
-        eraDateFormatted = eraStartTimestamp.format("YYYY-MM-DD");
       }
 
       // Check if a record exists in TriggerTimeStampsMaster for the given visitId

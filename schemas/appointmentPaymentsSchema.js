@@ -291,7 +291,14 @@ const updateTreatmentStatusSchema = Joi.object({
     otherwise: Joi.forbidden()
   }),
   treatmentStartDate: Joi.when("stage", {
-    is: Joi.valid("ICSI_START", "FET_START"),
+    is: Joi.valid(
+      "ICSI_START",
+      "START_IUI",
+      "START_OITI",
+      "START_HYSTEROSCOPY",
+      "FET_START",
+      "ERA_START"
+    ),
     then: Joi.string()
       .pattern(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
