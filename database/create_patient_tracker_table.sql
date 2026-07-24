@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS patient_tracker (
     paidAmount DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Total amount paid',
     -- Note: pendingAmount can be calculated as (packageAmount - paidAmount), but we can store it for quick access
     pendingAmount DECIMAL(10, 2) GENERATED ALWAYS AS (packageAmount - paidAmount) STORED COMMENT 'Pending amount (auto-calculated)',
+
+    -- Clinical procedure dates (Summary Automated)
+    icsiD1 DATE NULL COMMENT 'ICSI Day 1 date',
+    opu DATE NULL COMMENT 'OPU date',
+    fetD1 DATE NULL COMMENT 'FET Day 1 date',
+    fet DATE NULL COMMENT 'FET date',
     
     -- Embryology Details
     numberOfEmbryos INT DEFAULT 0 COMMENT 'Total number of embryos',

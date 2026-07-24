@@ -162,20 +162,24 @@ WHERE id = 1;
 
 ## Notes
 
-1. **Calculated Fields**:
+1. **Summary Automated entry/edit flow**: Selecting a patient on Summary Automated calls `GET /patient-tracker/by-patient/:patientId`. Existing record → **Edit**; none → **Data Entry**. Saved values overlay the grid for ICSI/OPU/FET/UPT/embryology fields.
+
+2. **Calculated Fields**:
 
    - `pendingAmount` = `packageAmount - paidAmount`
    - `embryosRemaining` = `numberOfEmbryos - numberOfEmbryosUsed`
 
    In the simplified version, these need to be calculated in the application code. In the version with generated columns, they are auto-calculated by MySQL.
 
-2. **Data Validation**:
+3. **Clinical date columns** (ICSI-D1, OPU, FET-D1, FET): run `alter_patient_tracker_add_clinical_fields.sql` on existing DBs.
+
+4. **Data Validation**:
 
    - `treatmentType` must be one of: 'IVF', 'OI-TI', 'IUI'
    - `cycleStatus` must be one of: 'Not Started', 'Registered', 'Running', 'Complete', 'Cancelled'
    - `uptResult` must be one of: 'Positive', 'Negative', 'Others'
 
-3. **Referential Integrity**:
+5. **Referential Integrity**:
    - Ensure `branchId` exists in `branch_master` before inserting
    - Ensure `referralSourceId` exists in `referral_type_master` (if provided)
    - Ensure `createdBy` and `updatedBy` exist in `users` table (if provided)
