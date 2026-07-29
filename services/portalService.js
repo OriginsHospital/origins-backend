@@ -354,10 +354,67 @@ class PortalService {
 
     const profile = profileRows?.[0] || null;
     const activeVisits = (visits || []).filter(v => v.isActive);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const isToday = value => {
+      if (!value) return false;
+      const s = String(value).slice(0, 10);
+      return s === todayStr;
+    };
+
+    const injectionKeywords = [
+      "inject",
+      "injection",
+      "inj",
+      "hcg",
+      "fsh",
+      "gonal",
+      "menopur",
+      "ovidrel",
+      "lupron",
+      "cetrotide",
+      "orgalutran",
+      "progesterone oil",
+      "gonadotropin"
+    ];
+
+    const isInjection = med => {
+      const hay = `${med.medicineName || ""} ${med.prescriptionDetails ||
+        ""}`.toLowerCase();
+      return injectionKeywords.some(k => hay.includes(k));
+    };
+
+    const todayMedicines = (medicines || []).filter(
+      m => isToday(m.appointmentDate) || isToday(m.visitDate)
+    );
+    // If nothing dated today, surface latest active prescriptions as "today's plan"
+    const todaysPlan =
+      todayMedicines.length > 0
+        ? todayMedicines
+        : (medicines || []).slice(0, 5);
+    const todayAppointments = (treatments || []).filter(t =>
+      isToday(t.appointmentDate)
+    );
     const upcoming = (treatments || []).filter(t => {
       if (!t.appointmentDate) return false;
       return new Date(t.appointmentDate) >= new Date(new Date().toDateString());
     });
+    const todayInjections = todaysPlan.filter(isInjection);
+    const doctorMessage = activeVisits[0]
+      ? {
+          title: "Care team update",
+          body: `Your ${activeVisits[0].packageName ||
+            activeVisits[0].visitType ||
+            "treatment"} cycle is ongoing. Please follow today's medicines and appointment schedule. Contact the clinic if you have concerns.`,
+          from: "Origins Care Team",
+          date: todayStr
+        }
+      : {
+          title: "Welcome to Origins",
+          body:
+            "Your care journey starts here. Check today's medicines, appointments, and reports. Reach out anytime for emergency support.",
+          from: "Origins Care Team",
+          date: todayStr
+        };
 
     return {
       profile,
@@ -366,12 +423,29 @@ class PortalService {
         totalVisits: (visits || []).length,
         prescribedMedicines: (medicines || []).length,
         labReports: (reports || []).length,
-        upcomingAppointments: upcoming.length
+        upcomingAppointments: upcoming.length,
+        todayMedicines: todaysPlan.length,
+        todayAppointments: todayAppointments.length,
+        todayInjections: todayInjections.length,
+        recentReports: (reports || []).slice(0, 3).length
       },
       activeTreatment: activeVisits[0] || null,
       recentMedicines: (medicines || []).slice(0, 8),
       recentReports: (reports || []).slice(0, 8),
-      upcomingAppointments: upcoming.slice(0, 8)
+      upcomingAppointments: upcoming.slice(0, 8),
+      today: {
+        medicines: todaysPlan.slice(0, 8),
+        appointments:
+          todayAppointments.length > 0
+            ? todayAppointments.slice(0, 5)
+            : upcoming.slice(0, 3),
+        injections: todayInjections.slice(0, 8),
+        doctorMessage,
+        emergency: {
+          phone: process.env.PORTAL_EMERGENCY_PHONE || "18001234567",
+          label: "Origins Emergency Helpline"
+        }
+      }
     };
   }
 
