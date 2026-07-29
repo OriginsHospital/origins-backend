@@ -40,6 +40,7 @@ const InboxRoute = require("./inbox_route.js");
 const NotificationsRoute = require("./notifications_route.js");
 const PaymentsRoute = require("./payments_route.js");
 const PatientTrackerRoute = require("./patient_tracker_route.js");
+const PortalRoute = require("./portal_route.js");
 
 class IndexRoute {
   constructor(expressApplication) {
@@ -49,6 +50,7 @@ class IndexRoute {
   async intializeRoutes() {
     this._app.use("/api", new ApiRoute()._route);
     this._app.use("/auth", new AuthRoute()._route);
+    this._app.use("/portal", new PortalRoute()._route);
     this._app.use("/roles", new ManageRolesRoute()._route);
     this._app.use("/branches", new ManageBranchesRoute()._route);
     this._app.use("/modules", new ManageModulesRoute()._route);
