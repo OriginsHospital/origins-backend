@@ -34,6 +34,8 @@ class App {
           "https://localhost:3001",
           "http://localhost:3000",
           "https://localhost:3000",
+          "http://localhost:3002",
+          "https://localhost:3002",
           "http://13.234.149.138:42000",
           "https://hms-app-alpha.vercel.app",
           "https://www.originshms.com"
