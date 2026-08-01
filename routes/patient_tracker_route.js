@@ -22,6 +22,13 @@ class PatientTrackerRoute {
     );
 
     this._route.get(
+      "/summary-automated",
+      checkActiveSession,
+      tokenVerified,
+      this.getSummaryAutomatedRoute
+    );
+
+    this._route.get(
       "/by-patient/:patientId",
       checkActiveSession,
       tokenVerified,
@@ -46,6 +53,11 @@ class PatientTrackerRoute {
   getAllPatientTrackerRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientTrackerController(req, res, next);
     await controllerObj.getAllPatientTrackerHandler();
+  });
+
+  getSummaryAutomatedRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientTrackerController(req, res, next);
+    await controllerObj.getSummaryAutomatedHandler();
   });
 
   getByPatientIdRoute = asyncHandler(async (req, res, next) => {

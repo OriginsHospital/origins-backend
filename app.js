@@ -9,6 +9,7 @@ const RedisConnection = require("./connections/redis_connection");
 const RedisStore = require("connect-redis").default;
 const { v4: uuid4 } = require("uuid");
 const cookieParser = require("cookie-parser");
+const http = require("http");
 const https = require("https");
 const path = require("path");
 const fs = require("fs");
@@ -36,6 +37,10 @@ class App {
           "https://localhost:3000",
           "http://localhost:3002",
           "https://localhost:3002",
+          "http://localhost",
+          "https://localhost",
+          "capacitor://localhost",
+          "ionic://localhost",
           "http://13.234.149.138:42000",
           "https://hms-app-alpha.vercel.app",
           "https://www.originshms.com"
@@ -115,8 +120,22 @@ class App {
       if (err) {
         throw new Error("Application Could not Start", err);
       }
-      console.log(`Application Running on Port ${process.env.PORT}`);
+      console.log(`Application Running on HTTPS Port ${process.env.PORT}`);
     });
+
+    // Cleartext HTTP for mobile APK / LAN devices (self-signed HTTPS cert is expired
+    // and Android rejects it). Default 3003 so it does not collide with HTTPS 3000.
+    const httpPort = Number(process.env.HTTP_PORT || 3003);
+    if (httpPort && httpPort !== Number(process.env.PORT)) {
+      http.createServer(this.app).listen(httpPort, "0.0.0.0", err => {
+        if (err) {
+          throw new Error("HTTP listener could not start", err);
+        }
+        console.log(
+          `Application Running on HTTP Port ${httpPort} (mobile/LAN)`
+        );
+      });
+    }
   }
 }
 

@@ -22,6 +22,15 @@ class PatientTrackerController {
     });
   }
 
+  async getSummaryAutomatedHandler() {
+    const data = await this._service.getSummaryAutomatedService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data
+    });
+  }
+
   async getByPatientIdHandler() {
     const data = await this._service.getByPatientIdService();
     this._response.status(200).send({

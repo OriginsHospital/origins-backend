@@ -1,12 +1,55 @@
 const Constants = require("../constants/constants");
 const createError = require("http-errors");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 const lodash = require("lodash");
+const MySqlConnection = require("../connections/mysql_connection");
 const PatientTrackerModel = require("../models/Master/patientTrackerMaster");
 const {
   createPatientTrackerSchema,
   editPatientTrackerSchema
 } = require("../schemas/patientTrackerSchema");
+const {
+  getPatientTrackerSummaryAutomatedQuery
+} = require("../queries/patient_tracker_queries");
+
+const BRANCH_CODE_TO_ID = {
+  HYD: 1,
+  HNK: 2,
+  SPL: 3,
+  KMM: 4
+};
+
+const resolveBranchId = value => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "ALL"
+  ) {
+    return null;
+  }
+  const asNumber = Number(value);
+  if (!Number.isNaN(asNumber) && asNumber > 0) {
+    return asNumber;
+  }
+  const code = String(value)
+    .trim()
+    .toUpperCase();
+  return BRANCH_CODE_TO_ID[code] || null;
+};
+
+const parseJsonField = value => {
+  if (value == null) return value;
+  if (typeof value === "object") return value;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return value;
+    }
+  }
+  return value;
+};
 
 const normalizeTreatmentType = value => {
   if (!value) return value;
@@ -87,6 +130,73 @@ class PatientTrackerService {
     this._request = request;
     this._response = response;
     this._next = next;
+    this.mysqlConnection = MySqlConnection._instance;
+  }
+
+  /**
+   * Fast Summary Automated feed: date-filtered patients + package amounts
+   * in a single SQL round-trip (no per-patient visit/package fan-out).
+   */
+  async getSummaryAutomatedService() {
+    const { fromDate, toDate, branchId, branch } = this._request.query || {};
+
+    if (!fromDate || !toDate) {
+      throw new createError.BadRequest("fromDate and toDate are required");
+    }
+
+    const resolvedBranchId = resolveBranchId(branchId ?? branch);
+    const branchFilter = resolvedBranchId ? "AND pm.branchId = :branchId" : "";
+
+    const query = getPatientTrackerSummaryAutomatedQuery.replace(
+      "{branchFilter}",
+      branchFilter
+    );
+
+    const replacements = {
+      fromDate,
+      toDate
+    };
+    if (resolvedBranchId) {
+      replacements.branchId = resolvedBranchId;
+    }
+
+    const rows = await this.mysqlConnection
+      .query(query, {
+        replacements,
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log(
+          "Error while fetching patient tracker summary automated",
+          err
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return (rows || []).map(row => {
+      const doctorSuggestedPackage = Number(row.doctorSuggestedPackage) || 0;
+      const marketingPackage = Number(row.marketingPackage) || 0;
+      const registrationAmount = Number(row.registrationAmount) || 0;
+      const paidAmount = Number(row.paidAmount) || 0;
+      const pendingAmount =
+        row.pendingAmount != null
+          ? Number(row.pendingAmount) || 0
+          : Math.max(0, marketingPackage - paidAmount);
+
+      return {
+        ...row,
+        referralSource: parseJsonField(row.referralSource),
+        activeVisitId: row.activeVisitId || null,
+        doctorSuggestedPackage,
+        doctorsPackage: doctorSuggestedPackage,
+        marketingPackage,
+        registrationAmount,
+        paidAmount,
+        pendingAmount
+      };
+    });
   }
 
   async getAllPatientTrackerService() {
