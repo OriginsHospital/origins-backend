@@ -314,9 +314,16 @@ class PatientTrackerService {
     if (body.treatmentType) {
       body.treatmentType = normalizeTreatmentType(body.treatmentType);
     }
+    // Coerce types that often arrive wrong from the UI
+    if (body.mobileNumber != null && body.mobileNumber !== "") {
+      body.mobileNumber = String(body.mobileNumber).slice(0, 15);
+    }
+    if (body.branchId != null && body.branchId !== "") {
+      body.branchId = Number(body.branchId);
+    }
 
     const validated = await upsertEmbryologyUptSchema.validateAsync(body);
-    const userId = this._request?.userDetails?.id;
+    const userId = this._request?.userDetails?.id || null;
 
     const numberOfEmbryos = toNumberOrZero(validated.numberOfEmbryos);
     const numberOfEmbryosUsed = toNumberOrZero(validated.numberOfEmbryosUsed);
@@ -327,7 +334,7 @@ class PatientTrackerService {
       validated.embryosRemaining !== undefined &&
       validated.embryosRemaining !== null
         ? toNumberOrZero(validated.embryosRemaining)
-        : numberOfEmbryos - numberOfEmbryosUsed;
+        : Math.max(0, numberOfEmbryos - numberOfEmbryosUsed);
 
     const embryologyFields = {
       numberOfEmbryos,
@@ -336,28 +343,40 @@ class PatientTrackerService {
       embryosRemaining,
       lastRenewalDate: toNullableDate(validated.lastRenewalDate),
       uptResult: validated.uptResult || null,
-      uptManualEntry: validated.uptManualEntry || null,
-      updatedBy: userId || null
+      uptManualEntry:
+        validated.uptResult === "Others"
+          ? validated.uptManualEntry || null
+          : null,
+      updatedBy: userId
     };
 
-    const existing = await PatientTrackerModel.findOne({
-      where: { patientId: validated.patientId },
-      order: [["updatedAt", "DESC"], ["id", "DESC"]]
-    }).catch(err => {
+    let existing = null;
+    try {
+      existing = await PatientTrackerModel.findOne({
+        where: { patientId: validated.patientId },
+        order: [["updatedAt", "DESC"], ["id", "DESC"]]
+      });
+    } catch (err) {
       console.log("Error while finding tracker for embryology upsert", err);
       throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
+        err?.original?.message ||
+          err?.message ||
+          Constants.SOMETHING_ERROR_OCCURRED
       );
-    });
+    }
 
-    if (!lodash.isEmpty(existing)) {
-      await existing.update(embryologyFields).catch(err => {
+    if (existing) {
+      try {
+        await existing.update(embryologyFields);
+        return existing;
+      } catch (err) {
         console.log("Error while updating embryology/UPT fields", err);
         throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
+          err?.original?.message ||
+            err?.message ||
+            Constants.SOMETHING_ERROR_OCCURRED
         );
-      });
-      return existing;
+      }
     }
 
     if (!validated.patientName || !validated.branchId) {
@@ -370,38 +389,69 @@ class PatientTrackerService {
       normalizeTreatmentType(validated.treatmentType) || "IVF";
     const cycleStatus = validated.cycleStatus || "Running";
 
-    const createPayload = buildPayload(
-      {
-        date: validated.date || new Date(),
-        branchId: validated.branchId,
-        patientId: validated.patientId,
-        patientName: validated.patientName,
-        mobileNumber: validated.mobileNumber || null,
-        plan: validated.plan || null,
-        treatmentType,
-        cycleStatus,
-        numberOfEmbryos,
-        numberOfEmbryosUsed,
-        numberOfEmbryosDiscarded,
-        embryosRemaining,
-        lastRenewalDate: validated.lastRenewalDate,
-        uptResult: validated.uptResult,
-        uptManualEntry: validated.uptManualEntry
-      },
-      userId,
-      true
-    );
+    // Lean create payload — avoid clinical columns that may not exist on older DBs
+    const createPayload = {
+      date: toNullableDate(validated.date) || new Date(),
+      branchId: Number(validated.branchId),
+      patientId: validated.patientId,
+      patientName: String(validated.patientName).slice(0, 255),
+      mobileNumber: validated.mobileNumber
+        ? String(validated.mobileNumber).slice(0, 15)
+        : null,
+      plan: validated.plan ? String(validated.plan).slice(0, 255) : null,
+      treatmentType,
+      cycleStatus,
+      numberOfEmbryos,
+      numberOfEmbryosUsed,
+      numberOfEmbryosDiscarded,
+      embryosRemaining,
+      lastRenewalDate: toNullableDate(validated.lastRenewalDate),
+      uptResult: validated.uptResult || null,
+      uptManualEntry:
+        validated.uptResult === "Others"
+          ? validated.uptManualEntry || null
+          : null,
+      packageAmount: 0,
+      registrationAmount: 0,
+      paidAmount: 0,
+      pendingAmount: 0,
+      createdBy: userId,
+      updatedBy: userId
+    };
 
-    const created = await PatientTrackerModel.create(createPayload).catch(
-      err => {
-        console.log("Error while creating tracker from embryology entry", err);
+    try {
+      const fields = Object.keys(createPayload);
+      const created = await PatientTrackerModel.create(createPayload, {
+        fields
+      });
+      return created;
+    } catch (err) {
+      console.log("Error while creating tracker from embryology entry", {
+        message: err?.message,
+        original: err?.original?.message,
+        sql: err?.sql,
+        payload: createPayload
+      });
+      const dbMessage = err?.original?.message || err?.message || "";
+      if (/Unknown column/i.test(dbMessage)) {
         throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
+          "Patient tracker table is missing columns. Please run patient_tracker migrations."
         );
       }
-    );
-
-    return created;
+      if (/foreign key|Cannot add or update/i.test(dbMessage)) {
+        throw new createError.BadRequest(
+          "Invalid branch or user reference. Please reselect the patient and try again."
+        );
+      }
+      if (/doesn't exist|ER_NO_SUCH_TABLE/i.test(dbMessage)) {
+        throw new createError.InternalServerError(
+          "patient_tracker table does not exist. Please run create_patient_tracker_table_simple.sql"
+        );
+      }
+      throw new createError.InternalServerError(
+        dbMessage || Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
   }
 }
 

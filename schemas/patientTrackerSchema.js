@@ -126,8 +126,8 @@ const upsertEmbryologyUptSchema = Joi.object({
     .integer()
     .allow(null)
     .optional(),
-  mobileNumber: Joi.string()
-    .max(15)
+  mobileNumber: Joi.alternatives()
+    .try(Joi.string().max(15), Joi.number())
     .allow(null, "")
     .optional(),
   date: Joi.date()
@@ -165,7 +165,7 @@ const upsertEmbryologyUptSchema = Joi.object({
     .allow(null)
     .optional(),
   uptResult: Joi.string()
-    .valid(...uptResultValues)
+    .valid("Positive", "Negative", "Others")
     .allow(null, "")
     .optional(),
   uptManualEntry: Joi.string()
