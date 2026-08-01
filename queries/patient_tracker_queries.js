@@ -1,7 +1,8 @@
 /**
  * Lean Patient Tracker Summary Automated query.
  * Filters by registration date (and optional branch) server-side,
- * and joins package + paid amounts in one round-trip.
+ * joins package financials + maps clinical dates from package milestones,
+ * OT list, treatment timestamps, and patient_tracker overlays.
  */
 const getPatientTrackerSummaryAutomatedQuery = `
 SELECT
@@ -75,7 +76,16 @@ FROM (
             ),
             '-'
         ) AS stageOfCycle,
-        pkg.activeVisitId,
+        COALESCE(
+            pkg.activeVisitId,
+            (
+                SELECT pva.id
+                FROM patient_visits_association pva
+                WHERE pva.patientId = pm.id
+                ORDER BY CASE WHEN pva.isActive = 1 THEN 0 ELSE 1 END, pva.createdAt DESC
+                LIMIT 1
+            )
+        ) AS activeVisitId,
         pkg.packageVisitId,
         COALESCE(pkg.doctorSuggestedPackage, 0) AS doctorSuggestedPackage,
         COALESCE(pkg.marketingPackage, 0) AS marketingPackage,
@@ -86,7 +96,7 @@ FROM (
                 FROM (
                     SELECT COALESCE(SUM(tom.paidOrderAmountBeforeDiscount), 0) AS totalPaid
                     FROM treatment_orders_master tom
-                    WHERE tom.visitId = pkg.packageVisitId
+                    WHERE tom.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
                       AND tom.paymentStatus = 'PAID'
                     UNION ALL
                     SELECT COALESCE(SUM(opom.paidOrderAmountBeforeDiscount), 0) AS totalPaid
@@ -98,7 +108,92 @@ FROM (
                 ) paid
             ),
             0
-        ) AS paidAmount
+        ) AS paidAmount,
+
+        /* ICSI-D1: package day1Date (ICSI types) → treatment_timestamps.startDate → tracker */
+        COALESCE(
+            NULLIF(DATE_FORMAT(pkg.day1Date, '%Y-%m-%d'), ''),
+            (
+                SELECT DATE_FORMAT(tt.startDate, '%Y-%m-%d')
+                FROM treatment_timestamps tt
+                WHERE tt.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
+                  AND tt.startDate IS NOT NULL
+                ORDER BY tt.id DESC
+                LIMIT 1
+            ),
+            NULLIF(DATE_FORMAT(pt.icsiD1, '%Y-%m-%d'), '')
+        ) AS icsiD1,
+
+        /* OPU: package pickUpDate → OT PickUp/OPU → tracker */
+        COALESCE(
+            NULLIF(DATE_FORMAT(pkg.pickUpDate, '%Y-%m-%d'), ''),
+            (
+                SELECT DATE_FORMAT(olm.procedureDate, '%Y-%m-%d')
+                FROM ot_list_master olm
+                INNER JOIN visit_treatment_cycles_associations vtca
+                    ON vtca.id = olm.treatmentCycleId
+                INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+                WHERE pva.patientId = pm.id
+                  AND (
+                    LOWER(REPLACE(olm.procedureName, ' ', '')) LIKE '%pickup%'
+                    OR LOWER(REPLACE(olm.procedureName, ' ', '')) LIKE '%opu%'
+                  )
+                ORDER BY olm.procedureDate DESC, olm.id DESC
+                LIMIT 1
+            ),
+            NULLIF(DATE_FORMAT(pt.opu, '%Y-%m-%d'), '')
+        ) AS opu,
+
+        /* FET-D1: package fetDate → treatment_timestamps.fetStartDate → tracker */
+        COALESCE(
+            NULLIF(DATE_FORMAT(pkg.fetDate, '%Y-%m-%d'), ''),
+            (
+                SELECT DATE_FORMAT(tt.fetStartDate, '%Y-%m-%d')
+                FROM treatment_timestamps tt
+                WHERE tt.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
+                  AND tt.fetStartDate IS NOT NULL
+                ORDER BY tt.id DESC
+                LIMIT 1
+            ),
+            NULLIF(DATE_FORMAT(pt.fetD1, '%Y-%m-%d'), '')
+        ) AS fetD1,
+
+        /* FET: treatment_timestamps.fetEndedDate → tracker */
+        COALESCE(
+            (
+                SELECT DATE_FORMAT(tt.fetEndedDate, '%Y-%m-%d')
+                FROM treatment_timestamps tt
+                WHERE tt.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
+                  AND tt.fetEndedDate IS NOT NULL
+                ORDER BY tt.id DESC
+                LIMIT 1
+            ),
+            NULLIF(DATE_FORMAT(pt.fet, '%Y-%m-%d'), '')
+        ) AS fet,
+
+        /* UPT: tracker first, else Positive if uptPositiveDate exists */
+        COALESCE(
+            NULLIF(pt.uptResult, ''),
+            CASE
+                WHEN pkg.uptPositiveDate IS NOT NULL THEN 'Positive'
+                ELSE NULL
+            END
+        ) AS uptResult,
+        pt.uptManualEntry AS uptManualEntry,
+
+        COALESCE(pt.numberOfEmbryos, 0) AS numberOfEmbryos,
+        COALESCE(pt.numberOfEmbryosUsed, 0) AS numberOfEmbryosUsed,
+        COALESCE(pt.numberOfEmbryosDiscarded, 0) AS numberOfEmbryosDiscarded,
+        COALESCE(
+            pt.embryosRemaining,
+            GREATEST(
+                COALESCE(pt.numberOfEmbryos, 0) - COALESCE(pt.numberOfEmbryosUsed, 0),
+                0
+            )
+        ) AS embryosRemaining,
+        pt.lastRenewalDate AS lastRenewalDate,
+        pt.cycleStatus AS trackerCycleStatus,
+        pt.stageOfCycle AS trackerStageOfCycle
     FROM patient_master pm
     LEFT JOIN referral_type_master rtm ON rtm.id = pm.referralId
     LEFT JOIN (
@@ -108,7 +203,11 @@ FROM (
             ranked.packageVisitId,
             ranked.doctorSuggestedPackage,
             ranked.marketingPackage,
-            ranked.registrationAmount
+            ranked.registrationAmount,
+            ranked.day1Date,
+            ranked.pickUpDate,
+            ranked.fetDate,
+            ranked.uptPositiveDate
         FROM (
             SELECT
                 pva.patientId,
@@ -123,6 +222,10 @@ FROM (
                 vpa.doctorSuggestedPackage,
                 vpa.marketingPackage,
                 vpa.registrationAmount,
+                vpa.day1Date,
+                vpa.pickUpDate,
+                vpa.fetDate,
+                vpa.uptPositiveDate,
                 ROW_NUMBER() OVER (
                     PARTITION BY pva.patientId
                     ORDER BY
@@ -137,6 +240,15 @@ FROM (
         ) ranked
         WHERE ranked.rn = 1
     ) pkg ON pkg.patientId = pm.id
+    LEFT JOIN (
+        SELECT pt1.*
+        FROM patient_tracker pt1
+        INNER JOIN (
+            SELECT patientId, MAX(id) AS maxId
+            FROM patient_tracker
+            GROUP BY patientId
+        ) latest ON latest.maxId = pt1.id
+    ) pt ON pt.patientId COLLATE utf8mb4_unicode_ci = pm.patientId COLLATE utf8mb4_unicode_ci
     WHERE CAST(pm.createdAt AS DATE) BETWEEN :fromDate AND :toDate
       {branchFilter}
 ) base

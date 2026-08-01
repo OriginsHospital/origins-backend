@@ -186,6 +186,33 @@ class PatientTrackerService {
           ? Number(row.pendingAmount) || 0
           : Math.max(0, marketingPackage - paidAmount);
 
+      const formatDisplayDate = value => {
+        if (
+          value === undefined ||
+          value === null ||
+          value === "" ||
+          value === "-"
+        ) {
+          return "-";
+        }
+        // Already formatted DD-MM-YYYY
+        if (/^\d{2}-\d{2}-\d{4}$/.test(String(value))) return String(value);
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        return `${dd}-${mm}-${yyyy}`;
+      };
+
+      const icsiD1 = formatDisplayDate(row.icsiD1);
+      const opu = formatDisplayDate(row.opu);
+      const fetD1 = formatDisplayDate(row.fetD1);
+      const fet = formatDisplayDate(row.fet);
+      const lastRenewalDate = row.lastRenewalDate
+        ? formatDisplayDate(row.lastRenewalDate)
+        : null;
+
       return {
         ...row,
         referralSource: parseJsonField(row.referralSource),
@@ -195,7 +222,21 @@ class PatientTrackerService {
         marketingPackage,
         registrationAmount,
         paidAmount,
-        pendingAmount
+        pendingAmount,
+        icsiD1,
+        opu,
+        fetD1,
+        fet,
+        uptResult: row.uptResult || "-",
+        uptManualEntry: row.uptManualEntry || null,
+        numberOfEmbryos: Number(row.numberOfEmbryos) || 0,
+        numberOfEmbryosUsed: Number(row.numberOfEmbryosUsed) || 0,
+        numberOfEmbryosDiscarded: Number(row.numberOfEmbryosDiscarded) || 0,
+        embryosRemaining: Number(row.embryosRemaining) || 0,
+        lastRenewalDate,
+        // Prefer manually tracked cycle status when present
+        cycleStatus: row.trackerCycleStatus || null,
+        stageOfCycle: row.trackerStageOfCycle || row.stageOfCycle || "-"
       };
     });
   }
