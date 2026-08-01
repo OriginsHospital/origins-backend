@@ -6,7 +6,8 @@ const MySqlConnection = require("../connections/mysql_connection");
 const PatientTrackerModel = require("../models/Master/patientTrackerMaster");
 const {
   createPatientTrackerSchema,
-  editPatientTrackerSchema
+  editPatientTrackerSchema,
+  upsertEmbryologyUptSchema
 } = require("../schemas/patientTrackerSchema");
 const {
   getPatientTrackerSummaryAutomatedQuery
@@ -302,6 +303,105 @@ class PatientTrackerService {
     });
 
     return existing;
+  }
+
+  /**
+   * Embryology dept data entry: update embryo/UPT on existing tracker,
+   * or create a minimal tracker row when none exists for the patient.
+   */
+  async upsertEmbryologyUptService() {
+    const body = { ...this._request.body };
+    if (body.treatmentType) {
+      body.treatmentType = normalizeTreatmentType(body.treatmentType);
+    }
+
+    const validated = await upsertEmbryologyUptSchema.validateAsync(body);
+    const userId = this._request?.userDetails?.id;
+
+    const numberOfEmbryos = toNumberOrZero(validated.numberOfEmbryos);
+    const numberOfEmbryosUsed = toNumberOrZero(validated.numberOfEmbryosUsed);
+    const numberOfEmbryosDiscarded = toNumberOrZero(
+      validated.numberOfEmbryosDiscarded
+    );
+    const embryosRemaining =
+      validated.embryosRemaining !== undefined &&
+      validated.embryosRemaining !== null
+        ? toNumberOrZero(validated.embryosRemaining)
+        : numberOfEmbryos - numberOfEmbryosUsed;
+
+    const embryologyFields = {
+      numberOfEmbryos,
+      numberOfEmbryosUsed,
+      numberOfEmbryosDiscarded,
+      embryosRemaining,
+      lastRenewalDate: toNullableDate(validated.lastRenewalDate),
+      uptResult: validated.uptResult || null,
+      uptManualEntry: validated.uptManualEntry || null,
+      updatedBy: userId || null
+    };
+
+    const existing = await PatientTrackerModel.findOne({
+      where: { patientId: validated.patientId },
+      order: [["updatedAt", "DESC"], ["id", "DESC"]]
+    }).catch(err => {
+      console.log("Error while finding tracker for embryology upsert", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!lodash.isEmpty(existing)) {
+      await existing.update(embryologyFields).catch(err => {
+        console.log("Error while updating embryology/UPT fields", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      return existing;
+    }
+
+    if (!validated.patientName || !validated.branchId) {
+      throw new createError.BadRequest(
+        "patientName and branchId are required to create a new tracker entry"
+      );
+    }
+
+    const treatmentType =
+      normalizeTreatmentType(validated.treatmentType) || "IVF";
+    const cycleStatus = validated.cycleStatus || "Running";
+
+    const createPayload = buildPayload(
+      {
+        date: validated.date || new Date(),
+        branchId: validated.branchId,
+        patientId: validated.patientId,
+        patientName: validated.patientName,
+        mobileNumber: validated.mobileNumber || null,
+        plan: validated.plan || null,
+        treatmentType,
+        cycleStatus,
+        numberOfEmbryos,
+        numberOfEmbryosUsed,
+        numberOfEmbryosDiscarded,
+        embryosRemaining,
+        lastRenewalDate: validated.lastRenewalDate,
+        uptResult: validated.uptResult,
+        uptManualEntry: validated.uptManualEntry
+      },
+      userId,
+      true
+    );
+
+    const created = await PatientTrackerModel.create(createPayload).catch(
+      err => {
+        console.log("Error while creating tracker from embryology entry", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      }
+    );
+
+    return created;
   }
 }
 

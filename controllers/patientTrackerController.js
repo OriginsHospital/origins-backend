@@ -57,6 +57,15 @@ class PatientTrackerController {
       data
     });
   }
+
+  async upsertEmbryologyUptHandler() {
+    const data = await this._service.upsertEmbryologyUptService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data
+    });
+  }
 }
 
 module.exports = PatientTrackerController;

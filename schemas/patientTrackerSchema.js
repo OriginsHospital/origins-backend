@@ -113,7 +113,69 @@ const editPatientTrackerSchema = Joi.object({
   ...trackerBodySchema
 });
 
+/** Upsert embryo/UPT fields from Embryology department data entry */
+const upsertEmbryologyUptSchema = Joi.object({
+  patientId: Joi.string()
+    .max(100)
+    .required(),
+  patientName: Joi.string()
+    .max(255)
+    .allow(null, "")
+    .optional(),
+  branchId: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  mobileNumber: Joi.string()
+    .max(15)
+    .allow(null, "")
+    .optional(),
+  date: Joi.date()
+    .allow(null, "")
+    .optional(),
+  treatmentType: Joi.string()
+    .valid(...treatmentTypeValues)
+    .allow(null, "")
+    .optional(),
+  cycleStatus: Joi.string()
+    .valid(...cycleStatusValues)
+    .allow(null, "")
+    .optional(),
+  plan: Joi.string()
+    .max(255)
+    .allow(null, "")
+    .optional(),
+  numberOfEmbryos: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  numberOfEmbryosUsed: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  numberOfEmbryosDiscarded: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  lastRenewalDate: Joi.date()
+    .allow(null, "")
+    .optional(),
+  embryosRemaining: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  uptResult: Joi.string()
+    .valid(...uptResultValues)
+    .allow(null, "")
+    .optional(),
+  uptManualEntry: Joi.string()
+    .max(255)
+    .allow(null, "")
+    .optional()
+});
+
 module.exports = {
   createPatientTrackerSchema,
-  editPatientTrackerSchema
+  editPatientTrackerSchema,
+  upsertEmbryologyUptSchema
 };
