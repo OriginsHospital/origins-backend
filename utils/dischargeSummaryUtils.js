@@ -5,6 +5,19 @@ const escapeHtml = value =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+/** Strip colored backgrounds / light text so print stays readable on all branches. */
+const toBlackAndWhiteHtml = template => {
+  if (!template) return "";
+
+  return String(template)
+    .replace(
+      /(?<![\w-])color\s*:\s*(?:white|#fff(?:fff)?|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\));?/gi,
+      "color: #000000;"
+    )
+    .replace(/background-color\s*:\s*[^;"']+;?/gi, "background-color: #ffffff;")
+    .replace(/\bbackground\s*:\s*[^;"']+;?/gi, "background: #ffffff;");
+};
+
 const applyPlaceholderReplacements = (template, context) => {
   const safe = {
     patientName: escapeHtml(context.patientName),
@@ -90,9 +103,11 @@ const fillLegacyEmptyCells = (template, context) => {
 const applyDischargeSummaryContext = (template, context = {}) => {
   if (!template) return "";
   const withPlaceholders = applyPlaceholderReplacements(template, context);
-  return fillLegacyEmptyCells(withPlaceholders, context);
+  const withLegacy = fillLegacyEmptyCells(withPlaceholders, context);
+  return toBlackAndWhiteHtml(withLegacy);
 };
 
 module.exports = {
-  applyDischargeSummaryContext
+  applyDischargeSummaryContext,
+  toBlackAndWhiteHtml
 };
