@@ -139,6 +139,15 @@ class PharmacyController {
     });
   }
 
+  async movePendingToPrescribedHandler() {
+    const data = await this._service.movePendingToPrescribedService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async saveGrnDetailsHandler() {
     const data = await this._service.saveGrnDetailsService();
     this._response.status(200).send({

@@ -148,6 +148,20 @@ const updatePharmacyDetailsSchema = Joi.array().items(
   })
 );
 
+/** Move pending (unsold) balance to a new PRESCRIBED line; purchase qty stays as-is. */
+const movePendingToPrescribedSchema = Joi.array()
+  .items(
+    Joi.object({
+      id: Joi.number()
+        .integer()
+        .required(),
+      type: Joi.string()
+        .valid("Consultation", "Treatment")
+        .required()
+    })
+  )
+  .min(1);
+
 const generatePaymentBreakUpSchema = Joi.array().items(
   Joi.object({
     id: Joi.number()
@@ -315,6 +329,7 @@ module.exports = {
   createManufacturerSchema,
   editManufacturerSchema,
   updatePharmacyDetailsSchema,
+  movePendingToPrescribedSchema,
   saveGrnDetailsSchema,
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,

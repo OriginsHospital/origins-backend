@@ -39,6 +39,7 @@ const {
   createManufacturerSchema,
   editManufacturerSchema,
   updatePharmacyDetailsSchema,
+  movePendingToPrescribedSchema,
   saveGrnDetailsSchema,
   generatePaymentBreakUpSchema,
   returnGrnItemsSchema,
@@ -742,6 +743,110 @@ class PharmacyService {
         Constants.SOMETHING_ERROR_OCCURRED
       );
     }
+  }
+
+  /**
+   * Pending Sales → Prescribed:
+   * Keep purchaseQuantity unchanged. Move only the unsold balance
+   * (prescribedQuantity - purchaseQuantity) onto a new PRESCRIBED line
+   * so pharmacy can sell the remaining qty without undoing sold qty.
+   */
+  async movePendingToPrescribedService() {
+    const entries = await movePendingToPrescribedSchema.validateAsync(
+      this._request.body.movePendingToPrescribed
+    );
+    const createdByUserId =
+      this._request?.userDetails?.id || this._request?.user?.id;
+
+    return this.mysqlConnection.transaction(async t => {
+      const results = [];
+
+      for (const entry of entries) {
+        const { id, type } = entry;
+        let updateModel;
+        if (type === "Treatment") {
+          updateModel = TreatmentAppointmentLineBillsAssociationModel;
+        } else if (type === "Consultation") {
+          updateModel = ConsultationAppointmentLineBillsAssociationsModel;
+        } else {
+          throw new createError.BadRequest(Constants.INVALID_OPERATION);
+        }
+
+        const lineBill = await updateModel
+          .findOne({ where: { id }, transaction: t })
+          .catch(err => {
+            console.log("Error fetching line bill for pending→prescribed", err);
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+
+        if (!lineBill) {
+          throw new createError.BadRequest(`Pharmacy item ${id} not found`);
+        }
+
+        const prescribedQty = Number(lineBill.prescribedQuantity || 0);
+        const purchaseQty = Number(lineBill.purchaseQuantity || 0);
+        const pendingQty = prescribedQty - purchaseQty;
+
+        if (pendingQty <= 0) {
+          throw new createError.BadRequest(
+            `No pending quantity to move for item ${id}`
+          );
+        }
+
+        // Fully unpurchased: already Prescribed (unless stuck as PAID) — do not touch purchase qty
+        if (purchaseQty === 0) {
+          if (String(lineBill.status || "").toUpperCase() === "PAID") {
+            await lineBill.update({ status: null }, { transaction: t });
+          }
+          results.push({
+            id,
+            type,
+            action: "already_prescribed",
+            purchaseQuantity: 0,
+            pendingQuantity: pendingQty,
+            newLineId: null
+          });
+          continue;
+        }
+
+        // Close sold portion on original line (purchaseQuantity unchanged)
+        await lineBill.update(
+          { prescribedQuantity: purchaseQty },
+          { transaction: t }
+        );
+
+        // New line for pending qty → shows under PRESCRIBED for sale
+        const newLine = await updateModel.create(
+          {
+            appointmentId: lineBill.appointmentId,
+            billTypeId: lineBill.billTypeId,
+            billTypeValue: lineBill.billTypeValue,
+            prescribedQuantity: pendingQty,
+            purchaseQuantity: 0,
+            returnQuantity: null,
+            prescriptionDetails: lineBill.prescriptionDetails,
+            prescriptionDays: lineBill.prescriptionDays,
+            isSpouse: lineBill.isSpouse,
+            status: null,
+            createdBy: createdByUserId || lineBill.createdBy
+          },
+          { transaction: t }
+        );
+
+        results.push({
+          id,
+          type,
+          action: "split_pending",
+          purchaseQuantity: purchaseQty,
+          pendingQuantity: pendingQty,
+          newLineId: newLine.id
+        });
+      }
+
+      return results;
+    });
   }
 
   async saveGrnDetailsService() {

@@ -105,6 +105,12 @@ class PharmacyRoute {
       tokenVerified,
       this.updatePharmacyDetails
     );
+    this._route.put(
+      "/movePendingToPrescribed",
+      checkActiveSession,
+      tokenVerified,
+      this.movePendingToPrescribed
+    );
     this._route.post(
       "/generatePaymentBreakUp",
       checkActiveSession,
@@ -286,6 +292,11 @@ class PharmacyRoute {
   updatePharmacyDetails = asyncHandler(async (req, res, next) => {
     const controllerObj = new PharmacyController(req, res, next);
     await controllerObj.updatePharmacyDetailsHandler();
+  });
+
+  movePendingToPrescribed = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PharmacyController(req, res, next);
+    await controllerObj.movePendingToPrescribedHandler();
   });
 
   saveGrnDetailsHandler = asyncHandler(async (req, res, next) => {
