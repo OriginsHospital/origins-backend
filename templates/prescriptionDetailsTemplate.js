@@ -5,117 +5,251 @@ const prescriptionDetailsTemplate = `
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Prescription</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            width: 210mm;
+            margin: 0 auto;
+            padding: 8mm;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            line-height: 1.45;
+            color: #000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .patient-info-table,
+        .section-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+        .patient-info-table td,
+        .section-table th,
+        .section-table td {
+            border: 1px solid #000;
+            padding: 8px 10px;
+            text-align: left;
+            word-wrap: break-word;
+            white-space: normal;
+            vertical-align: top;
+        }
+        .patient-info-table td {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .patient-info-table .label {
+            font-weight: 700;
+            color: #000;
+        }
+        .section-table th {
+            font-weight: 700;
+            font-size: 15px;
+            background: #f3f3f3;
+        }
+        .section-table td {
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #000;
+            text-align: center;
+            margin: 14px 0 10px;
+        }
+        .main-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #000;
+            text-align: center;
+            margin: 12px 0;
+        }
+        .prescribed-by {
+            font-size: 15px;
+            font-weight: 700;
+            color: #000;
+            text-align: right;
+            margin: 6px 0 8px;
+        }
+        .divider {
+            border: 0;
+            height: 1px;
+            background: #bbb;
+            margin: 12px 0;
+        }
+        .notes-content,
+        .notes-content * {
+            font-size: 15px !important;
+            line-height: 1.5 !important;
+            color: #000 !important;
+            font-weight: 600 !important;
+        }
+        .doctor-signature {
+            text-align: right;
+            margin: 16px 10px 8px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        @media print {
+            body {
+                width: auto;
+                padding: 6mm;
+                font-size: 12pt;
+            }
+            .patient-info-table,
+            .section-table {
+                font-size: 11pt;
+            }
+            .patient-info-table td,
+            .section-table th,
+            .section-table td {
+                font-size: 11pt;
+                padding: 7px 9px;
+            }
+            .main-title {
+                font-size: 16pt;
+            }
+            .section-title {
+                font-size: 14pt;
+            }
+            .prescribed-by,
+            .doctor-signature {
+                font-size: 12pt;
+            }
+            .notes-content,
+            .notes-content * {
+                font-size: 11pt !important;
+            }
+        }
+    </style>
 </head>
 
-<body style="width: 210mm; height: 297mm; margin: 0 auto; padding: 5mm; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 14px;">
+<body>
     {{{hospitalLogoInformation}}}
-    <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
-    
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+    <hr class="divider">
+
+    <table class="patient-info-table">
         <tr>
-            <td style="width: 50%; padding: 6px; border: 1px solid black;"><strong style="color: black;">Patient Name:</strong> {{patientName}} </td>
-            <td style="width: 50%; padding: 6px; border: 1px solid black;"><strong style="color: black;">Date:</strong> {{currentDate}} </td>
+            <td style="width: 50%;"><span class="label">Patient Name:</span> {{patientName}}</td>
+            <td style="width: 50%;"><span class="label">Date:</span> {{currentDate}}</td>
         </tr>
         <tr>
-            <td style="width: 50%; padding: 6px; border: 1px solid black;"><strong style="color: black;">Age:</strong> {{patientAge}} </td>
-            <td style="width: 50%; padding: 6px; border: 1px solid black;"><strong style="color: black;">Gender:</strong> {{gender}} </td>
+            <td style="width: 50%;"><span class="label">Age:</span> {{patientAge}}</td>
+            <td style="width: 50%;"><span class="label">Gender:</span> {{gender}}</td>
         </tr>
         <tr>
-            <td colspan="2" style="padding: 6px; border: 1px solid black;"><strong style="color: black;">Appointment Reason:</strong> {{appointmentReason}}</td>
+            <td colspan="2"><span class="label">Appointment Reason:</span> {{appointmentReason}}</td>
         </tr>
     </table>
-    <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
-    
-    <h3 style="font-size: 20px; color: black; text-align: center; margin: 10px 0;">Prescription Details</h3>
-    
-    <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
-    
+    <hr class="divider">
+
+    <h4 class="section-title">Vital Details</h4>
+    <table class="patient-info-table">
+        <tr>
+            <td style="width: 50%;"><span class="label">LMP:</span> {{lmp}}</td>
+            <td style="width: 50%;"><span class="label">EDD:</span> {{edd}}</td>
+        </tr>
+        <tr>
+            <td style="width: 50%;"><span class="label">Weight:</span> {{weight}}</td>
+            <td style="width: 50%;"><span class="label">BP:</span> {{bp}}</td>
+        </tr>
+    </table>
+    <hr class="divider">
+
+    <h3 class="main-title">Prescription Details</h3>
+
+    <hr class="divider">
+
     <div style="width: 100%; margin-top: 10px;">
         {{#if showNotes}}
-            <h4 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Consultation Notes</h4>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+            <h4 class="section-title">Consultation Notes</h4>
+            <table class="section-table">
                 <tr>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Consultation Notes</th>
+                    <th>Consultation Notes</th>
                 </tr>
                 <tr>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{{notesDetails}}}</td>
+                    <td class="notes-content">{{{notesDetails}}}</td>
                 </tr>
             </table>
-            <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
+            <hr class="divider">
         {{/if}}
-        
+
         {{#if showPharmacy}}
-            <h3 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Pharmacy</h3>
-            <p style="font-size: 12px; color: black; text-align: right; margin: 4px 0 6px 0;">
-                <strong>Prescribed By:</strong> {{doctorName}}
+            <h3 class="section-title">Pharmacy</h3>
+            <p class="prescribed-by">
+                Prescribed By: {{doctorName}}
             </p>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+            <table class="section-table">
                 <tr>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Name</th>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Dosage</th>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Prescribed Quantity</th>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Bought Quantity</th>
+                    <th>Name</th>
+                    <th>Dosage</th>
+                    <th>Prescribed Quantity</th>
+                    <th>Bought Quantity</th>
                 </tr>
                 {{#each pharmacyDetails}}
                 <tr>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.name}}</td>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.dosage}}</td>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.prescribedQuantity}}</td>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.purchaseQuantity}}</td>
+                    <td>{{this.name}}</td>
+                    <td>{{this.dosage}}</td>
+                    <td>{{this.prescribedQuantity}}</td>
+                    <td>{{this.purchaseQuantity}}</td>
                 </tr>
                 {{/each}}
             </table>
-            <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
+            <hr class="divider">
         {{/if}}
-        
+
         {{#if showLabs}}
-            <h3 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Labs</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+            <h3 class="section-title">Labs</h3>
+            <table class="section-table">
                 <tr>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Name</th>
+                    <th>Name</th>
                 </tr>
                 {{#each labDetails}}
                 <tr>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.name}}</td>
+                    <td>{{this.name}}</td>
                 </tr>
                 {{/each}}
             </table>
-            <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
+            <hr class="divider">
         {{/if}}
-        
+
         {{#if showScans}}
-            <h3 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Scans</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+            <h3 class="section-title">Scans</h3>
+            <table class="section-table">
                 <tr>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Name</th>
+                    <th>Name</th>
                 </tr>
                 {{#each scanDetails}}
                 <tr>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.name}}</td>
+                    <td>{{this.name}}</td>
                 </tr>
                 {{/each}}
             </table>
-            <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
+            <hr class="divider">
         {{/if}}
-        
+
         {{#if showEmbryology}}
-            <h3 style="font-size: 17px; color: black; text-align: center; margin: 10px 0;">Embryology</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; overflow: hidden; font-size: 12px;">
+            <h3 class="section-title">Embryology</h3>
+            <table class="section-table">
                 <tr>
-                    <th style="border: 1px solid black; padding: 6px; text-align: left; font-weight: bold;">Name</th>
+                    <th>Name</th>
                 </tr>
                 {{#each embryologyDetails}}
                 <tr>
-                    <td style="border: 1px solid black; padding: 6px; text-align: left; word-wrap: break-word; white-space: normal; max-width: 200px;">{{this.name}}</td>
+                    <td>{{this.name}}</td>
                 </tr>
                 {{/each}}
             </table>
-            <hr style="border: 0; height: 1px; background: #ddd; margin: 10px 0;">
+            <hr class="divider">
         {{/if}}
     </div>
-    
-    <div style="text-align: right; margin: 10px; font-weight: bold; font-size: 14px;">
-        <strong>Doctor's Signature:</strong> {{doctorName}}
+
+    <div class="doctor-signature">
+        Doctor's Signature: {{doctorName}}
     </div>
 </body>
 </html>

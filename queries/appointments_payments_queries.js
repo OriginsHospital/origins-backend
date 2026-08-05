@@ -1141,6 +1141,119 @@ GROUP BY taa.id
 ) statusTable
 `;
 
+const printPrescriptionVitalsFieldsSql = `
+				'weight', CASE
+					WHEN :isSpouse = 1 THEN COALESCE(
+						(
+							SELECT NULLIF(TRIM(vaa.spouseWeight), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.appointmentId = appointmentInformation.id
+								AND vaa.type = :type
+							LIMIT 1
+						),
+						(
+							SELECT NULLIF(TRIM(vaa.spouseWeight), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.patientId = (
+								SELECT pm2.patientId
+								FROM patient_master pm2
+								WHERE pm2.id = appointmentInformation.patientId
+							)
+								AND NULLIF(TRIM(vaa.spouseWeight), '') IS NOT NULL
+							ORDER BY vaa.appointmentDate DESC, vaa.id DESC
+							LIMIT 1
+						),
+						''
+					)
+					ELSE COALESCE(
+						(
+							SELECT NULLIF(TRIM(vaa.weight), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.appointmentId = appointmentInformation.id
+								AND vaa.type = :type
+							LIMIT 1
+						),
+						(
+							SELECT NULLIF(TRIM(vaa.weight), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.patientId = (
+								SELECT pm2.patientId
+								FROM patient_master pm2
+								WHERE pm2.id = appointmentInformation.patientId
+							)
+							ORDER BY vaa.appointmentDate DESC, vaa.id DESC
+							LIMIT 1
+						),
+						''
+					)
+				END,
+				'bp', CASE
+					WHEN :isSpouse = 1 THEN ''
+					ELSE COALESCE(
+						(
+							SELECT NULLIF(TRIM(vaa.bp), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.appointmentId = appointmentInformation.id
+								AND vaa.type = :type
+							LIMIT 1
+						),
+						(
+							SELECT NULLIF(TRIM(vaa.bp), '')
+							FROM vitals_appointments_associations vaa
+							WHERE vaa.patientId = (
+								SELECT pm2.patientId
+								FROM patient_master pm2
+								WHERE pm2.id = appointmentInformation.patientId
+							)
+							ORDER BY vaa.appointmentDate DESC, vaa.id DESC
+							LIMIT 1
+						),
+						''
+					)
+				END
+`;
+
+const printPrescriptionLatestScanWithLmpSql = `
+	(
+		SELECT sr.scanResult
+		FROM scan_results sr
+		WHERE sr.scanResult LIKE '%LMP%'
+			AND (
+				EXISTS (
+					SELECT 1
+					FROM consultation_appointments_associations caa
+					INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+					INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+					WHERE caa.id = sr.appointmentId
+						AND pva.patientId = appointmentInformation.patientId
+						AND UPPER(sr.type) = 'CONSULTATION'
+				)
+				OR EXISTS (
+					SELECT 1
+					FROM treatment_appointments_associations taa
+					INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+					INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+					WHERE taa.id = sr.appointmentId
+						AND pva.patientId = appointmentInformation.patientId
+						AND UPPER(sr.type) = 'TREATMENT'
+				)
+			)
+		ORDER BY sr.id DESC
+		LIMIT 1
+	) as latestScanResultWithLmp
+`;
+
+const printPrescriptionHysteroscopyLmpSql = `
+	(
+		SELECT DATE_FORMAT(vha.lmp, '%d/%m/%Y')
+		FROM visit_hysteroscopy_associations vha
+		WHERE vha.patientId = appointmentInformation.patientId
+			AND vha.lmp IS NOT NULL
+		ORDER BY vha.id DESC
+		LIMIT 1
+	) as hysteroscopyLmp
+`;
+
 const printPrescriptionQuery = `
 SELECT 
 	(	
@@ -1160,7 +1273,8 @@ SELECT
 						        ELSE pga.age
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
-				'doctorName', appointmentInformation.doctorName
+				'doctorName', appointmentInformation.doctorName,
+				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
 			patient_master pm
@@ -1202,7 +1316,9 @@ SELECT
 	) as prescriptionDetails,
 	(
 		SELECT cana.notes from consultation_appointment_notes_associations cana where cana.appointmentId = appointmentInformation.id and cana.isSpouse = :isSpouse
-	) as notesDetails
+	) as notesDetails,
+	${printPrescriptionLatestScanWithLmpSql},
+	${printPrescriptionHysteroscopyLmpSql}
 FROM (
 	SELECT
 		caa.id,
@@ -1244,7 +1360,8 @@ SELECT
 						        ELSE pga.age
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
-				'doctorName', appointmentInformation.doctorName
+				'doctorName', appointmentInformation.doctorName,
+				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
 			patient_master pm
@@ -1286,7 +1403,9 @@ SELECT
 	) as prescriptionDetails,
 	(
 		SELECT tana.notes from treatment_appointment_notes_associations tana where tana.appointmentId = appointmentInformation.id and tana.isSpouse = :isSpouse
-	) as notesDetails
+	) as notesDetails,
+	${printPrescriptionLatestScanWithLmpSql},
+	${printPrescriptionHysteroscopyLmpSql}
 FROM (
 	SELECT
 		taa.id,

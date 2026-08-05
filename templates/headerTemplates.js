@@ -34,22 +34,20 @@ const labHeaderTemplate = `
 `;
 
 const hospitalLogoTemplate = `
-<div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid black; padding: 10px; background-color: rgba(255, 255, 255, 0.8); position: relative;margin:5px">
-    <div style="content: ''; background-image: url('image.png'); background-size: cover; background-position: center; opacity: 0.3; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: -1;"></div>
-    <div style="display: flex; flex-direction: column; align-items: center; z-index: 1;">
-        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 120px; height: auto;">
-        <div style="font-size: 12px; margin-top: 5px;color: black">{logoText}</div>
+<div style="display: flex; align-items: center; gap: 16px; border-bottom: 2px solid black; padding: 8px 10px; background-color: rgba(255, 255, 255, 0.8); position: relative; margin: 5px;">
+    <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; z-index: 1; width: 110px;">
+        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 100px; height: auto; display: block;">
+        <div style="font-size: 11px; margin-top: 4px; color: black; text-align: center; line-height: 1.2;">{logoText}</div>
     </div>
 
     <!-- Hospital Info -->
-    <div style="text-align: center; flex-grow: 1; z-index: 1;">
-        <!-- Big Title in the Middle -->
-        <div style="font-size: 30px; font-weight: bold; color: #0073e6; margin-bottom: 5px;">ORIGINS IVF</div>
-        <div style="font-size: 14px; font-weight: bold; color: black; margin-bottom: 5px;">{branchName}</div>
-        <div style="font-size: 12px; color: black; margin-bottom: 5px;">
+    <div style="text-align: center; flex: 1; z-index: 1; min-width: 0; padding: 0 8px;">
+        <div style="font-size: 26px; font-weight: bold; color: #0073e6; margin-bottom: 4px; line-height: 1.15;">ORIGINS IVF</div>
+        <div style="font-size: 14px; font-weight: bold; color: black; margin-bottom: 4px; line-height: 1.2;">{branchName}</div>
+        <div style="font-size: 11px; font-weight: normal; color: black; margin: 0 auto 4px; line-height: 1.35; max-width: 460px; word-wrap: break-word; overflow-wrap: break-word;">
         {branchAddress}
         </div>
-        <div style="font-size: 12px; color: black;">Phone: {branchPhoneNumber}</div>
+        <div style="font-size: 12px; font-weight: bold; color: black; line-height: 1.2;">Phone: {branchPhoneNumber}</div>
     </div>
 </div>
 `;

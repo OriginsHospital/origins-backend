@@ -4010,6 +4010,44 @@ class AppointmentsPaymentService extends BaseService {
     });
   }
 
+  extractLmpEddFromScanHtml(html) {
+    if (!html || typeof html !== "string") {
+      return { lmp: "", edd: "" };
+    }
+
+    const text = html
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<\/(p|div|tr|td|th|li|h\d)>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ");
+
+    const datePattern = "([0-9]{1,2}[\\/\\-][0-9]{1,2}[\\/\\-][0-9]{2,4})";
+    const lmp =
+      (text.match(new RegExp(`LMP\\s*[:\\-]?\\s*${datePattern}`, "i")) ||
+        [])[1] || "";
+    const edd =
+      (text.match(
+        new RegExp(`EDD\\s*by\\s*LMP\\s*[:\\-]?\\s*${datePattern}`, "i")
+      ) || [])[1] ||
+      (text.match(new RegExp(`EDD\\s*[:\\-]?\\s*${datePattern}`, "i")) ||
+        [])[1] ||
+      "";
+
+    return { lmp, edd };
+  }
+
+  formatPrescriptionWeight(weight) {
+    if (!weight || String(weight).trim() === "") {
+      return "";
+    }
+    const value = String(weight).trim();
+    if (/kg/i.test(value)) {
+      return value;
+    }
+    return `${value} kg`;
+  }
+
   async printPrescriptionService() {
     const validatedPayload = await printPrescriptionSchema.validateAsync(
       this._request.body
@@ -4106,7 +4144,9 @@ class AppointmentsPaymentService extends BaseService {
         scanExists,
         pharmacyExists,
         embryologyExists,
-        notesExists
+        notesExists,
+        latestScanResultWithLmp,
+        hysteroscopyLmp
       } = entry;
 
       // Categorizing prescription details into different sections
@@ -4127,8 +4167,22 @@ class AppointmentsPaymentService extends BaseService {
         }
       });
 
+      let lmp = "";
+      let edd = "";
+      if (!validatedPayload?.isSpouse) {
+        const fromScan = this.extractLmpEddFromScanHtml(
+          latestScanResultWithLmp
+        );
+        lmp = fromScan.lmp || hysteroscopyLmp || "";
+        edd = fromScan.edd || "";
+      }
+
       return {
         ...patientDetails,
+        lmp: lmp || "-",
+        edd: edd || "-",
+        weight: this.formatPrescriptionWeight(patientDetails?.weight) || "-",
+        bp: patientDetails?.bp || "-",
         hospitalLogoInformation: hospitalLogoHeaderTemplate,
         showLabs: labsExists,
         showScans: scanExists,
