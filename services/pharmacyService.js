@@ -54,6 +54,8 @@ const SupplierMasterModel = require("../models/Master/SupplierMasterModel");
 const ManufacturerMasterModel = require("../models/Master/ManufacturerMasterModel");
 const ConsultationAppointmentLineBillsAssociationsModel = require("../models/Associations/consultationAppointmentLineBillsAssociations");
 const TreatmentAppointmentLineBillsAssociationModel = require("../models/Associations/treatmentAppointmentLineBillsAssociations");
+const ConsultationAppointmentAssociationModel = require("../models/Associations/consultationAppointmentsAssociations");
+const TreatmentAppointmentAssociationModel = require("../models/Associations/treatmentAppointmentAssociations");
 const GrnPaymentAssociationsModel = require("../models/Associations/grnPaymentAssociations");
 const GrnItemsAssociationsModel = require("../models/Associations/grnItemsAssociations");
 const GrnDetailsMasterModel = require("../models/Master/grnDetailsMaster");
@@ -746,10 +748,11 @@ class PharmacyService {
   }
 
   /**
-   * Pending Sales → Prescribed:
-   * Keep purchaseQuantity unchanged. Move only the unsold balance
-   * (prescribedQuantity - purchaseQuantity) onto a new PRESCRIBED line
-   * so pharmacy can sell the remaining qty without undoing sold qty.
+   * Pending Sales → Prescribed (current date):
+   * - Keep purchaseQuantity unchanged on the original (sold) line
+   * - Move only the unsold balance onto a PRESCRIBED line
+   * - That new/moved line is attached to today's appointment so it
+   *   appears under Pharmacy → Prescribed for the current date
    */
   async movePendingToPrescribedService() {
     const entries = await movePendingToPrescribedSchema.validateAsync(
@@ -757,22 +760,34 @@ class PharmacyService {
     );
     const createdByUserId =
       this._request?.userDetails?.id || this._request?.user?.id;
+    const today = moment()
+      .tz("Asia/Kolkata")
+      .format("YYYY-MM-DD");
 
     return this.mysqlConnection.transaction(async t => {
       const results = [];
+      // Reuse one "today" appointment per patient visit+branch within this batch
+      const todayAppointmentCache = {};
 
       for (const entry of entries) {
         const { id, type } = entry;
-        let updateModel;
+        let lineModel;
+        let appointmentModel;
+        let parentKey;
+
         if (type === "Treatment") {
-          updateModel = TreatmentAppointmentLineBillsAssociationModel;
+          lineModel = TreatmentAppointmentLineBillsAssociationModel;
+          appointmentModel = TreatmentAppointmentAssociationModel;
+          parentKey = "treatmentCycleId";
         } else if (type === "Consultation") {
-          updateModel = ConsultationAppointmentLineBillsAssociationsModel;
+          lineModel = ConsultationAppointmentLineBillsAssociationsModel;
+          appointmentModel = ConsultationAppointmentAssociationModel;
+          parentKey = "consultationId";
         } else {
           throw new createError.BadRequest(Constants.INVALID_OPERATION);
         }
 
-        const lineBill = await updateModel
+        const lineBill = await lineModel
           .findOne({ where: { id }, transaction: t })
           .catch(err => {
             console.log("Error fetching line bill for pending→prescribed", err);
@@ -785,6 +800,21 @@ class PharmacyService {
           throw new createError.BadRequest(`Pharmacy item ${id} not found`);
         }
 
+        const sourceAppointment = await appointmentModel
+          .findOne({ where: { id: lineBill.appointmentId }, transaction: t })
+          .catch(err => {
+            console.log("Error fetching source appointment", err);
+            throw new createError.InternalServerError(
+              Constants.SOMETHING_ERROR_OCCURRED
+            );
+          });
+
+        if (!sourceAppointment) {
+          throw new createError.BadRequest(
+            `Appointment not found for pharmacy item ${id}`
+          );
+        }
+
         const prescribedQty = Number(lineBill.prescribedQuantity || 0);
         const purchaseQty = Number(lineBill.purchaseQuantity || 0);
         const pendingQty = prescribedQty - purchaseQty;
@@ -795,32 +825,52 @@ class PharmacyService {
           );
         }
 
-        // Fully unpurchased: already Prescribed (unless stuck as PAID) — do not touch purchase qty
-        if (purchaseQty === 0) {
-          if (String(lineBill.status || "").toUpperCase() === "PAID") {
-            await lineBill.update({ status: null }, { transaction: t });
+        const todayAppointmentId = await this.resolveAppointmentForPharmacyToday(
+          {
+            type,
+            sourceAppointment,
+            appointmentModel,
+            parentKey,
+            today,
+            createdByUserId,
+            cache: todayAppointmentCache,
+            transaction: t
           }
+        );
+
+        // Nothing sold yet: move the same line onto today's appointment as PRESCRIBED
+        if (purchaseQty === 0) {
+          await lineBill.update(
+            {
+              appointmentId: todayAppointmentId,
+              status: null,
+              purchaseQuantity: 0
+            },
+            { transaction: t }
+          );
+
           results.push({
             id,
             type,
-            action: "already_prescribed",
+            action: "moved_to_today",
             purchaseQuantity: 0,
             pendingQuantity: pendingQty,
-            newLineId: null
+            newLineId: id,
+            targetAppointmentId: todayAppointmentId,
+            targetDate: today
           });
           continue;
         }
 
-        // Close sold portion on original line (purchaseQuantity unchanged)
+        // Partial sale: keep sold qty on original date; open pending on today
         await lineBill.update(
           { prescribedQuantity: purchaseQty },
           { transaction: t }
         );
 
-        // New line for pending qty → shows under PRESCRIBED for sale
-        const newLine = await updateModel.create(
+        const newLine = await lineModel.create(
           {
-            appointmentId: lineBill.appointmentId,
+            appointmentId: todayAppointmentId,
             billTypeId: lineBill.billTypeId,
             billTypeValue: lineBill.billTypeValue,
             prescribedQuantity: pendingQty,
@@ -838,15 +888,91 @@ class PharmacyService {
         results.push({
           id,
           type,
-          action: "split_pending",
+          action: "split_pending_to_today",
           purchaseQuantity: purchaseQty,
           pendingQuantity: pendingQty,
-          newLineId: newLine.id
+          newLineId: newLine.id,
+          targetAppointmentId: todayAppointmentId,
+          targetDate: today
         });
       }
 
       return results;
     });
+  }
+
+  /**
+   * Find an appointment for today for the same visit/branch, or clone
+   * the source appointment onto today for pharmacy carry-forward.
+   */
+  async resolveAppointmentForPharmacyToday({
+    type,
+    sourceAppointment,
+    appointmentModel,
+    parentKey,
+    today,
+    createdByUserId,
+    cache,
+    transaction
+  }) {
+    const sourceDate = moment(sourceAppointment.appointmentDate).format(
+      "YYYY-MM-DD"
+    );
+    if (sourceDate === today) {
+      return sourceAppointment.id;
+    }
+
+    const parentId = sourceAppointment[parentKey];
+    const branchId = sourceAppointment.branchId;
+    const cacheKey = `${type}-${parentId ?? "none"}-${branchId}-${today}`;
+
+    if (cache[cacheKey]) {
+      return cache[cacheKey];
+    }
+
+    // Prefer an existing same-visit appointment already booked for today
+    if (parentId != null) {
+      const existingToday = await appointmentModel.findOne({
+        where: {
+          [parentKey]: parentId,
+          branchId,
+          appointmentDate: today
+        },
+        transaction
+      });
+
+      if (existingToday) {
+        cache[cacheKey] = existingToday.id;
+        return existingToday.id;
+      }
+    }
+
+    const cloned = await appointmentModel.create(
+      {
+        [parentKey]: parentId,
+        branchId,
+        appointmentDate: today,
+        consultationDoctorId: sourceAppointment.consultationDoctorId,
+        timeStart: sourceAppointment.timeStart || "09:00:00",
+        timeEnd: sourceAppointment.timeEnd || "09:15:00",
+        appointmentReasonId: sourceAppointment.appointmentReasonId,
+        createdBy: createdByUserId || sourceAppointment.createdBy,
+        stage: "Booked",
+        appointmentType:
+          sourceAppointment.appointmentType || "PharmacyPendingCarryForward",
+        isSeen: 0,
+        isDone: 0,
+        isArrived: 0,
+        isScan: 0,
+        isDoctor: 0,
+        noShow: 0,
+        isCompleted: 0
+      },
+      { transaction }
+    );
+
+    cache[cacheKey] = cloned.id;
+    return cloned.id;
   }
 
   async saveGrnDetailsService() {
