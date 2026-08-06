@@ -814,11 +814,11 @@ class ScanService extends BaseService {
     const replacements = {};
 
     if (fromDate) {
-      whereConditions.push("CAST(ur.testDate AS DATE) >= :fromDate");
+      whereConditions.push("CAST(ur.resultDate AS DATE) >= :fromDate");
       replacements.fromDate = fromDate;
     }
     if (toDate) {
-      whereConditions.push("CAST(ur.testDate AS DATE) <= :toDate");
+      whereConditions.push("CAST(ur.resultDate AS DATE) <= :toDate");
       replacements.toDate = toDate;
     }
     if (branchId) {
@@ -850,7 +850,7 @@ class ScanService extends BaseService {
     if (whereConditions.length > 0) {
       query += ` WHERE ${whereConditions.join(" AND ")}`;
     }
-    query += ` ORDER BY ur.testDate DESC, ur.id DESC`;
+    query += ` ORDER BY ur.resultDate DESC, ur.id DESC`;
 
     return this.mysqlConnection
       .query(query, {
@@ -870,14 +870,15 @@ class ScanService extends BaseService {
       this._request.body
     );
 
-    const testDate =
-      typeof validatedPayload.testDate === "string"
-        ? validatedPayload.testDate.slice(0, 10)
-        : dayjsSafeDate(validatedPayload.testDate);
+    const resultDate =
+      typeof validatedPayload.resultDate === "string"
+        ? validatedPayload.resultDate.slice(0, 10)
+        : dayjsSafeDate(validatedPayload.resultDate);
 
     return UptResultsMaster.create({
       ...validatedPayload,
-      testDate
+      resultDate,
+      createdBy: this._request?.userDetails?.id || null
     }).catch(err => {
       console.log("Error while saving UPT result", err);
       throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
@@ -901,13 +902,13 @@ class ScanService extends BaseService {
     }
 
     const { id, ...rest } = validatedPayload;
-    const testDate =
-      typeof rest.testDate === "string"
-        ? rest.testDate.slice(0, 10)
-        : dayjsSafeDate(rest.testDate);
+    const resultDate =
+      typeof rest.resultDate === "string"
+        ? rest.resultDate.slice(0, 10)
+        : dayjsSafeDate(rest.resultDate);
 
     await UptResultsMaster.update(
-      { ...rest, testDate },
+      { ...rest, resultDate },
       { where: { id } }
     ).catch(err => {
       console.log("Error while updating UPT result", err);

@@ -31,7 +31,7 @@ const formFTemplatesByScanAppointmentSchema = Joi.object({
 });
 
 const saveUptResultSchema = Joi.object({
-  testDate: Joi.alternatives()
+  resultDate: Joi.alternatives()
     .try(Joi.date(), Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
     .required(),
   branchId: Joi.number()
@@ -55,7 +55,7 @@ const editUptResultSchema = Joi.object({
   id: Joi.number()
     .integer()
     .required(),
-  testDate: Joi.alternatives()
+  resultDate: Joi.alternatives()
     .try(Joi.date(), Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
     .required(),
   branchId: Joi.number()

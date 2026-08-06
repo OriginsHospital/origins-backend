@@ -546,7 +546,7 @@ ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 const getUptResultsQuery = `
 SELECT
   ur.id,
-  ur.testDate,
+  ur.resultDate,
   ur.branchId,
   bm.branchCode,
   bm.name AS branchName,
@@ -558,6 +558,7 @@ SELECT
   ur.uptResult,
   ur.createdByNurseId,
   opm.personName AS createdByNurseName,
+  ur.createdBy,
   ur.createdAt,
   ur.updatedAt
 FROM upt_results ur

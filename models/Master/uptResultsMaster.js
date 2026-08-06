@@ -10,7 +10,7 @@ const UptResultsMaster = MySqlConnection._instance.define(
       allowNull: false,
       autoIncrement: true
     },
-    testDate: {
+    resultDate: {
       type: Sequelize.DataTypes.DATEONLY,
       allowNull: false
     },
@@ -23,7 +23,7 @@ const UptResultsMaster = MySqlConnection._instance.define(
       allowNull: false
     },
     cycleType: {
-      type: Sequelize.DataTypes.ENUM("IVF", "OI-TI", "IUI"),
+      type: Sequelize.DataTypes.STRING(150),
       allowNull: false
     },
     uptResult: {
@@ -33,6 +33,10 @@ const UptResultsMaster = MySqlConnection._instance.define(
     createdByNurseId: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: false
+    },
+    createdBy: {
+      type: Sequelize.DataTypes.INTEGER,
+      allowNull: true
     }
   },
   {
