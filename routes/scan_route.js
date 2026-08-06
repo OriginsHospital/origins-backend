@@ -30,6 +30,10 @@ class ScanRoute {
     this._route.put("/reviewFormFTemplate", checkActiveSession, tokenVerified, this.reviewFormFTemplate);
     this._route.get( "/getFormFTemplateByDateRange", checkActiveSession, tokenVerified, this.getFormTemplateByDateRange );
     this._route.get( "/downloadScanReport", checkActiveSession, tokenVerified, this.downloadScanReport );
+    this._route.get( "/getUptResults", checkActiveSession, tokenVerified, this.getUptResults );
+    this._route.post( "/saveUptResult", checkActiveSession, tokenVerified, this.saveUptResult );
+    this._route.put( "/editUptResult", checkActiveSession, tokenVerified, this.editUptResult );
+    this._route.delete( "/deleteUptResult/:id", checkActiveSession, tokenVerified, this.deleteUptResult );
   }
 
   getScansByDate = asyncHandler(async (req, res, next) => {
@@ -103,6 +107,26 @@ class ScanRoute {
     const controllerObj = new ScanController(req, res, next);
     await controllerObj.downloadScanReportHandler();
   })
+
+  getUptResults = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.getUptResultsHandler();
+  });
+
+  saveUptResult = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.saveUptResultHandler();
+  });
+
+  editUptResult = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.editUptResultHandler();
+  });
+
+  deleteUptResult = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.deleteUptResultHandler();
+  });
 
 }
 

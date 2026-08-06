@@ -543,6 +543,29 @@ WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
 ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 `;
 
+const getUptResultsQuery = `
+SELECT
+  ur.id,
+  ur.testDate,
+  ur.branchId,
+  bm.branchCode,
+  bm.name AS branchName,
+  ur.patientId,
+  pm.patientId AS originsId,
+  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+  COALESCE(pm.mobileNo, '') AS mobileNumber,
+  ur.cycleType,
+  ur.uptResult,
+  ur.createdByNurseId,
+  opm.personName AS createdByNurseName,
+  ur.createdAt,
+  ur.updatedAt
+FROM upt_results ur
+INNER JOIN patient_master pm ON pm.id = ur.patientId
+INNER JOIN branch_master bm ON bm.id = ur.branchId
+LEFT JOIN ot_person_master opm ON opm.id = ur.createdByNurseId
+`;
+
 module.exports = {
   getScansByDateQuery,
   getFormFTemplateByDateRangeQuery,
@@ -550,5 +573,6 @@ module.exports = {
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
-  getHysteroLapByDateQuery
+  getHysteroLapByDateQuery,
+  getUptResultsQuery
 };

@@ -9,16 +9,20 @@ const {
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
-  getHysteroLapByDateQuery
+  getHysteroLapByDateQuery,
+  getUptResultsQuery
 } = require("../queries/scan_queries");
 const { Sequelize } = require("sequelize");
 const ScanTemplatesMaster = require("../models/Master/ScanTemplatesMaster");
 const {
   saveScanResultSchema,
   uploadFormFForScanSchema,
-  deleteFormFForScanSchema
+  deleteFormFForScanSchema,
+  saveUptResultSchema,
+  editUptResultSchema
 } = require("../schemas/scanSchema");
 const ScanResultModel = require("../models/Master/ScanResultMaster");
+const UptResultsMaster = require("../models/Master/uptResultsMaster");
 const patientScanFormFAssociations = require("../models/Associations/patientScanFormFAssociation");
 const AWSConnection = require("../connections/aws_connection");
 const { getPatientInfoForTemplate } = require("../queries/lab_queries");
@@ -27,6 +31,17 @@ const { scanHeaderTemplate } = require("../templates/headerTemplates");
 const BaseService = require("./baseService");
 
 const puppeteer = require("puppeteer");
+
+const dayjsSafeDate = value => {
+  if (!value) return value;
+  if (typeof value === "string") return value.slice(0, 10);
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 class ScanService extends BaseService {
   constructor(request, response, next) {
@@ -781,6 +796,152 @@ class ScanService extends BaseService {
     });
 
     this._response.send(pdf_buffer);
+  }
+
+  async getUptResultsService() {
+    const {
+      fromDate,
+      toDate,
+      branchId,
+      cycleType,
+      uptResult,
+      createdByNurseId,
+      search
+    } = this._request.query;
+
+    let query = getUptResultsQuery;
+    const whereConditions = [];
+    const replacements = {};
+
+    if (fromDate) {
+      whereConditions.push("CAST(ur.testDate AS DATE) >= :fromDate");
+      replacements.fromDate = fromDate;
+    }
+    if (toDate) {
+      whereConditions.push("CAST(ur.testDate AS DATE) <= :toDate");
+      replacements.toDate = toDate;
+    }
+    if (branchId) {
+      whereConditions.push("ur.branchId = :branchId");
+      replacements.branchId = branchId;
+    }
+    if (cycleType) {
+      whereConditions.push("ur.cycleType = :cycleType");
+      replacements.cycleType = cycleType;
+    }
+    if (uptResult) {
+      whereConditions.push("ur.uptResult = :uptResult");
+      replacements.uptResult = uptResult;
+    }
+    if (createdByNurseId) {
+      whereConditions.push("ur.createdByNurseId = :createdByNurseId");
+      replacements.createdByNurseId = createdByNurseId;
+    }
+    if (search && String(search).trim()) {
+      whereConditions.push(`(
+        pm.patientId LIKE :search
+        OR CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) LIKE :search
+        OR pm.mobileNo LIKE :search
+        OR opm.personName LIKE :search
+      )`);
+      replacements.search = `%${String(search).trim()}%`;
+    }
+
+    if (whereConditions.length > 0) {
+      query += ` WHERE ${whereConditions.join(" AND ")}`;
+    }
+    query += ` ORDER BY ur.testDate DESC, ur.id DESC`;
+
+    return this.mysqlConnection
+      .query(query, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements
+      })
+      .catch(err => {
+        console.log("Error while getting UPT results", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+  }
+
+  async saveUptResultService() {
+    const validatedPayload = await saveUptResultSchema.validateAsync(
+      this._request.body
+    );
+
+    const testDate =
+      typeof validatedPayload.testDate === "string"
+        ? validatedPayload.testDate.slice(0, 10)
+        : dayjsSafeDate(validatedPayload.testDate);
+
+    return UptResultsMaster.create({
+      ...validatedPayload,
+      testDate
+    }).catch(err => {
+      console.log("Error while saving UPT result", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+  }
+
+  async editUptResultService() {
+    const validatedPayload = await editUptResultSchema.validateAsync(
+      this._request.body
+    );
+
+    const existing = await UptResultsMaster.findOne({
+      where: { id: validatedPayload.id }
+    }).catch(err => {
+      console.log("Error while fetching UPT result", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    if (lodash.isEmpty(existing)) {
+      throw createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const { id, ...rest } = validatedPayload;
+    const testDate =
+      typeof rest.testDate === "string"
+        ? rest.testDate.slice(0, 10)
+        : dayjsSafeDate(rest.testDate);
+
+    await UptResultsMaster.update(
+      { ...rest, testDate },
+      { where: { id } }
+    ).catch(err => {
+      console.log("Error while updating UPT result", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async deleteUptResultService() {
+    const { id } = this._request.params;
+    if (!id) {
+      throw createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "id")
+      );
+    }
+
+    const existing = await UptResultsMaster.findOne({
+      where: { id }
+    }).catch(err => {
+      console.log("Error while fetching UPT result for delete", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    if (lodash.isEmpty(existing)) {
+      throw createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    await UptResultsMaster.destroy({ where: { id } }).catch(err => {
+      console.log("Error while deleting UPT result", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
   }
 }
 

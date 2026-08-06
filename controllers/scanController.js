@@ -124,6 +124,42 @@ class ScanController {
   async downloadScanReportHandler() {
     await this._service.downloadScanReportService(this._request);
   }
+
+  async getUptResultsHandler() {
+    const data = await this._service.getUptResultsService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async saveUptResultHandler() {
+    const data = await this._service.saveUptResultService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async editUptResultHandler() {
+    const data = await this._service.editUptResultService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteUptResultHandler() {
+    const data = await this._service.deleteUptResultService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = ScanController;

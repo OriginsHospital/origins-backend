@@ -30,9 +30,56 @@ const formFTemplatesByScanAppointmentSchema = Joi.object({
   type: Joi.string().required()
 });
 
+const saveUptResultSchema = Joi.object({
+  testDate: Joi.alternatives()
+    .try(Joi.date(), Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
+    .required(),
+  branchId: Joi.number()
+    .integer()
+    .required(),
+  patientId: Joi.number()
+    .integer()
+    .required(),
+  cycleType: Joi.string()
+    .valid("IVF", "OI-TI", "IUI")
+    .required(),
+  uptResult: Joi.string()
+    .valid("Positive", "Negative")
+    .required(),
+  createdByNurseId: Joi.number()
+    .integer()
+    .required()
+});
+
+const editUptResultSchema = Joi.object({
+  id: Joi.number()
+    .integer()
+    .required(),
+  testDate: Joi.alternatives()
+    .try(Joi.date(), Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/))
+    .required(),
+  branchId: Joi.number()
+    .integer()
+    .required(),
+  patientId: Joi.number()
+    .integer()
+    .required(),
+  cycleType: Joi.string()
+    .valid("IVF", "OI-TI", "IUI")
+    .required(),
+  uptResult: Joi.string()
+    .valid("Positive", "Negative")
+    .required(),
+  createdByNurseId: Joi.number()
+    .integer()
+    .required()
+});
+
 module.exports = {
   saveScanResultSchema,
   uploadFormFForScanSchema,
   deleteFormFForScanSchema,
-  formFTemplatesByScanAppointmentSchema
+  formFTemplatesByScanAppointmentSchema,
+  saveUptResultSchema,
+  editUptResultSchema
 };
