@@ -54,6 +54,26 @@ FROM (
             ),
             '-'
         ) AS plan,
+        /* Visit type from patient visit (not appointments) */
+        COALESCE(
+            (
+                SELECT vtm.name
+                FROM patient_visits_association pva
+                INNER JOIN visit_type_master vtm ON vtm.id = pva.type
+                WHERE pva.patientId = pm.id AND pva.isActive = 1
+                ORDER BY pva.createdAt DESC
+                LIMIT 1
+            ),
+            (
+                SELECT vtm.name
+                FROM patient_visits_association pva
+                INNER JOIN visit_type_master vtm ON vtm.id = pva.type
+                WHERE pva.patientId = pm.id
+                ORDER BY pva.createdAt DESC
+                LIMIT 1
+            ),
+            '-'
+        ) AS visitType,
         COALESCE(
             (
                 SELECT DATE_FORMAT(MAX(caa.appointmentDate), '%d-%m-%Y')

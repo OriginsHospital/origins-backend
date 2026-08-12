@@ -234,8 +234,11 @@ class PatientTrackerService {
         numberOfEmbryosDiscarded: Number(row.numberOfEmbryosDiscarded) || 0,
         embryosRemaining: Number(row.embryosRemaining) || 0,
         lastRenewalDate,
-        // Prefer manually tracked cycle status when present
-        cycleStatus: row.trackerCycleStatus || null,
+        visitType: row.visitType || "-",
+        // Prefer manually tracked cycle status; else show visit type (not appointment status)
+        cycleStatus:
+          row.trackerCycleStatus ||
+          (row.visitType && row.visitType !== "-" ? row.visitType : null),
         stageOfCycle: row.trackerStageOfCycle || row.stageOfCycle || "-"
       };
     });
