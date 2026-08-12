@@ -213,6 +213,18 @@ class PatientTrackerService {
         ? formatDisplayDate(row.lastRenewalDate)
         : null;
 
+      const planHistoryRaw = parseJsonField(row.planHistory);
+      const planHistory = Array.isArray(planHistoryRaw)
+        ? planHistoryRaw
+            .filter(item => item && item.name)
+            .map(item => ({
+              name: String(item.name),
+              status: String(item.status || "Previous"),
+              isActive: Number(item.isActive) === 1,
+              date: item.date || null
+            }))
+        : [];
+
       return {
         ...row,
         referralSource: parseJsonField(row.referralSource),
@@ -235,6 +247,8 @@ class PatientTrackerService {
         embryosRemaining: Number(row.embryosRemaining) || 0,
         lastRenewalDate,
         visitType: row.visitType || "-",
+        plan: row.plan || "-",
+        planHistory,
         // Prefer manually tracked cycle status; else show visit type (not appointment status)
         cycleStatus:
           row.trackerCycleStatus ||

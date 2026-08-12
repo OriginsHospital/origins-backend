@@ -8,10 +8,10 @@ const getPatientTrackerSummaryAutomatedQuery = `
 SELECT
     base.*,
     CASE
-        WHEN base.plan = '-' OR base.plan IS NULL OR TRIM(base.plan) = '' THEN '-'
-        WHEN UPPER(TRIM(base.plan)) LIKE '%OI%TI%' OR UPPER(TRIM(base.plan)) LIKE '%TI%OI%' THEN 'OI + TI'
-        WHEN UPPER(TRIM(base.plan)) LIKE '%IUI%' THEN 'IUI'
-        WHEN UPPER(TRIM(base.plan)) LIKE '%ICSI%' THEN 'IVF'
+        WHEN base.latestTreatmentName = '-' OR base.latestTreatmentName IS NULL OR TRIM(base.latestTreatmentName) = '' THEN '-'
+        WHEN UPPER(TRIM(base.latestTreatmentName)) LIKE '%OI%TI%' OR UPPER(TRIM(base.latestTreatmentName)) LIKE '%TI%OI%' THEN 'OI + TI'
+        WHEN UPPER(TRIM(base.latestTreatmentName)) LIKE '%IUI%' THEN 'IUI'
+        WHEN UPPER(TRIM(base.latestTreatmentName)) LIKE '%ICSI%' THEN 'IVF'
         ELSE '-'
     END AS treatmentType,
     GREATEST(
@@ -33,6 +33,7 @@ FROM (
             'id', pm.referralId,
             'referralSource', COALESCE(rtm.name, '')
         ) AS referralSource,
+        /* Latest treatment name (drives Treatment Type column) */
         COALESCE(
             (
                 SELECT ttm.name
@@ -53,7 +54,93 @@ FROM (
                 LIMIT 1
             ),
             '-'
+        ) AS latestTreatmentName,
+        /* All treatment cycles incl. previous Failed / Cancelled — display string */
+        COALESCE(
+            (
+                SELECT GROUP_CONCAT(
+                    CONCAT(
+                        ttm.name,
+                        ' (',
+                        CASE
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT_NEGATIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT NEGATIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) = 'NEGATIVE'
+                                THEN 'Failed'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%CANCEL%'
+                                THEN 'Cancelled'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT_POSITIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT POSITIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) = 'POSITIVE'
+                                THEN 'Success'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%FREEZE%'
+                                THEN 'Freeze All'
+                            WHEN tt.endDate IS NOT NULL OR tt.fetEndedDate IS NOT NULL
+                                THEN 'Ended'
+                            WHEN pva.isActive = 1 THEN 'Active'
+                            ELSE 'Previous'
+                        END,
+                        ')'
+                    )
+                    ORDER BY
+                        CASE WHEN pva.isActive = 1 THEN 0 ELSE 1 END,
+                        vtca.createdAt DESC
+                    SEPARATOR ', '
+                )
+                FROM visit_treatment_cycles_associations vtca
+                INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+                INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+                LEFT JOIN treatment_timestamps tt
+                    ON tt.visitId = vtca.visitId
+                   AND tt.treatmentType = vtca.treatmentTypeId
+                WHERE pva.patientId = pm.id
+            ),
+            '-'
         ) AS plan,
+        /* Structured history for chip UI */
+        (
+            SELECT CONCAT(
+                '[',
+                GROUP_CONCAT(
+                    JSON_OBJECT(
+                        'name', ttm.name,
+                        'status',
+                        CASE
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT_NEGATIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT NEGATIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) = 'NEGATIVE'
+                                THEN 'Failed'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%CANCEL%'
+                                THEN 'Cancelled'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT_POSITIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%UPT POSITIVE%'
+                              OR UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) = 'POSITIVE'
+                                THEN 'Success'
+                            WHEN UPPER(COALESCE(tt.endedReason, tt.fetEndedReason, '')) LIKE '%FREEZE%'
+                                THEN 'Freeze All'
+                            WHEN tt.endDate IS NOT NULL OR tt.fetEndedDate IS NOT NULL
+                                THEN 'Ended'
+                            WHEN pva.isActive = 1 THEN 'Active'
+                            ELSE 'Previous'
+                        END,
+                        'isActive', pva.isActive,
+                        'date', DATE_FORMAT(vtca.createdAt, '%Y-%m-%d')
+                    )
+                    ORDER BY
+                        CASE WHEN pva.isActive = 1 THEN 0 ELSE 1 END,
+                        vtca.createdAt DESC
+                    SEPARATOR ','
+                ),
+                ']'
+            )
+            FROM visit_treatment_cycles_associations vtca
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+            INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+            LEFT JOIN treatment_timestamps tt
+                ON tt.visitId = vtca.visitId
+               AND tt.treatmentType = vtca.treatmentTypeId
+            WHERE pva.patientId = pm.id
+        ) AS planHistory,
         /* Visit type from patient visit (not appointments) */
         COALESCE(
             (
