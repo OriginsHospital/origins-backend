@@ -17,7 +17,23 @@ SELECT
     GREATEST(
         COALESCE(base.marketingPackage, 0) - COALESCE(base.paidAmount, 0),
         0
-    ) AS pendingAmount
+    ) AS pendingAmount,
+    /* Live journey: Registered → Initial Appointment → Follow up → treatment milestones */
+    CASE
+        WHEN UPPER(TRIM(COALESCE(base.uptResult, ''))) = 'POSITIVE' THEN 'UPT Positive'
+        WHEN UPPER(TRIM(COALESCE(base.uptResult, ''))) = 'NEGATIVE' THEN 'UPT Negative'
+        WHEN UPPER(TRIM(COALESCE(base.uptResult, ''))) NOT IN ('', 'OTHERS', '-')
+            AND base.uptResult IS NOT NULL THEN 'UPT'
+        WHEN base.fet IS NOT NULL AND TRIM(base.fet) != '' THEN 'FET'
+        WHEN base.fetD1 IS NOT NULL AND TRIM(base.fetD1) != '' THEN 'FET-D1'
+        WHEN base.opu IS NOT NULL AND TRIM(base.opu) != '' THEN 'OPU'
+        WHEN base.icsiD1 IS NOT NULL AND TRIM(base.icsiD1) != '' THEN 'Cycle Started'
+        WHEN base.latestTreatmentName IS NOT NULL
+            AND TRIM(base.latestTreatmentName) != ''
+            AND base.latestTreatmentName != '-' THEN 'Treatment'
+        WHEN base.appointmentStage IS NOT NULL THEN base.appointmentStage
+        ELSE 'Registered'
+    END AS stageOfCycle
 FROM (
     SELECT
         pm.id,
@@ -161,28 +177,23 @@ FROM (
             ),
             '-'
         ) AS visitType,
-        COALESCE(
-            (
-                SELECT DATE_FORMAT(MAX(caa.appointmentDate), '%d-%m-%Y')
-                FROM consultation_appointments_associations caa
-                INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
-                INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
-                WHERE pva.patientId = pm.id
-                  AND pva.isActive = 1
-                  AND vca.type = 'FollowUp Consultation'
-                  AND CAST(caa.appointmentDate AS DATE) >= CAST(CURRENT_DATE AS DATE)
-            ),
-            (
-                SELECT DATE_FORMAT(MAX(caa.appointmentDate), '%d-%m-%Y')
-                FROM consultation_appointments_associations caa
-                INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
-                INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
-                WHERE pva.patientId = pm.id
-                  AND vca.type = 'FollowUp Consultation'
-                  AND CAST(caa.appointmentDate AS DATE) >= CAST(CURRENT_DATE AS DATE)
-            ),
-            '-'
-        ) AS stageOfCycle,
+        /* Furthest consultation stage: Follow up > Initial Appointment */
+        (
+            SELECT
+                CASE
+                    WHEN SUM(CASE WHEN vca.type LIKE '%Follow%' THEN 1 ELSE 0 END) > 0
+                        THEN 'Follow up'
+                    WHEN SUM(CASE WHEN vca.type LIKE '%nitial%' THEN 1 ELSE 0 END) > 0
+                        THEN 'Initial Appointment'
+                    WHEN COUNT(caa.id) > 0
+                        THEN 'Initial Appointment'
+                    ELSE NULL
+                END
+            FROM consultation_appointments_associations caa
+            INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+            INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+            WHERE pva.patientId = pm.id
+        ) AS appointmentStage,
         COALESCE(
             pkg.activeVisitId,
             (

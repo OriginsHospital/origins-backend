@@ -253,7 +253,8 @@ class PatientTrackerService {
         cycleStatus:
           row.trackerCycleStatus ||
           (row.visitType && row.visitType !== "-" ? row.visitType : null),
-        stageOfCycle: row.trackerStageOfCycle || row.stageOfCycle || "-"
+        // Live journey stage (Registered → Initial Appointment → Follow up → treatment)
+        stageOfCycle: row.stageOfCycle || "Registered"
       };
     });
   }
