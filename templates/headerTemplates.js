@@ -35,16 +35,16 @@ const labHeaderTemplate = `
 
 const hospitalLogoTemplate = `
 <div style="display: flex; align-items: center; gap: 16px; border-bottom: 2px solid black; padding: 8px 10px; background-color: rgba(255, 255, 255, 0.8); position: relative; margin: 5px;">
-    <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; z-index: 1; width: 110px;">
-        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 100px; height: auto; display: block;">
-        <div style="font-size: 11px; margin-top: 4px; color: black; text-align: center; line-height: 1.2;">{logoText}</div>
+    <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; z-index: 1; width: 150px;">
+        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 140px; height: auto; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: high-quality; -ms-interpolation-mode: bicubic;">
+        <div style="font-size: 11px; font-weight: bold; margin-top: 4px; color: black; text-align: center; line-height: 1.2;">{logoText}</div>
     </div>
 
     <!-- Hospital Info -->
     <div style="text-align: center; flex: 1; z-index: 1; min-width: 0; padding: 0 8px;">
         <div style="font-size: 26px; font-weight: bold; color: #0073e6; margin-bottom: 4px; line-height: 1.15;">ORIGINS IVF</div>
         <div style="font-size: 14px; font-weight: bold; color: black; margin-bottom: 4px; line-height: 1.2;">{branchName}</div>
-        <div style="font-size: 11px; font-weight: normal; color: black; margin: 0 auto 4px; line-height: 1.35; max-width: 460px; word-wrap: break-word; overflow-wrap: break-word;">
+        <div style="font-size: 11px; font-weight: bold; color: black; margin: 0 auto 4px; line-height: 1.35; max-width: 460px; word-wrap: break-word; overflow-wrap: break-word;">
         {branchAddress}
         </div>
         <div style="font-size: 12px; font-weight: bold; color: black; line-height: 1.2;">Phone: {branchPhoneNumber}</div>
