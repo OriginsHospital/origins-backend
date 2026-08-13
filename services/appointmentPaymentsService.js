@@ -4199,6 +4199,10 @@ class AppointmentsPaymentService extends BaseService {
         showEmbryology: embryologyExists,
         showNotes: notesExists,
         labDetails,
+        labNames: (labDetails || [])
+          .map(lab => lab?.name)
+          .filter(Boolean)
+          .join(", "),
         scanDetails,
         pharmacyDetails,
         embryologyDetails,

@@ -159,10 +159,8 @@ const prescriptionDetailsTemplate = `
 
     <div style="width: 100%; margin-top: 10px;">
         {{#if showNotes}}
+            <h4 class="section-title">Consultation Notes</h4>
             <table class="section-table">
-                <tr>
-                    <th>Consultation Notes</th>
-                </tr>
                 <tr>
                     <td class="notes-content">{{{notesDetails}}}</td>
                 </tr>
@@ -171,13 +169,10 @@ const prescriptionDetailsTemplate = `
         {{/if}}
 
         {{#if showPharmacy}}
-            <h3 class="section-title">Pharmacy</h3>
-            <p class="prescribed-by">
-                Prescribed By: {{doctorName}}
-            </p>
+            <h3 class="section-title">Medication</h3>
             <table class="section-table">
                 <tr>
-                    <th>Medication</th>
+                    <th>Drug</th>
                     <th>Dosage</th>
                     <th>Prescribed Quantity</th>
                     <th>Purchased Quantity</th>
@@ -198,13 +193,8 @@ const prescriptionDetailsTemplate = `
             <h3 class="section-title">Labs</h3>
             <table class="section-table">
                 <tr>
-                    <th>Name</th>
+                    <td>{{labNames}}</td>
                 </tr>
-                {{#each labDetails}}
-                <tr>
-                    <td>{{this.name}}</td>
-                </tr>
-                {{/each}}
             </table>
             <hr class="divider">
         {{/if}}
