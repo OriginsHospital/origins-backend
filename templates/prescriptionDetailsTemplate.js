@@ -159,7 +159,6 @@ const prescriptionDetailsTemplate = `
 
     <div style="width: 100%; margin-top: 10px;">
         {{#if showNotes}}
-            <h4 class="section-title">Consultation Notes</h4>
             <table class="section-table">
                 <tr>
                     <th>Consultation Notes</th>
@@ -178,10 +177,10 @@ const prescriptionDetailsTemplate = `
             </p>
             <table class="section-table">
                 <tr>
-                    <th>Name</th>
+                    <th>Medication</th>
                     <th>Dosage</th>
                     <th>Prescribed Quantity</th>
-                    <th>Bought Quantity</th>
+                    <th>Purchased Quantity</th>
                 </tr>
                 {{#each pharmacyDetails}}
                 <tr>

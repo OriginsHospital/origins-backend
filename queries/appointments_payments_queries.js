@@ -1263,7 +1263,7 @@ SELECT
 						        WHEN :isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 						        ELSE pga.name
 	    					END,
-				'currentDate', CAST(NOW() AS DATE),
+				'currentDate', DATE_FORMAT(NOW(), '%d/%m/%Y'),
 				'gender', CASE 
 					        WHEN :isSpouse = 0 THEN pm.gender
 					        ELSE COALESCE(pga.gender,'')
@@ -1354,7 +1354,7 @@ SELECT
 						        WHEN :isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 						        ELSE pga.name
 	    					END,
-				'currentDate', CAST(NOW() AS DATE),
+				'currentDate', DATE_FORMAT(NOW(), '%d/%m/%Y'),
 				'gender', CASE 
 					        WHEN :isSpouse = 0 THEN pm.gender
 					        ELSE COALESCE(pga.gender,'')
