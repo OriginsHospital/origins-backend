@@ -138,7 +138,7 @@ const prescriptionDetailsTemplate = `
             <td style="width: 50%;"><span class="label">Date:</span> {{currentDate}}</td>
         </tr>
         <tr>
-            <td style="width: 50%;"><span class="label">Age:</span> {{patientAge}}</td>
+            <td style="width: 50%;"><span class="label">Age:</span> {{patientAge}} years</td>
             <td style="width: 50%;"><span class="label">Gender:</span> {{gender}}</td>
         </tr>
         <tr>
