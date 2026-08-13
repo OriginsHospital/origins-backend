@@ -93,7 +93,13 @@ WITH appointments as (
                     LIMIT 1
                 )
             END
-        ) as vitalInfo
+        ) as vitalInfo,
+        pva.id as visit_id,
+        pva.type as visitTypeId,
+        (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
+        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
+        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.isActive as visitIsActive
     FROM
         consultation_appointments_associations caa
     LEFT JOIN appointment_reason_master arm 
@@ -185,7 +191,13 @@ WITH appointments as (
                     LIMIT 1
                 )
             END
-        ) as vitalInfo
+        ) as vitalInfo,
+        pva.id as visit_id,
+        pva.type as visitTypeId,
+        (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
+        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
+        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.isActive as visitIsActive
     FROM
         treatment_appointments_associations taa
     LEFT JOIN appointment_reason_master arm 
@@ -212,7 +224,11 @@ WITH appointments as (
         caa.id as appointmentId,
         caa.appointmentDate  as appointmentDate,
         pva.id as visit_id, 
-        vtm.name as visitType, 
+        vtm.name as visitType,
+        pva.type as visitTypeId,
+        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
+        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.isActive as visitIsActive,
         caa.consultationId,
         CASE 
 	        WHEN arm.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
@@ -262,7 +278,11 @@ WITH appointments as (
         taa.id as appointmentId,
         taa.appointmentDate  as appointmentDate,
         pva.id as visit_id, 
-        vtm.name as visitType, 
+        vtm.name as visitType,
+        pva.type as visitTypeId,
+        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
+        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.isActive as visitIsActive,
         null as consultationId,
         CASE 
 	        WHEN arm.isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
@@ -430,6 +450,11 @@ WITH patientInfo AS (
 )
 select 
 pInfo.*,
+pva.type as visitTypeId,
+vtm.name as visitType,
+DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
+DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+pva.isActive as visitIsActive,
 CASE 
 	WHEN pInfo.treatmentExists = 1 THEN 
 			(
@@ -456,7 +481,9 @@ CASE
             )
         ELSE null
     END as treatmentCycleId
-from patientInfo pInfo;
+from patientInfo pInfo
+LEFT JOIN patient_visits_association pva ON pva.id = pInfo.activeVisitId
+LEFT JOIN visit_type_master vtm ON vtm.id = pva.type;
 `;
 
 const getConsultationLineBillsAndNotesQuery = `

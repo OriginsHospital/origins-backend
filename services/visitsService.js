@@ -24,7 +24,8 @@ const {
   closeVisitSchema,
   closeVisitByConsultationSchema,
   deleteDonorFileSchema,
-  saveHysteroscopySchema
+  saveHysteroscopySchema,
+  saveVisitLmpEddSchema
 } = require("../schemas/visitSchema");
 const visitConsultationsAssociations = require("../models/Associations/visitConsultationsAssociations");
 const visitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
@@ -129,6 +130,74 @@ class VisitsService {
       });
 
     return Constants.VISIT_SUCCESSFULLY_UPDATED;
+  }
+
+  async saveVisitLmpEddService() {
+    const validatedData = await saveVisitLmpEddSchema.validateAsync(
+      this._request.body
+    );
+
+    const visit = await patientVisitsAssociation
+      .findOne({ where: { id: validatedData.visitId } })
+      .catch(err => {
+        console.log("Error while fetching visit for LMP/EDD", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!visit) {
+      throw new createError.BadRequest(Constants.VISIT_DOES_NOT_EXIST);
+    }
+
+    if (!visit.isActive) {
+      throw new createError.BadRequest(
+        "LMP and EDD can only be updated while the visit is active"
+      );
+    }
+
+    const visitTypeRows = await this.mysqlConnection
+      .query(
+        `SELECT name FROM visit_type_master WHERE id = :visitTypeId LIMIT 1`,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { visitTypeId: visit.type }
+        }
+      )
+      .catch(err => {
+        console.log("Error while fetching visit type for LMP/EDD", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    const visitTypeName = String(visitTypeRows?.[0]?.name || "").toLowerCase();
+    const isAntenatal =
+      Number(visit.type) === 2 || visitTypeName.includes("antenatal");
+
+    if (!isAntenatal) {
+      throw new createError.BadRequest(
+        "LMP and EDD can only be saved for antenatal visits"
+      );
+    }
+
+    await visit
+      .update({
+        lmp: validatedData.lmp,
+        edd: validatedData.edd
+      })
+      .catch(err => {
+        console.log("Error while saving visit LMP/EDD", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return {
+      visitId: visit.id,
+      lmp: validatedData.lmp,
+      edd: validatedData.edd
+    };
   }
 
   async getVisitService() {

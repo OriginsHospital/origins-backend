@@ -1276,6 +1276,8 @@ SELECT
 				'doctorName', appointmentInformation.doctorName,
 				'visitTypeId', appointmentInformation.visitTypeId,
 				'visitTypeName', appointmentInformation.visitTypeName,
+				'visitLmp', appointmentInformation.visitLmp,
+				'visitEdd', appointmentInformation.visitEdd,
 				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
@@ -1327,6 +1329,8 @@ FROM (
 		pva.patientId,
 		pva.type as visitTypeId,
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
+		DATE_FORMAT(pva.lmp, '%d/%m/%Y') as visitLmp,
+		DATE_FORMAT(pva.edd, '%d/%m/%Y') as visitEdd,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
@@ -1367,6 +1371,8 @@ SELECT
 				'doctorName', appointmentInformation.doctorName,
 				'visitTypeId', appointmentInformation.visitTypeId,
 				'visitTypeName', appointmentInformation.visitTypeName,
+				'visitLmp', appointmentInformation.visitLmp,
+				'visitEdd', appointmentInformation.visitEdd,
 				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
@@ -1418,6 +1424,8 @@ FROM (
 		pva.patientId,
 		pva.type as visitTypeId,
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
+		DATE_FORMAT(pva.lmp, '%d/%m/%Y') as visitLmp,
+		DATE_FORMAT(pva.edd, '%d/%m/%Y') as visitEdd,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(

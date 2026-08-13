@@ -26,6 +26,12 @@ class VisitsRoute {
       tokenVerified,
       this.editVisitRoute
     );
+    this._route.put(
+      "/saveVisitLmpEdd",
+      checkActiveSession,
+      tokenVerified,
+      this.saveVisitLmpEddRoute
+    );
     this._route.get(
       "/getVisits/:patientId",
       checkActiveSession,
@@ -187,6 +193,11 @@ class VisitsRoute {
   editVisitRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new VisitsController(req, res, next);
     await controllerObj.editVisitHandler();
+  });
+
+  saveVisitLmpEddRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new VisitsController(req, res, next);
+    await controllerObj.saveVisitLmpEddHandler();
   });
 
   getVisitRoute = asyncHandler(async (req, res, next) => {

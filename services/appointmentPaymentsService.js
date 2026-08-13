@@ -4181,8 +4181,8 @@ class AppointmentsPaymentService extends BaseService {
         const fromScan = this.extractLmpEddFromScanHtml(
           latestScanResultWithLmp
         );
-        lmp = fromScan.lmp || hysteroscopyLmp || "";
-        edd = fromScan.edd || "";
+        lmp = patientDetails?.visitLmp || fromScan.lmp || hysteroscopyLmp || "";
+        edd = patientDetails?.visitEdd || fromScan.edd || "";
       }
 
       return {

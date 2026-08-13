@@ -45,6 +45,14 @@ const patientVisitsAssociation = MySqlConnection._instance.define(
     closedBy: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: true
+    },
+    lmp: {
+      type: Sequelize.DataTypes.DATEONLY,
+      allowNull: true
+    },
+    edd: {
+      type: Sequelize.DataTypes.DATEONLY,
+      allowNull: true
     }
   },
   {

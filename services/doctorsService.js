@@ -40,6 +40,9 @@ const moment = require("moment-timezone");
 const e = require("express");
 const ConsultationAppointmentAssociations = require("../models/Associations/consultationAppointmentsAssociations");
 const TreatmentAppointmentAssociations = require("../models/Associations/treatmentAppointmentAssociations");
+const {
+  checkIsFirstAppointmentInVisit
+} = require("../queries/appointments_payments_queries");
 class DoctorsService {
   constructor(request, response, next) {
     this._request = request;
@@ -515,9 +518,31 @@ class DoctorsService {
         );
       });
 
-    response["patientInfo"] = lodash.isEmpty(patientDetails)
-      ? {}
-      : patientDetails[0];
+    const patientInfo = lodash.isEmpty(patientDetails) ? {} : patientDetails[0];
+    let isFirstAppointmentInVisit = 0;
+    const { appointmentId, type } = this._request.query || {};
+    if (appointmentId && type && patientInfo?.activeVisitId) {
+      const firstAppointmentRows = await this.mysqlConnection
+        .query(checkIsFirstAppointmentInVisit, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            appointmentId,
+            type,
+            visitId: patientInfo.activeVisitId
+          }
+        })
+        .catch(err => {
+          console.log("Error while checking first appointment in visit", err);
+          return [];
+        });
+      isFirstAppointmentInVisit =
+        firstAppointmentRows?.[0]?.isFirstAppointment == 1 ? 1 : 0;
+    }
+
+    response["patientInfo"] = {
+      ...patientInfo,
+      isFirstAppointmentInVisit
+    };
     response["consultations"] = patientConsultations;
     response["treatments"] = patientTreatments;
 

@@ -23,10 +23,19 @@ class visitsController {
   }
 
   async editVisitHandler() {
-    const data = await this._service.editVisitService(this._request);
+    const data = await this._service.editVisitService();
     this._response.status(200).send({
       status: 200,
       message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async saveVisitLmpEddHandler() {
+    const data = await this._service.saveVisitLmpEddService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.DATA_UPDATED_SUCCESS,
       data: data
     });
   }
