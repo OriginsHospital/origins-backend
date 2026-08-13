@@ -4167,9 +4167,17 @@ class AppointmentsPaymentService extends BaseService {
         }
       });
 
+      const visitTypeName = String(
+        patientDetails?.visitTypeName || ""
+      ).toLowerCase();
+      const visitTypeId = Number(patientDetails?.visitTypeId);
+      const isAntenatal =
+        visitTypeId === 2 || visitTypeName.includes("antenatal");
+      const showLmpEdd = isAntenatal && !validatedPayload?.isSpouse;
+
       let lmp = "";
       let edd = "";
-      if (!validatedPayload?.isSpouse) {
+      if (showLmpEdd) {
         const fromScan = this.extractLmpEddFromScanHtml(
           latestScanResultWithLmp
         );
@@ -4181,6 +4189,7 @@ class AppointmentsPaymentService extends BaseService {
         ...patientDetails,
         lmp: lmp || "-",
         edd: edd || "-",
+        showLmpEdd,
         weight: this.formatPrescriptionWeight(patientDetails?.weight) || "-",
         bp: patientDetails?.bp || "-",
         hospitalLogoInformation: hospitalLogoHeaderTemplate,

@@ -144,24 +144,17 @@ const prescriptionDetailsTemplate = `
         <tr>
             <td colspan="2"><span class="label">Appointment Reason:</span> {{appointmentReason}}</td>
         </tr>
-    </table>
-    <hr class="divider">
-
-    <h4 class="section-title">Vital Details</h4>
-    <table class="patient-info-table">
+        {{#if showLmpEdd}}
         <tr>
             <td style="width: 50%;"><span class="label">LMP:</span> {{lmp}}</td>
             <td style="width: 50%;"><span class="label">EDD:</span> {{edd}}</td>
         </tr>
+        {{/if}}
         <tr>
             <td style="width: 50%;"><span class="label">Weight:</span> {{weight}}</td>
             <td style="width: 50%;"><span class="label">BP:</span> {{bp}}</td>
         </tr>
     </table>
-    <hr class="divider">
-
-    <h3 class="main-title">Prescription Details</h3>
-
     <hr class="divider">
 
     <div style="width: 100%; margin-top: 10px;">

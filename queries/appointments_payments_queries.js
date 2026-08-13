@@ -1274,6 +1274,8 @@ SELECT
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
 				'doctorName', appointmentInformation.doctorName,
+				'visitTypeId', appointmentInformation.visitTypeId,
+				'visitTypeName', appointmentInformation.visitTypeName,
 				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
@@ -1323,6 +1325,8 @@ FROM (
 	SELECT
 		caa.id,
 		pva.patientId,
+		pva.type as visitTypeId,
+		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
@@ -1361,6 +1365,8 @@ SELECT
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
 				'doctorName', appointmentInformation.doctorName,
+				'visitTypeId', appointmentInformation.visitTypeId,
+				'visitTypeName', appointmentInformation.visitTypeName,
 				${printPrescriptionVitalsFieldsSql}
 			) as patientDetails
 		FROM
@@ -1410,6 +1416,8 @@ FROM (
 	SELECT
 		taa.id,
 		pva.patientId,
+		pva.type as visitTypeId,
+		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(

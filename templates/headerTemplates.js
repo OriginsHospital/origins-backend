@@ -44,8 +44,8 @@ const hospitalLogoTemplate = `
     <div style="text-align: center; flex: 1; z-index: 1; min-width: 0; padding: 0 8px;">
         <div style="font-size: 26px; font-weight: bold; color: #0073e6; margin-bottom: 4px; line-height: 1.15;">ORIGINS IVF</div>
         <div style="font-size: 14px; font-weight: bold; color: black; margin-bottom: 4px; line-height: 1.2;">{branchName}</div>
-        <div style="font-size: 11px; font-weight: bold; color: black; margin: 0 auto 4px; line-height: 1.35; max-width: 460px; word-wrap: break-word; overflow-wrap: break-word;">
-        {branchAddress}
+        <div class="header-branch-address" style="font-size: 11px; font-weight: 700; color: black; margin: 0 auto 4px; line-height: 1.35; max-width: 460px; word-wrap: break-word; overflow-wrap: break-word;">
+        <strong>{branchAddress}</strong>
         </div>
         <div style="font-size: 12px; font-weight: bold; color: black; line-height: 1.2;">Phone: {branchPhoneNumber}</div>
     </div>
@@ -64,8 +64,8 @@ const hopsitalLogoTemplateForInvoice = `
         <!-- Big Title in the Middle -->
         <div style="font-size: 12px; font-weight: bold; color: #0073e6; margin-bottom: 10px;">ORIGINS IVF</div>
         <div style="font-size: 8px; font-weight: bold; color: black; margin-bottom: 5px;">{branchName}</div>
-        <div style="font-size: 7px; color: black; margin-bottom: 5px;">
-        {branchAddress}
+        <div class="header-branch-address" style="font-size: 7px; font-weight: 700; color: black; margin-bottom: 5px;">
+        <strong>{branchAddress}</strong>
         </div>
         <div style="font-size: 8px; color: black;">Phone: {branchPhoneNumber}</div>
     </div>
