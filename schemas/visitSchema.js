@@ -428,10 +428,12 @@ const saveHysteroscopySchema = Joi.object({
 const saveVisitLmpEddSchema = Joi.object({
   visitId: Joi.number().required(),
   lmp: Joi.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .trim()
+    .max(100)
     .required(),
   edd: Joi.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .trim()
+    .max(100)
     .required()
 });
 

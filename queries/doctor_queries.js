@@ -97,8 +97,8 @@ WITH appointments as (
         pva.id as visit_id,
         pva.type as visitTypeId,
         (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
-        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
-        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.lmp as lmp,
+        pva.edd as edd,
         pva.isActive as visitIsActive
     FROM
         consultation_appointments_associations caa
@@ -195,8 +195,8 @@ WITH appointments as (
         pva.id as visit_id,
         pva.type as visitTypeId,
         (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
-        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
-        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.lmp as lmp,
+        pva.edd as edd,
         pva.isActive as visitIsActive
     FROM
         treatment_appointments_associations taa
@@ -226,8 +226,8 @@ WITH appointments as (
         pva.id as visit_id, 
         vtm.name as visitType,
         pva.type as visitTypeId,
-        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
-        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.lmp as lmp,
+        pva.edd as edd,
         pva.isActive as visitIsActive,
         caa.consultationId,
         CASE 
@@ -280,8 +280,8 @@ WITH appointments as (
         pva.id as visit_id, 
         vtm.name as visitType,
         pva.type as visitTypeId,
-        DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
-        DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+        pva.lmp as lmp,
+        pva.edd as edd,
         pva.isActive as visitIsActive,
         null as consultationId,
         CASE 
@@ -452,8 +452,8 @@ select
 pInfo.*,
 pva.type as visitTypeId,
 vtm.name as visitType,
-DATE_FORMAT(pva.lmp, '%Y-%m-%d') as lmp,
-DATE_FORMAT(pva.edd, '%Y-%m-%d') as edd,
+pva.lmp as lmp,
+pva.edd as edd,
 pva.isActive as visitIsActive,
 CASE 
 	WHEN pInfo.treatmentExists = 1 THEN 

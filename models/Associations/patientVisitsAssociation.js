@@ -47,11 +47,11 @@ const patientVisitsAssociation = MySqlConnection._instance.define(
       allowNull: true
     },
     lmp: {
-      type: Sequelize.DataTypes.DATEONLY,
+      type: Sequelize.DataTypes.STRING(100),
       allowNull: true
     },
     edd: {
-      type: Sequelize.DataTypes.DATEONLY,
+      type: Sequelize.DataTypes.STRING(100),
       allowNull: true
     }
   },

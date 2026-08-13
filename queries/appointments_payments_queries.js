@@ -1329,8 +1329,8 @@ FROM (
 		pva.patientId,
 		pva.type as visitTypeId,
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
-		DATE_FORMAT(pva.lmp, '%d/%m/%Y') as visitLmp,
-		DATE_FORMAT(pva.edd, '%d/%m/%Y') as visitEdd,
+		pva.lmp as visitLmp,
+		pva.edd as visitEdd,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
@@ -1424,8 +1424,8 @@ FROM (
 		pva.patientId,
 		pva.type as visitTypeId,
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
-		DATE_FORMAT(pva.lmp, '%d/%m/%Y') as visitLmp,
-		DATE_FORMAT(pva.edd, '%d/%m/%Y') as visitEdd,
+		pva.lmp as visitLmp,
+		pva.edd as visitEdd,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
