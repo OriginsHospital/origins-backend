@@ -76,6 +76,37 @@ const toNumberOrZero = value => {
   return Number.isNaN(num) ? 0 : num;
 };
 
+const STAGE_OF_CYCLE_LABELS = new Set([
+  "Registered",
+  "Initial Appointment",
+  "Follow up",
+  "Treatment",
+  "Cycle Started",
+  "OPU",
+  "FET-D1",
+  "FET",
+  "UPT",
+  "UPT Positive",
+  "UPT Negative"
+]);
+
+const DATE_LIKE_STAGE = /^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$/;
+
+const resolveStageOfCycle = row => {
+  const raw =
+    row && row.stageOfCycle != null ? String(row.stageOfCycle).trim() : "";
+  const appointmentStage =
+    row && row.appointmentStage != null
+      ? String(row.appointmentStage).trim()
+      : "";
+
+  if (STAGE_OF_CYCLE_LABELS.has(raw)) return raw;
+  if (STAGE_OF_CYCLE_LABELS.has(appointmentStage)) return appointmentStage;
+  // Old query stored the next follow-up appointment date here
+  if (DATE_LIKE_STAGE.test(raw)) return "Follow up";
+  return "Registered";
+};
+
 const buildPayload = (body, userId, isCreate = false) => {
   const packageAmount = toNumberOrZero(body.packageAmount);
   const paidAmount = toNumberOrZero(body.paidAmount);
@@ -253,8 +284,8 @@ class PatientTrackerService {
         cycleStatus:
           row.trackerCycleStatus ||
           (row.visitType && row.visitType !== "-" ? row.visitType : null),
-        // Live journey stage (Registered → Initial Appointment → Follow up → treatment)
-        stageOfCycle: row.stageOfCycle || "Registered"
+        // Live journey stage — never return a date
+        stageOfCycle: resolveStageOfCycle(row)
       };
     });
   }

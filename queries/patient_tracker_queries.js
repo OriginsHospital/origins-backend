@@ -183,6 +183,8 @@ FROM (
                 CASE
                     WHEN SUM(CASE WHEN vca.type LIKE '%Follow%' THEN 1 ELSE 0 END) > 0
                         THEN 'Follow up'
+                    WHEN COUNT(caa.id) >= 2
+                        THEN 'Follow up'
                     WHEN SUM(CASE WHEN vca.type LIKE '%nitial%' THEN 1 ELSE 0 END) > 0
                         THEN 'Initial Appointment'
                     WHEN COUNT(caa.id) > 0
