@@ -1,8 +1,8 @@
 /**
  * Lean Patient Tracker Summary Automated query.
  * Filters by registration date (and optional branch) server-side,
- * joins package financials + maps clinical dates from package milestones,
- * OT list, treatment timestamps, and patient_tracker overlays.
+ * joins ACTIVE visit package financials + clinical dates from that package,
+ * active-visit OT list, and active-visit treatment timestamps.
  */
 const getPatientTrackerSummaryAutomatedQuery = `
 SELECT
@@ -49,7 +49,7 @@ FROM (
             'id', pm.referralId,
             'referralSource', COALESCE(rtm.name, '')
         ) AS referralSource,
-        /* Latest treatment name (drives Treatment Type column) */
+        /* Active visit treatment only (do not fall back to closed/old cycles) */
         COALESCE(
             (
                 SELECT ttm.name
@@ -57,15 +57,6 @@ FROM (
                 INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
                 INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
                 WHERE pva.patientId = pm.id AND pva.isActive = 1
-                ORDER BY vtca.createdAt DESC
-                LIMIT 1
-            ),
-            (
-                SELECT ttm.name
-                FROM visit_treatment_cycles_associations vtca
-                INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
-                INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
-                WHERE pva.patientId = pm.id
                 ORDER BY vtca.createdAt DESC
                 LIMIT 1
             ),
@@ -201,8 +192,8 @@ FROM (
             (
                 SELECT pva.id
                 FROM patient_visits_association pva
-                WHERE pva.patientId = pm.id
-                ORDER BY CASE WHEN pva.isActive = 1 THEN 0 ELSE 1 END, pva.createdAt DESC
+                WHERE pva.patientId = pm.id AND pva.isActive = 1
+                ORDER BY pva.createdAt DESC
                 LIMIT 1
             )
         ) AS activeVisitId,
@@ -225,12 +216,17 @@ FROM (
                     WHERE popa.patientId = pm.id
                       AND opom.paymentStatus = 'PAID'
                       AND LOWER(popa.appointmentReason) LIKE 'ivf package%'
+                      AND popa.createdAt >= (
+                          SELECT pva.createdAt
+                          FROM patient_visits_association pva
+                          WHERE pva.id = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
+                      )
                 ) paid
             ),
             0
         ) AS paidAmount,
 
-        /* ICSI-D1: package day1Date (ICSI types) → treatment_timestamps.startDate → tracker */
+        /* ICSI-D1 from active package / active visit only */
         COALESCE(
             NULLIF(DATE_FORMAT(pkg.day1Date, '%Y-%m-%d'), ''),
             (
@@ -240,11 +236,10 @@ FROM (
                   AND tt.startDate IS NOT NULL
                 ORDER BY tt.id DESC
                 LIMIT 1
-            ),
-            NULLIF(DATE_FORMAT(pt.icsiD1, '%Y-%m-%d'), '')
+            )
         ) AS icsiD1,
 
-        /* OPU: package pickUpDate → OT PickUp/OPU → tracker */
+        /* OPU from active package / active visit OT list only */
         COALESCE(
             NULLIF(DATE_FORMAT(pkg.pickUpDate, '%Y-%m-%d'), ''),
             (
@@ -254,17 +249,17 @@ FROM (
                     ON vtca.id = olm.treatmentCycleId
                 INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
                 WHERE pva.patientId = pm.id
+                  AND pva.isActive = 1
                   AND (
                     LOWER(REPLACE(olm.procedureName, ' ', '')) LIKE '%pickup%'
                     OR LOWER(REPLACE(olm.procedureName, ' ', '')) LIKE '%opu%'
                   )
                 ORDER BY olm.procedureDate DESC, olm.id DESC
                 LIMIT 1
-            ),
-            NULLIF(DATE_FORMAT(pt.opu, '%Y-%m-%d'), '')
+            )
         ) AS opu,
 
-        /* FET-D1: package fetDate → treatment_timestamps.fetStartDate → tracker */
+        /* FET-D1 from active package / active visit only */
         COALESCE(
             NULLIF(DATE_FORMAT(pkg.fetDate, '%Y-%m-%d'), ''),
             (
@@ -274,31 +269,24 @@ FROM (
                   AND tt.fetStartDate IS NOT NULL
                 ORDER BY tt.id DESC
                 LIMIT 1
-            ),
-            NULLIF(DATE_FORMAT(pt.fetD1, '%Y-%m-%d'), '')
+            )
         ) AS fetD1,
 
-        /* FET: treatment_timestamps.fetEndedDate → tracker */
-        COALESCE(
-            (
-                SELECT DATE_FORMAT(tt.fetEndedDate, '%Y-%m-%d')
-                FROM treatment_timestamps tt
-                WHERE tt.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
-                  AND tt.fetEndedDate IS NOT NULL
-                ORDER BY tt.id DESC
-                LIMIT 1
-            ),
-            NULLIF(DATE_FORMAT(pt.fet, '%Y-%m-%d'), '')
+        /* FET from active visit only */
+        (
+            SELECT DATE_FORMAT(tt.fetEndedDate, '%Y-%m-%d')
+            FROM treatment_timestamps tt
+            WHERE tt.visitId = COALESCE(pkg.packageVisitId, pkg.activeVisitId)
+              AND tt.fetEndedDate IS NOT NULL
+            ORDER BY tt.id DESC
+            LIMIT 1
         ) AS fet,
 
-        /* UPT: tracker first, else Positive if uptPositiveDate exists */
-        COALESCE(
-            NULLIF(pt.uptResult, ''),
-            CASE
-                WHEN pkg.uptPositiveDate IS NOT NULL THEN 'Positive'
-                ELSE NULL
-            END
-        ) AS uptResult,
+        /* UPT from active package milestone only */
+        CASE
+            WHEN pkg.uptPositiveDate IS NOT NULL THEN 'Positive'
+            ELSE NULL
+        END AS uptResult,
         pt.uptManualEntry AS uptManualEntry,
 
         COALESCE(pt.numberOfEmbryos, 0) AS numberOfEmbryos,
@@ -331,13 +319,7 @@ FROM (
         FROM (
             SELECT
                 pva.patientId,
-                (
-                    SELECT pva2.id
-                    FROM patient_visits_association pva2
-                    WHERE pva2.patientId = pva.patientId AND pva2.isActive = 1
-                    ORDER BY pva2.createdAt DESC
-                    LIMIT 1
-                ) AS activeVisitId,
+                pva.id AS activeVisitId,
                 vpa.visitId AS packageVisitId,
                 vpa.doctorSuggestedPackage,
                 vpa.marketingPackage,
@@ -348,15 +330,13 @@ FROM (
                 vpa.uptPositiveDate,
                 ROW_NUMBER() OVER (
                     PARTITION BY pva.patientId
-                    ORDER BY
-                        CASE WHEN pva.isActive = 1 THEN 0 ELSE 1 END,
-                        pva.createdAt DESC,
-                        vpa.id DESC
+                    ORDER BY pva.createdAt DESC, vpa.id DESC
                 ) AS rn
             FROM patient_visits_association pva
             INNER JOIN visit_packages_associations vpa ON vpa.visitId = pva.id
             INNER JOIN patient_master pm_pkg ON pm_pkg.id = pva.patientId
             WHERE CAST(pm_pkg.createdAt AS DATE) BETWEEN :fromDate AND :toDate
+              AND pva.isActive = 1
         ) ranked
         WHERE ranked.rn = 1
     ) pkg ON pkg.patientId = pm.id
