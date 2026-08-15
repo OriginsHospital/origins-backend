@@ -1,10 +1,22 @@
-const getDoctorsAvailabiltyListQuery = `SELECT DISTINCT
+const getDoctorsAvailabiltyListQuery = `SELECT
     cdm.id,
     cdm.userId as doctorId,
     cdm.name as doctorName,
     cdm.isActive as isActive,
     TIME_FORMAT(cdm.shiftFrom, '%H:%i') AS shiftFrom,
-    TIME_FORMAT(cdm.shiftTo, '%H:%i') AS shiftTo
+    TIME_FORMAT(cdm.shiftTo, '%H:%i') AS shiftTo,
+    COALESCE(
+      (
+        SELECT GROUP_CONCAT(DISTINCT cdba.branchId ORDER BY cdba.branchId)
+        FROM consultation_doctor_branch_association cdba
+        WHERE cdba.doctorUserId = cdm.userId
+      ),
+      (
+        SELECT GROUP_CONCAT(DISTINCT uba_fallback.branchId ORDER BY uba_fallback.branchId)
+        FROM user_branch_association uba_fallback
+        WHERE uba_fallback.userId = cdm.userId
+      )
+    ) as branchIds
 FROM
     consultation_doctor_master cdm
 INNER JOIN
@@ -12,7 +24,14 @@ INNER JOIN
 INNER JOIN
     user_branch_association uba ON u.id = uba.userId
 WHERE
-    uba.branchId IN (:branchId)`;
+    uba.branchId IN (:branchId)
+GROUP BY
+    cdm.id,
+    cdm.userId,
+    cdm.name,
+    cdm.isActive,
+    cdm.shiftFrom,
+    cdm.shiftTo`;
 
 const getAppointsmentsByDateQuery = `
 WITH appointments as (

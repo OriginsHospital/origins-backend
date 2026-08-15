@@ -8,7 +8,14 @@ const createDoctorAvailabilitySchema = Joi.object({
     .required(),
   shiftTo: Joi.string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/) // Regular expression for 24-hour format "__:__"
-    .required()
+    .required(),
+  branchIds: Joi.array()
+    .items(
+      Joi.number()
+        .integer()
+        .positive()
+    )
+    .optional()
 });
 
 const saveLabTestsPharmacyNotesSchema = Joi.object({

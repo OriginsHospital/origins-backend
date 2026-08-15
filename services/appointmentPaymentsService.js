@@ -5,6 +5,7 @@ const MySqlConnection = require("../connections/mysql_connection");
 const timeSlotGenerator = require("time-slots-generator");
 const lodash = require("lodash");
 const ConsultationAppointmentAssociationModel = require("../models/Associations/consultationAppointmentsAssociations");
+const ConsultationDoctorBranchAssociation = require("../models/Associations/consultationDoctorBranchAssociation");
 const stageConstants = require("../constants/stageConstants");
 const moment = require("moment-timezone");
 const TreatmentAppointmentAssociationModel = require("../models/Associations/treatmentAppointmentAssociations");
@@ -104,6 +105,28 @@ class AppointmentsPaymentService extends BaseService {
     this._next = next;
     this.mysqlConnection = MySqlConnection._instance;
     this.htmlTemplateGenerationObj = new GenerateHtmlTemplate();
+  }
+
+  async assertDoctorBookableAtBranch(doctorId, branchId, transaction) {
+    if (!doctorId || !branchId) {
+      return;
+    }
+    const configuredCount = await ConsultationDoctorBranchAssociation.count({
+      where: { doctorUserId: doctorId },
+      transaction
+    });
+    if (!configuredCount) {
+      return;
+    }
+    const allowed = await ConsultationDoctorBranchAssociation.findOne({
+      where: { doctorUserId: doctorId, branchId },
+      transaction
+    });
+    if (!allowed) {
+      throw new createError.BadRequest(
+        Constants.DOCTOR_NOT_AVAILABLE_AT_BRANCH
+      );
+    }
   }
 
   /*
@@ -266,6 +289,12 @@ class AppointmentsPaymentService extends BaseService {
     }
 
     return await this.mysqlConnection.transaction(async t => {
+      await this.assertDoctorBookableAtBranch(
+        payload.doctorId,
+        payload.branchId,
+        t
+      );
+
       const inputData = {
         appointmentDate: payload.date,
         consultationDoctorId: payload.doctorId,
@@ -1526,6 +1555,12 @@ class AppointmentsPaymentService extends BaseService {
     }
 
     return await this.mysqlConnection.transaction(async t => {
+      await this.assertDoctorBookableAtBranch(
+        payload.doctorId,
+        payload.branchId,
+        t
+      );
+
       const inputData = {
         appointmentDate: payload.date,
         consultationDoctorId: payload.doctorId,

@@ -5,12 +5,30 @@ select
 	cdm.name
 from
 	consultation_doctor_master cdm
-INNER JOIN user_branch_association uba on
-	uba.userId = cdm.userId
 where
-	uba.branchId in (:branchId)
-	and cdm.isActive = 1
-	and uba.userId not in (
+	cdm.isActive = 1
+	and (
+		EXISTS (
+			select 1
+			from consultation_doctor_branch_association cdba
+			where cdba.doctorUserId = cdm.userId
+				and cdba.branchId in (:branchId)
+		)
+		or (
+			NOT EXISTS (
+				select 1
+				from consultation_doctor_branch_association cdba
+				where cdba.doctorUserId = cdm.userId
+			)
+			and EXISTS (
+				select 1
+				from user_branch_association uba
+				where uba.userId = cdm.userId
+					and uba.branchId in (:branchId)
+			)
+		)
+	)
+	and cdm.userId not in (
 	select
 		bsm.doctorId
 	from

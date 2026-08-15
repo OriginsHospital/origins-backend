@@ -194,6 +194,10 @@ module.exports = {
   DOCTOR_STATUS_EDITOR_EMAIL: "nikhilsuvva@gmail.com",
   DOCTOR_STATUS_EDIT_FORBIDDEN:
     "You are not authorized to change doctor active status",
+  DOCTOR_BRANCH_EDIT_FORBIDDEN:
+    "You are not authorized to change doctor appointment branches",
+  DOCTOR_NOT_AVAILABLE_AT_BRANCH:
+    "This doctor is not available for appointments at the selected branch",
   REVENUE_NEW_ENTRY_EDIT_FORBIDDEN:
     "You are not authorized to modify revenue report entries",
   PACKAGE_EDIT_FORBIDDEN: "You are not authorized to edit patient packages"

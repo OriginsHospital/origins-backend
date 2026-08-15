@@ -14,6 +14,9 @@ const {
   saveLabTestsPharmacyNotesSchema
 } = require("../schemas/doctorSchema");
 const ConsultancyDoctorMasterModel = require("../models/Master/consultancyDoctorMaster");
+const ConsultationDoctorBranchAssociation = require("../models/Associations/consultationDoctorBranchAssociation");
+const BranchMasterModel = require("../models/Master/branchMaster");
+const { shouldReceiveAllBranches } = require("../constants/allBranchesAccess");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const { TimeSlotsService } = require("./timeSlotsService");
 const consultationAppointmentNotesAssociations = require("../models/Associations/consultationAppointmentNotesAssociations");
@@ -60,6 +63,88 @@ class DoctorsService {
     }
   }
 
+  canManageDoctorBookableBranches() {
+    const userDetails = this._request?.userDetails;
+    if (!userDetails) return false;
+    const email = (userDetails.email || "").trim().toLowerCase();
+    if (email === Constants.DOCTOR_STATUS_EDITOR_EMAIL.toLowerCase()) {
+      return true;
+    }
+    return shouldReceiveAllBranches(userDetails);
+  }
+
+  parseBranchIds(rawBranchIds) {
+    if (rawBranchIds == null || rawBranchIds === "") return [];
+    let value = rawBranchIds;
+    if (Buffer.isBuffer(value)) {
+      value = value.toString("utf8");
+    }
+    if (Array.isArray(value)) {
+      return [
+        ...new Set(
+          value
+            .map(item =>
+              item && typeof item === "object" ? Number(item.id) : Number(item)
+            )
+            .filter(id => Number.isInteger(id) && id > 0)
+        )
+      ];
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === "null") return [];
+      if (trimmed.startsWith("[")) {
+        try {
+          return this.parseBranchIds(JSON.parse(trimmed));
+        } catch (error) {
+          return [];
+        }
+      }
+      return [
+        ...new Set(
+          trimmed
+            .split(",")
+            .map(part => Number(part.trim()))
+            .filter(id => Number.isInteger(id) && id > 0)
+        )
+      ];
+    }
+    const singleId = Number(value);
+    return Number.isInteger(singleId) && singleId > 0 ? [singleId] : [];
+  }
+
+  async replaceDoctorBookableBranches(doctorId, branchIds, transaction) {
+    const uniqueBranchIds = [
+      ...new Set(
+        (branchIds || [])
+          .map(id => Number(id))
+          .filter(id => Number.isInteger(id) && id > 0)
+      )
+    ];
+    const createdBy = this._request?.userDetails?.id || null;
+
+    await ConsultationDoctorBranchAssociation.destroy({
+      where: { doctorUserId: doctorId },
+      transaction
+    });
+
+    if (!uniqueBranchIds.length) {
+      return [];
+    }
+
+    await ConsultationDoctorBranchAssociation.bulkCreate(
+      uniqueBranchIds.map(branchId => ({
+        doctorUserId: doctorId,
+        branchId,
+        createdBy,
+        updatedBy: createdBy
+      })),
+      { transaction }
+    );
+
+    return uniqueBranchIds;
+  }
+
   async createDoctorAvailabiltyService() {
     const { shiftList } = this._request.body;
 
@@ -70,7 +155,7 @@ class DoctorsService {
             let payload = await createDoctorAvailabilitySchema.validateAsync(
               shift
             );
-            const { doctorId, doctorName, ...props } = payload;
+            const { doctorId, doctorName, branchIds, ...props } = payload;
             const validatedData = {
               userId: doctorId,
               name: doctorName,
@@ -93,6 +178,15 @@ class DoctorsService {
               });
             }
 
+            if (Array.isArray(branchIds)) {
+              if (!this.canManageDoctorBookableBranches()) {
+                throw new createError.Forbidden(
+                  Constants.DOCTOR_BRANCH_EDIT_FORBIDDEN
+                );
+              }
+              await this.replaceDoctorBookableBranches(doctorId, branchIds, t);
+            }
+
             return payload;
           })
         );
@@ -100,6 +194,9 @@ class DoctorsService {
         return updatedDoctorAvailabilities;
       });
     } catch (error) {
+      if (error.status || error.statusCode) {
+        throw error;
+      }
       console.log("Error while saving doctor availabilities", error.message);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
@@ -114,21 +211,57 @@ class DoctorsService {
       }
     );
 
-    const data = await this.mysqlConnection
-      .query(getDoctorsAvailabiltyListQuery, {
-        type: Sequelize.QueryTypes.SELECT,
-        replacements: {
-          branchId: currentUserBranchId.map(branch => String(branch))
-        }
-      })
-      .catch(err => {
-        console.log("Error while getting doctorsList", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
+    const [data, allBranches] = await Promise.all([
+      this.mysqlConnection
+        .query(getDoctorsAvailabiltyListQuery, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            branchId: currentUserBranchId.map(branch => String(branch))
+          }
+        })
+        .catch(err => {
+          console.log("Error while getting doctorsList", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        }),
+      BranchMasterModel.findAll({
+        attributes: ["id", "name", "branchCode"],
+        order: [["name", "ASC"]]
+      }).catch(err => {
+        console.log(
+          "Error while getting branches for doctor availability",
+          err
         );
-      });
+        return [];
+      })
+    ]);
 
-    return data;
+    const branchById = new Map(
+      (allBranches || []).map(branch => {
+        const values = branch.dataValues || branch;
+        return [
+          Number(values.id),
+          {
+            id: Number(values.id),
+            name: values.name,
+            branchCode: values.branchCode || values.name
+          }
+        ];
+      })
+    );
+
+    return (data || []).map(row => {
+      const branchIds = this.parseBranchIds(row.branchIds);
+      const branches = branchIds
+        .map(id => branchById.get(Number(id)))
+        .filter(Boolean);
+      return {
+        ...row,
+        branches,
+        branchIds
+      };
+    });
   }
 
   async updateDoctorActiveStatusService() {
