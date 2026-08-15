@@ -86,6 +86,21 @@ const editScanSchema = Joi.object({
   amount: Joi.number().required()
 });
 
+const realignScanTemplateSchema = Joi.object({
+  scanId: Joi.number()
+    .integer()
+    .required(),
+  scanTemplate: Joi.string()
+    .allow("")
+    .required()
+});
+
+const restoreScanTemplateSchema = Joi.object({
+  scanId: Joi.number()
+    .integer()
+    .required()
+});
+
 const createEmbryologySchema = Joi.object({
   name: Joi.string()
     .max(100)
@@ -441,6 +456,8 @@ module.exports = {
   editBranchSchema,
   createScanSchema,
   editScanSchema,
+  realignScanTemplateSchema,
+  restoreScanTemplateSchema,
   createEmbryologySchema,
   editEmbryologySchema,
   saveOtDefaultPersonSchema,

@@ -285,6 +285,34 @@ WHERE pkm.isActive = 1
 ORDER BY pkm.kitName
 `;
 
+const getAllScanTemplatesQuery = `
+SELECT
+  sm.id AS scanId,
+  sm.name AS scanName,
+  sf.id AS templateId,
+  CASE WHEN sf.id IS NULL THEN 0 ELSE 1 END AS hasTemplate,
+  CASE
+    WHEN sf.id IS NULL THEN 0
+    WHEN sf.originalScanTemplate IS NULL OR sf.originalScanTemplate = '' THEN 0
+    WHEN sf.scanTemplate <=> sf.originalScanTemplate THEN 0
+    ELSE 1
+  END AS isCustomized,
+  sf.updatedBy,
+  (SELECT u.fullName FROM users u WHERE u.id = sf.updatedBy) AS updatedByName,
+  sf.updatedAt
+FROM scan_master sm
+LEFT JOIN (
+  SELECT sf1.*
+  FROM scan_formats sf1
+  INNER JOIN (
+    SELECT scanId, MAX(id) AS maxId
+    FROM scan_formats
+    GROUP BY scanId
+  ) latest ON latest.maxId = sf1.id
+) sf ON sf.scanId = sm.id
+ORDER BY sm.name
+`;
+
 module.exports = {
   getAllAppointmentReasonsQuery,
   getAllLabTestGroupQuery,
@@ -304,5 +332,6 @@ module.exports = {
   getBranchesListQuery,
   getOtDefaultPersonQuery,
   getAllPharmacyKitsQuery,
-  getActivePharmacyKitsQuery
+  getActivePharmacyKitsQuery,
+  getAllScanTemplatesQuery
 };

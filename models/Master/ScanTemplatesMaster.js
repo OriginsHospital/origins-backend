@@ -17,10 +17,23 @@ const ScanTemplatesMaster = MySqlConnection._instance.define(
     scanTemplate: {
       type: Sequelize.TEXT,
       allowNull: false
+    },
+    originalScanTemplate: {
+      type: Sequelize.TEXT("long"),
+      allowNull: true
+    },
+    updatedBy: {
+      type: Sequelize.INTEGER,
+      allowNull: true
+    },
+    updatedAt: {
+      type: Sequelize.DATE,
+      allowNull: true
     }
   },
   {
-    tableName: "scan_formats"
+    tableName: "scan_formats",
+    timestamps: false
   }
 );
 

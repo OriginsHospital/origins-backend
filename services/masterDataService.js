@@ -31,7 +31,8 @@ const {
   getAllEmbryologyQuery,
   getOtDefaultPersonQuery,
   getAllPharmacyKitsQuery,
-  getActivePharmacyKitsQuery
+  getActivePharmacyKitsQuery,
+  getAllScanTemplatesQuery
 } = require("../queries/master_data_queries");
 const {
   createLabTestGroupSchema,
@@ -58,6 +59,8 @@ const {
   editBranchSchema,
   createScanSchema,
   editScanSchema,
+  realignScanTemplateSchema,
+  restoreScanTemplateSchema,
   createEmbryologySchema,
   editEmbryologySchema,
   saveOtDefaultPersonSchema,
@@ -80,6 +83,7 @@ const BranchMasterModel = require("../models/Master/branchMaster");
 const LabTestMasterBranchAssociation = require("../models/Master/LabTestMasterBranchAssociation");
 const ScanMaster = require("../models/Master/ScanMaster");
 const ScanMasterBranchAssociation = require("../models/Master/ScanMasterBranchAssociation");
+const ScanTemplatesMaster = require("../models/Master/ScanTemplatesMaster");
 const EmbryologyMaster = require("../models/Master/EmbryologyMaster");
 const EmbryologyMasterBranchAssociation = require("../models/Master/EmbryologyMasterBranchAssociation");
 const OtPersonDefaultMasterModel = require("../models/Master/personDefaultOtMasterModel");
@@ -2381,6 +2385,211 @@ class MasterDataService {
         "Pharmacy kit quantities did not save correctly"
       );
     }
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  assertScanTemplateAdmin() {
+    const roleDetails = this._request?.userDetails?.roleDetails || {};
+    const roleId = Number(roleDetails.id);
+    const roleName = String(roleDetails.name || roleDetails.roleName || "")
+      .trim()
+      .toLowerCase();
+    const isAdmin = roleId === 1 || roleName === "admin";
+    if (!isAdmin) {
+      throw new createError.Forbidden(
+        "Only administrators can manage scan templates"
+      );
+    }
+  }
+
+  async getAllScanTemplatesService() {
+    this.assertScanTemplateAdmin();
+    const data = await this.mysqlConnection
+      .query(getAllScanTemplatesQuery, {
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting scan templates", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return data || [];
+  }
+
+  async getScanTemplateByScanIdService() {
+    this.assertScanTemplateAdmin();
+    const scanId = Number(this._request.params.scanId);
+    if (!scanId) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "scanId")
+      );
+    }
+
+    const scan = await ScanMaster.findOne({
+      where: { id: scanId },
+      attributes: ["id", "name"]
+    }).catch(err => {
+      console.log("Error while fetching scan for template", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(scan)) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const template = await ScanTemplatesMaster.findOne({
+      where: { scanId },
+      attributes: [
+        "id",
+        "scanId",
+        "scanTemplate",
+        "originalScanTemplate",
+        "updatedBy",
+        "updatedAt"
+      ],
+      order: [["id", "DESC"]]
+    }).catch(err => {
+      console.log("Error while fetching scan template", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    const currentTemplate = template?.scanTemplate || "";
+    const originalTemplate = template?.originalScanTemplate || "";
+
+    return {
+      scanId: scan.id,
+      scanName: scan.name,
+      templateId: template?.id || null,
+      scanTemplate: currentTemplate,
+      originalScanTemplate: originalTemplate,
+      hasTemplate: template ? 1 : 0,
+      isCustomized:
+        originalTemplate && currentTemplate !== originalTemplate ? 1 : 0,
+      updatedAt: template?.updatedAt || null
+    };
+  }
+
+  async realignScanTemplateService() {
+    this.assertScanTemplateAdmin();
+    const validatedPayload = await realignScanTemplateSchema.validateAsync(
+      this._request.body
+    );
+    const { scanId, scanTemplate } = validatedPayload;
+    const userId = this._request?.userDetails?.id || null;
+
+    const scan = await ScanMaster.findOne({
+      where: { id: scanId },
+      attributes: ["id"]
+    }).catch(err => {
+      console.log("Error while fetching scan for realign", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(scan)) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const existing = await ScanTemplatesMaster.findOne({
+      where: { scanId },
+      order: [["id", "DESC"]]
+    }).catch(err => {
+      console.log("Error while fetching scan template for realign", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(existing)) {
+      await ScanTemplatesMaster.create({
+        scanId,
+        scanTemplate,
+        originalScanTemplate: scanTemplate,
+        updatedBy: userId,
+        updatedAt: new Date()
+      }).catch(err => {
+        console.log("Error while creating scan template", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      return Constants.DATA_UPDATED_SUCCESS;
+    }
+
+    const originalScanTemplate =
+      existing.originalScanTemplate || existing.scanTemplate || scanTemplate;
+
+    await ScanTemplatesMaster.update(
+      {
+        scanTemplate,
+        originalScanTemplate,
+        updatedBy: userId,
+        updatedAt: new Date()
+      },
+      {
+        where: { id: existing.id }
+      }
+    ).catch(err => {
+      console.log("Error while realigning scan template", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async restoreScanTemplateService() {
+    this.assertScanTemplateAdmin();
+    const validatedPayload = await restoreScanTemplateSchema.validateAsync(
+      this._request.body
+    );
+    const { scanId } = validatedPayload;
+    const userId = this._request?.userDetails?.id || null;
+
+    const existing = await ScanTemplatesMaster.findOne({
+      where: { scanId },
+      order: [["id", "DESC"]]
+    }).catch(err => {
+      console.log("Error while fetching scan template for restore", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(existing)) {
+      throw new createError.BadRequest("No default template found to restore");
+    }
+
+    if (!existing.originalScanTemplate) {
+      throw new createError.BadRequest(
+        "Original default template is not available for restore"
+      );
+    }
+
+    await ScanTemplatesMaster.update(
+      {
+        scanTemplate: existing.originalScanTemplate,
+        updatedBy: userId,
+        updatedAt: new Date()
+      },
+      {
+        where: { id: existing.id }
+      }
+    ).catch(err => {
+      console.log("Error while restoring scan template", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
 
     return Constants.DATA_UPDATED_SUCCESS;
   }

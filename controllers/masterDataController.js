@@ -527,5 +527,41 @@ class MasterDataController {
       data: data
     });
   }
+
+  async getAllScanTemplatesController() {
+    const data = await this._service.getAllScanTemplatesService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getScanTemplateByScanIdController() {
+    const data = await this._service.getScanTemplateByScanIdService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async realignScanTemplateController() {
+    const data = await this._service.realignScanTemplateService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.DATA_UPDATED_SUCCESS,
+      data: data
+    });
+  }
+
+  async restoreScanTemplateController() {
+    const data = await this._service.restoreScanTemplateService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.DATA_UPDATED_SUCCESS,
+      data: data
+    });
+  }
 }
 module.exports = MasterDataController;

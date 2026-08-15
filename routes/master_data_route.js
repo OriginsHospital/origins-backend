@@ -406,6 +406,35 @@ class ManageMasterDataRoute {
             tokenVerified,
             this.editOtDefaultPerson
         );
+
+        // Scan Templates (admin only)
+        this._route.get(
+            "/scanTemplates/getAllScanTemplates",
+            checkActiveSession,
+            tokenVerified,
+            this.getAllScanTemplatesRoute
+        );
+
+        this._route.get(
+            "/scanTemplates/getScanTemplate/:scanId",
+            checkActiveSession,
+            tokenVerified,
+            this.getScanTemplateByScanIdRoute
+        );
+
+        this._route.post(
+            "/scanTemplates/realignScanTemplate",
+            checkActiveSession,
+            tokenVerified,
+            this.realignScanTemplateRoute
+        );
+
+        this._route.post(
+            "/scanTemplates/restoreScanTemplate",
+            checkActiveSession,
+            tokenVerified,
+            this.restoreScanTemplateRoute
+        );
     }   
     
     // Appointment Reasons
@@ -692,6 +721,26 @@ class ManageMasterDataRoute {
     editOtDefaultPerson  = asyncHandler(async (req, res, next) => {
         const controllerObj = new MasterDataController(req, res, next);
         await controllerObj.editDefaultPersonController();
+    });
+
+    getAllScanTemplatesRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getAllScanTemplatesController();
+    });
+
+    getScanTemplateByScanIdRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getScanTemplateByScanIdController();
+    });
+
+    realignScanTemplateRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.realignScanTemplateController();
+    });
+
+    restoreScanTemplateRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.restoreScanTemplateController();
     });
 }
 
