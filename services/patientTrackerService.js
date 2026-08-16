@@ -7,7 +7,8 @@ const PatientTrackerModel = require("../models/Master/patientTrackerMaster");
 const {
   createPatientTrackerSchema,
   editPatientTrackerSchema,
-  upsertEmbryologyUptSchema
+  upsertEmbryologyUptSchema,
+  upsertNotesSchema
 } = require("../schemas/patientTrackerSchema");
 const {
   getPatientTrackerSummaryAutomatedQuery
@@ -150,6 +151,10 @@ const buildPayload = (body, userId, isCreate = false) => {
     updatedBy: userId || null
   };
 
+  if (body.notes !== undefined) {
+    payload.notes = body.notes ? String(body.notes).slice(0, 5000) : null;
+  }
+
   if (isCreate) {
     payload.createdBy = userId || null;
   }
@@ -272,6 +277,7 @@ class PatientTrackerService {
         fet,
         uptResult: row.uptResult || "-",
         uptManualEntry: row.uptManualEntry || null,
+        notes: row.notes || "",
         numberOfEmbryos: Number(row.numberOfEmbryos) || 0,
         numberOfEmbryosUsed: Number(row.numberOfEmbryosUsed) || 0,
         numberOfEmbryosDiscarded: Number(row.numberOfEmbryosDiscarded) || 0,
@@ -536,6 +542,122 @@ class PatientTrackerService {
       if (/doesn't exist|ER_NO_SUCH_TABLE/i.test(dbMessage)) {
         throw new createError.InternalServerError(
           "patient_tracker table does not exist. Please run create_patient_tracker_table_simple.sql"
+        );
+      }
+      throw new createError.InternalServerError(
+        dbMessage || Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
+  }
+
+  /**
+   * Summary Automated Actions: save notes on existing tracker,
+   * or create a minimal tracker row when none exists for the patient.
+   */
+  async upsertNotesService() {
+    const body = { ...this._request.body };
+    if (body.treatmentType) {
+      body.treatmentType = normalizeTreatmentType(body.treatmentType);
+    }
+    if (body.mobileNumber != null && body.mobileNumber !== "") {
+      body.mobileNumber = String(body.mobileNumber).slice(0, 15);
+    }
+    if (body.branchId != null && body.branchId !== "") {
+      body.branchId = Number(body.branchId);
+    }
+
+    const validated = await upsertNotesSchema.validateAsync(body);
+    const userId = this._request?.userDetails?.id || null;
+    const notes =
+      validated.notes != null && String(validated.notes).trim() !== ""
+        ? String(validated.notes).slice(0, 5000)
+        : null;
+
+    let existing = null;
+    try {
+      existing = await PatientTrackerModel.findOne({
+        where: { patientId: validated.patientId },
+        order: [["updatedAt", "DESC"], ["id", "DESC"]]
+      });
+    } catch (err) {
+      console.log("Error while finding tracker for notes upsert", err);
+      throw new createError.InternalServerError(
+        err?.original?.message ||
+          err?.message ||
+          Constants.SOMETHING_ERROR_OCCURRED
+      );
+    }
+
+    if (existing) {
+      try {
+        await existing.update({ notes, updatedBy: userId });
+        return existing;
+      } catch (err) {
+        console.log("Error while updating tracker notes", err);
+        const dbMessage = err?.original?.message || err?.message || "";
+        if (/Unknown column.*notes/i.test(dbMessage)) {
+          throw new createError.InternalServerError(
+            "Patient tracker table is missing the notes column. Please run alter_patient_tracker_add_notes.sql"
+          );
+        }
+        throw new createError.InternalServerError(
+          dbMessage || Constants.SOMETHING_ERROR_OCCURRED
+        );
+      }
+    }
+
+    const resolvedBranchId =
+      validated.branchId || resolveBranchId(validated.branch);
+    if (!validated.patientName || !resolvedBranchId) {
+      throw new createError.BadRequest(
+        "patientName and branch are required to save notes for a new tracker entry"
+      );
+    }
+
+    const parseDisplayDate = value => {
+      if (!value) return new Date();
+      const asString = String(value).trim();
+      const dmy = asString.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+      if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+      return new Date();
+    };
+
+    const treatmentType =
+      normalizeTreatmentType(validated.treatmentType) || "IVF";
+    const cycleStatus = validated.cycleStatus || "Registered";
+
+    const createPayload = {
+      date: parseDisplayDate(validated.date),
+      branchId: Number(resolvedBranchId),
+      patientId: validated.patientId,
+      patientName: String(validated.patientName).slice(0, 255),
+      mobileNumber: validated.mobileNumber
+        ? String(validated.mobileNumber).slice(0, 15)
+        : null,
+      treatmentType,
+      cycleStatus,
+      notes,
+      packageAmount: 0,
+      registrationAmount: 0,
+      paidAmount: 0,
+      pendingAmount: 0,
+      createdBy: userId,
+      updatedBy: userId
+    };
+
+    try {
+      const created = await PatientTrackerModel.create(createPayload, {
+        fields: Object.keys(createPayload)
+      });
+      return created;
+    } catch (err) {
+      console.log("Error while creating tracker from notes entry", err);
+      const dbMessage = err?.original?.message || err?.message || "";
+      if (/Unknown column.*notes/i.test(dbMessage)) {
+        throw new createError.InternalServerError(
+          "Patient tracker table is missing the notes column. Please run alter_patient_tracker_add_notes.sql"
         );
       }
       throw new createError.InternalServerError(

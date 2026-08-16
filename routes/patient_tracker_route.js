@@ -55,6 +55,13 @@ class PatientTrackerRoute {
       tokenVerified,
       this.upsertEmbryologyUptRoute
     );
+
+    this._route.put(
+      "/notes",
+      checkActiveSession,
+      tokenVerified,
+      this.upsertNotesRoute
+    );
   }
 
   getAllPatientTrackerRoute = asyncHandler(async (req, res, next) => {
@@ -85,6 +92,11 @@ class PatientTrackerRoute {
   upsertEmbryologyUptRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientTrackerController(req, res, next);
     await controllerObj.upsertEmbryologyUptHandler();
+  });
+
+  upsertNotesRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientTrackerController(req, res, next);
+    await controllerObj.upsertNotesHandler();
   });
 }
 

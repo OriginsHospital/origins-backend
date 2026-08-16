@@ -101,6 +101,10 @@ const trackerBodySchema = {
   uptManualEntry: Joi.string()
     .max(255)
     .allow(null, "")
+    .optional(),
+  notes: Joi.string()
+    .max(5000)
+    .allow(null, "")
     .optional()
 };
 
@@ -174,8 +178,48 @@ const upsertEmbryologyUptSchema = Joi.object({
     .optional()
 });
 
+/** Upsert free-text notes from Summary Automated Actions column */
+const upsertNotesSchema = Joi.object({
+  patientId: Joi.string()
+    .max(100)
+    .required(),
+  notes: Joi.string()
+    .max(5000)
+    .allow(null, "")
+    .optional(),
+  patientName: Joi.string()
+    .max(255)
+    .allow(null, "")
+    .optional(),
+  branchId: Joi.number()
+    .integer()
+    .allow(null)
+    .optional(),
+  branch: Joi.string()
+    .max(50)
+    .allow(null, "")
+    .optional(),
+  mobileNumber: Joi.alternatives()
+    .try(Joi.string().max(15), Joi.number())
+    .allow(null, "")
+    .optional(),
+  date: Joi.alternatives()
+    .try(Joi.date(), Joi.string().max(32))
+    .allow(null, "")
+    .optional(),
+  treatmentType: Joi.string()
+    .valid(...treatmentTypeValues)
+    .allow(null, "")
+    .optional(),
+  cycleStatus: Joi.string()
+    .valid(...cycleStatusValues)
+    .allow(null, "")
+    .optional()
+});
+
 module.exports = {
   createPatientTrackerSchema,
   editPatientTrackerSchema,
-  upsertEmbryologyUptSchema
+  upsertEmbryologyUptSchema,
+  upsertNotesSchema
 };

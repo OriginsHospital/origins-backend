@@ -132,6 +132,10 @@ const PatientTrackerModel = MySqlConnection._instance.define(
       type: Sequelize.DataTypes.STRING(255),
       allowNull: true
     },
+    notes: {
+      type: Sequelize.DataTypes.TEXT,
+      allowNull: true
+    },
     createdBy: {
       type: Sequelize.DataTypes.INTEGER,
       allowNull: true

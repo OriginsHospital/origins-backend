@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS patient_tracker (
     -- UPT Result
     uptResult ENUM('Positive', 'Negative', 'Others') COMMENT 'UPT test result',
     uptManualEntry VARCHAR(255) COMMENT 'Manual entry for UPT result when "Others" is selected',
+    notes TEXT COMMENT 'Free-text tracker notes',
     
     -- Audit Fields
     createdBy INT COMMENT 'User ID who created this record',

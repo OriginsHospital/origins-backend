@@ -34,6 +34,17 @@ const mysql = require("mysql2/promise");
     console.log("alter clinical fields:", e.message);
   }
 
+  const notesSql = fs.readFileSync(
+    path.join(__dirname, "../database/alter_patient_tracker_add_notes.sql"),
+    "utf8"
+  );
+  try {
+    await conn.query(notesSql);
+    console.log("alter notes: applied");
+  } catch (e) {
+    console.log("alter notes:", e.message);
+  }
+
   const [tables] = await conn.query("SHOW TABLES LIKE 'patient_tracker'");
   console.log("table exists:", tables.length > 0);
   const [cols] = await conn.query("SHOW COLUMNS FROM patient_tracker");

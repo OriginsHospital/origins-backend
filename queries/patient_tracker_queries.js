@@ -300,6 +300,7 @@ FROM (
             )
         ) AS embryosRemaining,
         pt.lastRenewalDate AS lastRenewalDate,
+        COALESCE(lastApptNotes.notes, '') AS notes,
         pt.cycleStatus AS trackerCycleStatus,
         pt.stageOfCycle AS trackerStageOfCycle
     FROM patient_master pm
@@ -349,6 +350,36 @@ FROM (
             GROUP BY patientId
         ) latest ON latest.maxId = pt1.id
     ) pt ON pt.patientId COLLATE utf8mb4_unicode_ci = pm.patientId COLLATE utf8mb4_unicode_ci
+    LEFT JOIN (
+        SELECT
+            latest.patientId,
+            (
+                SELECT cana.notes
+                FROM consultation_appointment_notes_associations cana
+                WHERE cana.appointmentId = latest.appointmentId
+                  AND COALESCE(cana.isSpouse, 0) = 0
+                ORDER BY cana.id DESC
+                LIMIT 1
+            ) AS notes
+        FROM (
+            SELECT
+                pva.patientId,
+                caa.id AS appointmentId,
+                ROW_NUMBER() OVER (
+                    PARTITION BY pva.patientId
+                    ORDER BY caa.appointmentDate DESC, caa.id DESC
+                ) AS rn
+            FROM consultation_appointments_associations caa
+            INNER JOIN visit_consultations_associations vca
+                ON vca.id = caa.consultationId
+            INNER JOIN patient_visits_association pva
+                ON pva.id = vca.visitId
+            INNER JOIN patient_master pm_n
+                ON pm_n.id = pva.patientId
+            WHERE CAST(pm_n.createdAt AS DATE) BETWEEN :fromDate AND :toDate
+        ) latest
+        WHERE latest.rn = 1
+    ) lastApptNotes ON lastApptNotes.patientId = pm.id
     WHERE CAST(pm.createdAt AS DATE) BETWEEN :fromDate AND :toDate
       {branchFilter}
 ) base
