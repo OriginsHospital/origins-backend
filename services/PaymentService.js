@@ -989,6 +989,19 @@ class PaymentService extends BaseService {
       : null;
   }
 
+  normalizeAppointmentType(value) {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (normalized === "treatment") {
+      return "Treatment";
+    }
+    if (normalized === "consultation") {
+      return "Consultation";
+    }
+    return value;
+  }
+
   async generatePatientHeaderInformationForInvoice(
     appointmentId,
     type,
@@ -1242,9 +1255,10 @@ class PaymentService extends BaseService {
       }
 
       let query = null;
-      if (type == "Consultation") {
+      const normalizedType = String(type || "").toLowerCase();
+      if (normalizedType === "consultation") {
         query = pharmacyConsultationProductTable;
-      } else if (type == "Treatment") {
+      } else if (normalizedType === "treatment") {
         query = pharmacyTreatmentProductTable;
       }
 
@@ -1259,6 +1273,19 @@ class PaymentService extends BaseService {
             refId: refIds.map(id => String(id))
           }
         });
+
+        if (lodash.isEmpty(itemInfo) || !itemInfo[0]?.itemInfo) {
+          const fallbackQuery =
+            query === pharmacyTreatmentProductTable
+              ? pharmacyConsultationProductTable
+              : pharmacyTreatmentProductTable;
+          itemInfo = await this.mySqlConnection.query(fallbackQuery, {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: {
+              refId: refIds.map(id => String(id))
+            }
+          });
+        }
 
         if (!lodash.isEmpty(itemInfo) && itemInfo[0]?.itemInfo) {
           itemInfo = itemInfo[0];
@@ -1377,7 +1404,7 @@ class PaymentService extends BaseService {
 
     const resolvedId = this.toPositiveInteger(id);
     let resolvedAppointmentId = this.toPositiveInteger(appointmentId);
-    let resolvedType = type;
+    let resolvedType = this.normalizeAppointmentType(type);
     let orderDetails = null;
     let isTreatmentOrder = false;
 
@@ -1398,7 +1425,9 @@ class PaymentService extends BaseService {
         resolvedAppointmentId =
           this.toPositiveInteger(orderDetails.appointmentId) ||
           resolvedAppointmentId;
-        resolvedType = orderDetails.type || resolvedType;
+        resolvedType = this.normalizeAppointmentType(
+          orderDetails.type || resolvedType
+        );
       }
     }
 
@@ -1417,6 +1446,26 @@ class PaymentService extends BaseService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+      if (lodash.isEmpty(orderDetails)) {
+        orderDetails = await OrderDetailsMasterModel.findOne({
+          where: {
+            appointmentId: resolvedAppointmentId,
+            productType: productType
+          },
+          order: [["id", "DESC"]]
+        }).catch(err => {
+          console.log("Error while fetching order details without type", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+        if (!lodash.isEmpty(orderDetails)) {
+          resolvedType = this.normalizeAppointmentType(
+            orderDetails.type || resolvedType
+          );
+        }
+      }
     }
 
     if (lodash.isEmpty(orderDetails) && !resolvedAppointmentId) {

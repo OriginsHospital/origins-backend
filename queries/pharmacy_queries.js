@@ -58,7 +58,7 @@ pharmacy_paid_orders AS (
 	) jt ON 1 = 1
 	WHERE odm.productType = 'PHARMACY'
 		AND odm.paymentStatus = 'PAID'
-		AND odm.type IN ('Consultation', 'Treatment')
+		AND LOWER(odm.type) IN ('consultation', 'treatment')
 		AND (
 			jt.refId IN (SELECT lineId FROM consultation_line_ids)
 			OR jt.refId IN (SELECT lineId FROM treatment_line_ids)
@@ -151,7 +151,7 @@ LEFT JOIN patient_guardian_associations pga ON pga.patientId = pm.id
 LEFT JOIN consultation_doctor_master cdm ON cdm.userId = caa.consultationDoctorId
 LEFT JOIN stockmanagement.item_master sm ON sm.id = calba.billTypeValue
 LEFT JOIN branch_item_stock bis ON bis.itemId = calba.billTypeValue AND bis.branchId = caa.branchId
-LEFT JOIN pharmacy_order_details pod ON pod.refId = calba.id AND pod.type = 'Consultation'
+LEFT JOIN pharmacy_order_details pod ON pod.refId = calba.id AND LOWER(pod.type) = 'consultation'
 LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
 	ON ppdt.refId = calba.id AND ppdt.type = 'Consultation'
 LEFT JOIN purchase_non_reason pnr ON pnr.refId = calba.id AND pnr.type = 'Consultation'
@@ -219,7 +219,7 @@ LEFT JOIN patient_guardian_associations pga ON pga.patientId = pm.id
 LEFT JOIN consultation_doctor_master cdm ON cdm.userId = taa.consultationDoctorId
 LEFT JOIN stockmanagement.item_master sm ON sm.id = talba.billTypeValue
 LEFT JOIN branch_item_stock bis ON bis.itemId = talba.billTypeValue AND bis.branchId = taa.branchId
-LEFT JOIN pharmacy_order_details pod ON pod.refId = talba.id AND pod.type = 'Treatment'
+LEFT JOIN pharmacy_order_details pod ON pod.refId = talba.id AND LOWER(pod.type) = 'treatment'
 LEFT JOIN stockmanagement.pharmacy_purchase_details_temp ppdt
 	ON ppdt.refId = talba.id AND ppdt.type = 'Treatment'
 LEFT JOIN purchase_non_reason pnr ON pnr.refId = talba.id AND pnr.type = 'Treatment'
