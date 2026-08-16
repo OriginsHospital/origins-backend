@@ -1,4 +1,5 @@
 const MasterDataService = require("../services/masterDataService");
+const MasterDataCloneService = require("../services/masterDataCloneService");
 const Constants = require("../constants/constants");
 
 class MasterDataController {
@@ -560,6 +561,26 @@ class MasterDataController {
     this._response.status(200).send({
       status: 200,
       message: Constants.DATA_UPDATED_SUCCESS,
+      data: data
+    });
+  }
+
+  async previewCloneMasterDataController() {
+    const cloneService = new MasterDataCloneService(this._request);
+    const data = await cloneService.previewCloneMasterData();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async cloneMasterDataController() {
+    const cloneService = new MasterDataCloneService(this._request);
+    const data = await cloneService.cloneMasterData();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.CLONE_MASTER_DATA_SUCCESS,
       data: data
     });
   }

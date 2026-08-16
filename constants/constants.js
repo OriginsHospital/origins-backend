@@ -200,5 +200,8 @@ module.exports = {
     "This doctor is not available for appointments at the selected branch",
   REVENUE_NEW_ENTRY_EDIT_FORBIDDEN:
     "You are not authorized to modify revenue report entries",
-  PACKAGE_EDIT_FORBIDDEN: "You are not authorized to edit patient packages"
+  PACKAGE_EDIT_FORBIDDEN: "You are not authorized to edit patient packages",
+  CLONE_SOURCE_TARGET_SAME: "Source and target branches must be different",
+  CLONE_TYPES_REQUIRED: "Select at least one type of data to clone",
+  CLONE_MASTER_DATA_SUCCESS: "Master data cloned successfully"
 };

@@ -431,6 +431,31 @@ const editPharmacyKitSchema = Joi.object({
   isActive: Joi.number().required()
 });
 
+const ALLOWED_CLONE_TYPES = [
+  "labTests",
+  "scans",
+  "embryology",
+  "defaultOtPersons",
+  "appointmentCharges",
+  "layouts"
+];
+
+const cloneMasterDataSchema = Joi.object({
+  sourceBranchId: Joi.number()
+    .integer()
+    .required(),
+  targetBranchId: Joi.number()
+    .integer()
+    .required(),
+  cloneTypes: Joi.array()
+    .items(Joi.string().valid(...ALLOWED_CLONE_TYPES))
+    .min(1)
+    .required(),
+  overwriteExisting: Joi.boolean()
+    .optional()
+    .default(false)
+});
+
 module.exports = {
   createLabTestGroupSchema,
   createLabTestSampleTypeSchema,
@@ -463,5 +488,7 @@ module.exports = {
   saveOtDefaultPersonSchema,
   editOtDefaultPersonSchema,
   createPharmacyKitSchema,
-  editPharmacyKitSchema
+  editPharmacyKitSchema,
+  cloneMasterDataSchema,
+  ALLOWED_CLONE_TYPES
 };

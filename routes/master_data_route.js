@@ -435,6 +435,20 @@ class ManageMasterDataRoute {
             tokenVerified,
             this.restoreScanTemplateRoute
         );
+
+        this._route.post(
+            "/clone/preview",
+            checkActiveSession,
+            tokenVerified,
+            this.previewCloneMasterDataRoute
+        );
+
+        this._route.post(
+            "/clone",
+            checkActiveSession,
+            tokenVerified,
+            this.cloneMasterDataRoute
+        );
     }   
     
     // Appointment Reasons
@@ -741,6 +755,16 @@ class ManageMasterDataRoute {
     restoreScanTemplateRoute = asyncHandler(async (req, res, next) => {
         const controllerObj = new MasterDataController(req, res, next);
         await controllerObj.restoreScanTemplateController();
+    });
+
+    previewCloneMasterDataRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.previewCloneMasterDataController();
+    });
+
+    cloneMasterDataRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.cloneMasterDataController();
     });
 }
 
