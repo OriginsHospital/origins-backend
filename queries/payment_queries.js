@@ -20,12 +20,6 @@ select CAST(NOW() as DATE) as currentDate,
     ) as paymentBreakUp
     from 
     order_details_master odm 
-    INNER JOIN consultation_appointments_associations caa  on caa.id = odm.appointmentId 
-    INNER JOIN appointment_reason_master arm on arm.id = caa.appointmentReasonId
-    INNER JOIN visit_consultations_associations vca on vca.id = caa.consultationId 
-    INNER JOIN patient_visits_association pva on pva.id = vca.visitId 
-    INNER JOIN patient_master pm on pm.id = pva.patientId 
-    LEFT  JOIN patient_guardian_associations pga on pga.patientId  = pm.id
     where odm.appointmentId  = :appointmentId and odm.productType = :productType and odm.type = 'Consultation'
 `;
 const invoiceForTreatementAppointmentsQuery = `
@@ -50,13 +44,32 @@ select CAST(NOW() as DATE) as currentDate,
     ) as paymentBreakUp
     from 
     order_details_master odm 
-    INNER JOIN treatment_appointments_associations taa  on taa.id = odm.appointmentId 
-    INNER JOIN appointment_reason_master arm on arm.id = taa.appointmentReasonId
-    INNER JOIN visit_treatment_cycles_associations vtca on vtca.id = taa.treatmentCycleId  
-    INNER JOIN patient_visits_association pva on pva.id = vtca.visitId 
-    INNER JOIN patient_master pm on pm.id = pva.patientId 
-    LEFT  JOIN patient_guardian_associations pga on pga.patientId  = pm.id
     where odm.appointmentId  =  :appointmentId and odm.productType = :productType and odm.type = 'Treatment'
+`;
+
+const invoiceByOrderDbIdQuery = `
+select CAST(NOW() as DATE) as currentDate,
+    JSON_OBJECT(
+        'orderNo', odm.orderId ,
+        'transactionNo', IFNULL(odm.transactionId,'') ,
+        'paymentStatus', odm.paymentStatus ,
+        'paymentMode', odm.paymentMode,
+        'splitPaymentSummary', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(odm.orderDetails, '$[0].splitPaymentSummary')), ''),
+        'splitCashAmount', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(odm.orderDetails, '$[0].splitPayment.cashAmount')), ''),
+        'splitUpiAmount', IFNULL(JSON_UNQUOTE(JSON_EXTRACT(odm.orderDetails, '$[0].splitPayment.upiAmount')), ''),
+        'isOnlineMode', CASE WHEN odm.paymentMode IN ('ONLINE', 'UPI') THEN TRUE ELSE FALSE END,
+        'isCashMode', CASE WHEN odm.paymentMode = 'CASH' THEN TRUE ELSE FALSE END,
+        'orderDate', CAST(odm.orderDate as DATE)
+    ) as orderDetails,
+    JSON_OBJECT(
+        'totalAmount', odm.totalOrderAmount ,
+        'paidAmount', odm.paidOrderAmount,
+        'discount', odm.discountAmount,
+        'gst', 0
+    ) as paymentBreakUp
+    from 
+    order_details_master odm 
+    where odm.id = :id and odm.productType = :productType
 `;
 
 const invoiceForTreatmentOrdersMileStoneQuery = `
@@ -590,7 +603,7 @@ SELECT
 ) as patientInformation
 FROM
 	consultation_appointments_associations caa 
-    INNER JOIN appointment_reason_master arm on arm.id = caa.appointmentReasonId
+    LEFT JOIN appointment_reason_master arm on arm.id = caa.appointmentReasonId
     INNER JOIN visit_consultations_associations vca on vca.id = caa.consultationId 
     INNER JOIN patient_visits_association pva on pva.id = vca.visitId 
     INNER JOIN patient_master pm on pm.id = pva.patientId 
@@ -621,7 +634,7 @@ SELECT
 ) as patientInformation
 FROM
 	treatment_appointments_associations taa
-    INNER JOIN appointment_reason_master arm on arm.id = taa.appointmentReasonId
+    LEFT JOIN appointment_reason_master arm on arm.id = taa.appointmentReasonId
     INNER JOIN visit_treatment_cycles_associations vtca on vtca.id = taa.treatmentCycleId  
     INNER JOIN patient_visits_association pva on pva.id = vtca.visitId 
     INNER JOIN patient_master pm on pm.id = pva.patientId 
@@ -956,6 +969,7 @@ WHERE ppr.orderId = :orderId;
 module.exports = {
   invoiceForConsultationAppointmentsQuery,
   invoiceForTreatementAppointmentsQuery,
+  invoiceByOrderDbIdQuery,
   pharmacyConsultationProductTable,
   pharmacyTreatmentProductTable,
   patientItemReturnConsultationQuery,

@@ -24,6 +24,7 @@ const GrnItemsAssociationsModel = require("../models/Associations/grnItemsAssoci
 const {
   invoiceForConsultationAppointmentsQuery,
   invoiceForTreatementAppointmentsQuery,
+  invoiceByOrderDbIdQuery,
   pharmacyConsultationProductTable,
   pharmacyTreatmentProductTable,
   patientItemReturnConsultationQuery,
@@ -962,6 +963,32 @@ class PaymentService extends BaseService {
     return details;
   };
 
+  parseJsonArray(value) {
+    if (!value) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (typeof value === "object") {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.log("Error parsing JSON array for invoice", err);
+      return [];
+    }
+  }
+
+  toPositiveInteger(value) {
+    const numericValue = Number(value);
+    return Number.isInteger(numericValue) && numericValue > 0
+      ? numericValue
+      : null;
+  }
+
   async generatePatientHeaderInformationForInvoice(
     appointmentId,
     type,
@@ -1169,12 +1196,9 @@ class PaymentService extends BaseService {
     orderId
   ) {
     const purchaseDetails = await OrderDetailsMasterModel.findOne({
-      where: {
-        appointmentId: appointmentId,
-        type: type,
-        productType: productType,
-        orderId: orderId
-      }
+      where: orderId
+        ? { orderId, productType }
+        : { appointmentId, type, productType }
     }).catch(err => {
       console.log("Error whole getting the details", err);
       throw new createError.InternalServerError(
@@ -1184,10 +1208,38 @@ class PaymentService extends BaseService {
     if (productType == "PHARMACY") {
       // PHARMACY HANDLED DIFFERENYLY AS ITEM COST IS BASED ON THE GRN , IT IS AVAILABLE IN ORDER DETAILS
       // WE NEED PRESCIBED AND PURCHASE QUANTITY IN PHARMACY
-      let orderDetails = JSON.parse(purchaseDetails?.orderDetails);
-      let refIds = orderDetails.map(each => {
-        return each.refId;
-      });
+      const orderDetails = this.parseJsonArray(purchaseDetails?.orderDetails);
+      const buildFallbackProductTable = async () => {
+        return Promise.all(
+          orderDetails.map(async (info, index) => {
+            const purchaseQty = Array.isArray(info?.purchaseDetails)
+              ? info.purchaseDetails.reduce(
+                  (sum, detail) => sum + Number(detail.usedQuantity || 0),
+                  0
+                )
+              : Number(info?.prescribed || 0);
+            return {
+              serialNumber: index + 1,
+              itemName: info.itemName || "Pharmacy Item",
+              batchNo: await this.resolveBatchNumbersForInvoice(
+                info?.purchaseDetails
+              ),
+              presQty: info.prescribed || info.prescribedQuantity || "",
+              purcQty: purchaseQty || info.prescribed || "",
+              totalCost:
+                info.totalCost != null ? `Rs. ${info.totalCost}` : "N/A",
+              prescribedTo:
+                info.prescribedTo === "SPOUSE" || info.isSpouse == 1
+                  ? "SPOUSE"
+                  : "PATIENT"
+            };
+          })
+        );
+      };
+
+      if (lodash.isEmpty(orderDetails)) {
+        return [];
+      }
 
       let query = null;
       if (type == "Consultation") {
@@ -1196,35 +1248,46 @@ class PaymentService extends BaseService {
         query = pharmacyTreatmentProductTable;
       }
 
-      let itemInfo = await this.mySqlConnection.query(query, {
-        type: Sequelize.QueryTypes.SELECT,
-        replacements: {
-          refId: refIds.map(id => String(id))
-        }
-      });
+      const refIds = orderDetails
+        .map(each => each.refId)
+        .filter(refId => refId != null && String(refId).trim() !== "");
 
-      if (!lodash.isEmpty(itemInfo)) {
-        itemInfo = itemInfo[0];
-        const orderData = await Promise.all(
-          (itemInfo?.itemInfo || []).map(async (info, index) => {
-            const costInfo = orderDetails.find(
-              details => details.refId == info.refId
-            );
-            return {
-              serialNumber: index + 1,
-              itemName: info.itemName,
-              batchNo: await this.resolveBatchNumbersForInvoice(
-                costInfo?.purchaseDetails
-              ),
-              presQty: info.prescribedQuantity,
-              purcQty: info.purchaseQuantity,
-              totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
-              prescribedTo: info?.prescribedTo
-            };
-          })
-        );
-        return orderData;
+      if (query && refIds.length > 0) {
+        let itemInfo = await this.mySqlConnection.query(query, {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: {
+            refId: refIds.map(id => String(id))
+          }
+        });
+
+        if (!lodash.isEmpty(itemInfo) && itemInfo[0]?.itemInfo) {
+          itemInfo = itemInfo[0];
+          const orderData = await Promise.all(
+            (itemInfo?.itemInfo || []).map(async (info, index) => {
+              const costInfo = orderDetails.find(
+                details => details.refId == info.refId
+              );
+              return {
+                serialNumber: index + 1,
+                itemName: info.itemName,
+                batchNo: await this.resolveBatchNumbersForInvoice(
+                  costInfo?.purchaseDetails
+                ),
+                presQty: info.prescribedQuantity,
+                purcQty: info.purchaseQuantity,
+                totalCost: costInfo ? `Rs. ${costInfo.totalCost}` : "N/A",
+                prescribedTo:
+                  info?.prescribedTo === "SPOUSE" ? "SPOUSE" : "PATIENT"
+              };
+            })
+          );
+          if (orderData.length > 0) {
+            return orderData;
+          }
+        }
       }
+
+      return buildFallbackProductTable();
     } else if (
       ["LAB TEST", "SCAN", "EMBRYOLOGY", "CONSULTATION FEE"].includes(
         productType
@@ -1312,35 +1375,56 @@ class PaymentService extends BaseService {
       id
     } = await invoiceSchema.validateAsync(this._request.body);
 
+    const resolvedId = this.toPositiveInteger(id);
+    let resolvedAppointmentId = this.toPositiveInteger(appointmentId);
+    let resolvedType = type;
     let orderDetails = null;
     let isTreatmentOrder = false;
-    // For Invoice Sepearate Function to generate A5 Size Header
-    const hospitalLogoHeaderTemplate = await this.hospitalLogoHeaderTemplateForInvoice(
-      appointmentId,
-      type,
-      id
-    );
 
-    if (appointmentId) {
+    if (resolvedId) {
+      orderDetails = await OrderDetailsMasterModel.findOne({
+        where: {
+          id: resolvedId,
+          productType: productType
+        }
+      }).catch(err => {
+        console.log("Error while fetching order details by id", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (!lodash.isEmpty(orderDetails)) {
+        resolvedAppointmentId =
+          this.toPositiveInteger(orderDetails.appointmentId) ||
+          resolvedAppointmentId;
+        resolvedType = orderDetails.type || resolvedType;
+      }
+    }
+
+    if (lodash.isEmpty(orderDetails) && resolvedAppointmentId) {
       // For Normal orders other than Treatment Milestones
       orderDetails = await OrderDetailsMasterModel.findOne({
         where: {
-          appointmentId: appointmentId,
-          type: type,
+          appointmentId: resolvedAppointmentId,
+          type: resolvedType,
           productType: productType
-        }
+        },
+        order: [["id", "DESC"]]
       }).catch(err => {
         console.log("Error while fetching order details", err);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
-    } else {
+    }
+
+    if (lodash.isEmpty(orderDetails) && !resolvedAppointmentId) {
       isTreatmentOrder = true;
       orderDetails = await TreatmentOrdersMasterModel.findOne({
         where: {
-          id: id,
-          type: type,
+          id: resolvedId || id,
+          type: resolvedType,
           productType: productType
         }
       }).catch(err => {
@@ -1355,21 +1439,34 @@ class PaymentService extends BaseService {
       throw new createError.BadRequest(Constants.PAYMENT_DETAILS_NOT_FOUND);
     }
 
+    // For Invoice Sepearate Function to generate A5 Size Header
+    const hospitalLogoHeaderTemplate = await this.hospitalLogoHeaderTemplateForInvoice(
+      resolvedAppointmentId,
+      resolvedType,
+      resolvedId || id
+    );
+
     let invoiceDetailsQuery = null;
-    if (type == "Consultation") {
-      if (appointmentId) {
+    if (resolvedId && !isTreatmentOrder) {
+      invoiceDetailsQuery = invoiceByOrderDbIdQuery;
+    } else if (resolvedType == "Consultation") {
+      if (resolvedAppointmentId) {
         invoiceDetailsQuery =
           invoiceForConsultationAppointmentsQuery +
-          (id ? ` AND odm.id = :id` : "");
+          (resolvedId ? ` AND odm.id = :id` : "");
       }
-    } else if (type == "Treatment") {
-      if (appointmentId) {
+    } else if (resolvedType == "Treatment") {
+      if (resolvedAppointmentId) {
         invoiceDetailsQuery =
           invoiceForTreatementAppointmentsQuery +
-          (id ? ` AND odm.id = :id` : "");
+          (resolvedId ? ` AND odm.id = :id` : "");
       } else {
         invoiceDetailsQuery = invoiceForTreatmentOrdersMileStoneQuery;
       }
+    }
+
+    if (!invoiceDetailsQuery) {
+      throw new createError.BadRequest(Constants.PAYMENT_DETAILS_NOT_FOUND);
     }
 
     let invoiceTemplates = [];
@@ -1377,9 +1474,9 @@ class PaymentService extends BaseService {
       .query(invoiceDetailsQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
-          appointmentId: appointmentId,
+          appointmentId: resolvedAppointmentId,
           productType: productType,
-          id: id
+          id: resolvedId || id
         }
       })
       .catch(err => {
@@ -1388,6 +1485,10 @@ class PaymentService extends BaseService {
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+    if (!Array.isArray(invoiceDetailsList)) {
+      invoiceDetailsList = [];
+    }
 
     for (const invoiceDetails of invoiceDetailsList) {
       const { paidAmount } = { ...invoiceDetails?.paymentBreakUp }; // Converstion into words
@@ -1403,40 +1504,48 @@ class PaymentService extends BaseService {
         isLab: productType == "LAB TEST" ? 1 : 0,
         isEmbryology: productType == "EMBRYOLOGY" ? 1 : 0,
         isConsultationFee: productType == "CONSULTATION FEE" ? 1 : 0,
-        isAppointment: productType.indexOf("APPOINTMENT") !== -1 ? 1 : 0, //  APPOINTMENT_45 Etc.
+        isAppointment:
+          (productType || "").indexOf("APPOINTMENT") !== -1 ? 1 : 0, //  APPOINTMENT_45 Etc.
         isMileStone:
-          !appointmentId && productType.indexOf("APPOINTMENT") === -1 ? 1 : 0 // Treatment Order and not of type APPOINTMENT_45 etc.
+          !resolvedAppointmentId &&
+          (productType || "").indexOf("APPOINTMENT") === -1
+            ? 1
+            : 0 // Treatment Order and not of type APPOINTMENT_45 etc.
       };
 
       let productTableData;
       if (!isTreatmentOrder) {
         //  For all orders except treatment milestones
         productTableData = await this.generateProductInformationTable(
-          appointmentId,
-          type,
+          resolvedAppointmentId,
+          resolvedType,
           productType,
           invoiceDetails?.orderDetails?.orderNo
         );
       } else {
         productTableData = await this.generateProductInformationTableForTreatmentOrders(
-          type,
+          resolvedType,
           productType,
           invoiceDetails?.orderDetails?.orderNo
         );
+      }
+
+      if (!Array.isArray(productTableData)) {
+        productTableData = [];
       }
 
       const spouseProducts = productTableData.filter(
         item => item.prescribedTo === "SPOUSE"
       );
       const nonSpouseProducts = productTableData.filter(
-        item => item.prescribedTo === "PATIENT"
+        item => item.prescribedTo !== "SPOUSE"
       );
 
       if (nonSpouseProducts.length > 0) {
         const patientHeaderForInvoice = await this.generatePatientHeaderInformationForInvoice(
-          appointmentId,
-          type,
-          id,
+          resolvedAppointmentId,
+          resolvedType,
+          resolvedId || id,
           0,
           invoiceDetails?.orderDetails
         );
@@ -1457,9 +1566,9 @@ class PaymentService extends BaseService {
 
       if (spouseProducts.length > 0) {
         const patientHeaderForInvoice = await this.generatePatientHeaderInformationForInvoice(
-          appointmentId,
-          type,
-          id,
+          resolvedAppointmentId,
+          resolvedType,
+          resolvedId || id,
           1,
           invoiceDetails?.orderDetails
         );
@@ -1475,6 +1584,25 @@ class PaymentService extends BaseService {
           spouseInfo
         );
 
+        invoiceTemplates.push(htmlContent);
+      }
+
+      if (nonSpouseProducts.length === 0 && spouseProducts.length === 0) {
+        const patientHeaderForInvoice = await this.generatePatientHeaderInformationForInvoice(
+          resolvedAppointmentId,
+          resolvedType,
+          resolvedId || id,
+          0,
+          invoiceDetails?.orderDetails
+        );
+        const htmlContent = await this.htmlTemplateGenerationObj.generateTemplateFromText(
+          invoiceTemplate,
+          {
+            ...patientOrderAndPaymentInfo,
+            productTable: productTableData,
+            patientHeaderInformation: patientHeaderForInvoice
+          }
+        );
         invoiceTemplates.push(htmlContent);
       }
     }
