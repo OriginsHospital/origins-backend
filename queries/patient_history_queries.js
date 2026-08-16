@@ -528,6 +528,45 @@ select JSON_ARRAYAGG(
 			SUM(prescriptionDays) as prescriptionDays
 		from (
 				select
+					calba.billTypeValue,
+					calba.prescribedQuantity,
+					COALESCE(calba.purchaseQuantity,0) as purchaseQuantity,
+					calba.prescriptionDays
+				from
+					consultation_appointment_line_bills_associations calba
+				INNER JOIN consultation_appointments_associations caa on
+					caa.id = calba.appointmentId
+				INNER JOIN visit_consultations_associations vca on
+					vca.id = caa.consultationId
+				INNER JOIN visit_treatment_cycles_associations vtca on
+					vtca.visitId = vca.visitId
+				LEFT JOIN (
+					select visitId, MIN(startDay) as startDay
+					from (
+						select visitId, DATE(startDate) as startDay from treatment_timestamps where startDate is not null
+						union all
+						select visitId, DATE(fetStartDate) from treatment_timestamps where fetStartDate is not null
+						union all
+						select visitId, DATE(eraStartDate) from treatment_timestamps where eraStartDate is not null
+						union all
+						select visitId, DATE(day1Date) from visit_packages_associations where day1Date is not null
+						union all
+						select visitId, DATE(fetDate) from visit_packages_associations where fetDate is not null
+						union all
+						select visitId, DATE(eraDate) from visit_packages_associations where eraDate is not null
+					) startDates
+					group by visitId
+				) treatmentStart on treatmentStart.visitId = vtca.visitId
+				WHERE
+					vtca.id = :treatmentCycleId
+					and calba.isSpouse = 0
+					and calba.billTypeId = 3
+					and (
+						treatmentStart.startDay is null
+						or DATE(caa.appointmentDate) >= treatmentStart.startDay
+					)
+				UNION ALL
+				select
 					talba.billTypeValue ,
 					talba.prescribedQuantity ,
 					COALESCE(talba.purchaseQuantity,0) as purchaseQuantity,
@@ -536,8 +575,33 @@ select JSON_ARRAYAGG(
 					treatment_appointment_line_bills_associations talba
 				INNER JOIN treatment_appointments_associations taa on
 					taa.id = talba.appointmentId
+				INNER JOIN visit_treatment_cycles_associations vtca on
+					vtca.id = taa.treatmentCycleId
+				LEFT JOIN (
+					select visitId, MIN(startDay) as startDay
+					from (
+						select visitId, DATE(startDate) as startDay from treatment_timestamps where startDate is not null
+						union all
+						select visitId, DATE(fetStartDate) from treatment_timestamps where fetStartDate is not null
+						union all
+						select visitId, DATE(eraStartDate) from treatment_timestamps where eraStartDate is not null
+						union all
+						select visitId, DATE(day1Date) from visit_packages_associations where day1Date is not null
+						union all
+						select visitId, DATE(fetDate) from visit_packages_associations where fetDate is not null
+						union all
+						select visitId, DATE(eraDate) from visit_packages_associations where eraDate is not null
+					) startDates
+					group by visitId
+				) treatmentStart on treatmentStart.visitId = vtca.visitId
 				WHERE
-					taa.treatmentCycleId = :treatmentCycleId and talba.isSpouse = 0 and talba.billTypeId  = 3
+					taa.treatmentCycleId = :treatmentCycleId
+					and talba.isSpouse = 0
+					and talba.billTypeId = 3
+					and (
+						treatmentStart.startDay is null
+						or DATE(taa.appointmentDate) >= treatmentStart.startDay
+					)
 		) prescriptionDetails GROUP BY billTypeValue
 ) itemList
 `;

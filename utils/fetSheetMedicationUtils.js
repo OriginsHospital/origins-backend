@@ -30,6 +30,46 @@ const PRESCRIBED_MEDS_BY_CYCLE_QUERY = `
   ) prescriptionDetails
 `;
 
+function buildPrescribedMedsByVisitQuery(hasStartDate) {
+  const consultDateFilter = hasStartDate
+    ? "AND DATE(caa.appointmentDate) >= DATE(:startDate)"
+    : "";
+  const treatmentDateFilter = hasStartDate
+    ? "AND DATE(taa.appointmentDate) >= DATE(:startDate)"
+    : "";
+
+  return `
+    SELECT itemName FROM (
+      SELECT
+        (SELECT im.itemName FROM stockmanagement.item_master im WHERE im.id = billTypeValue) AS itemName
+      FROM (
+        SELECT calba.billTypeValue
+        FROM consultation_appointment_line_bills_associations calba
+        INNER JOIN consultation_appointments_associations caa ON caa.id = calba.appointmentId
+        INNER JOIN visit_consultations_associations vca ON vca.id = caa.consultationId
+        WHERE vca.visitId = :visitId
+          AND calba.isSpouse = 0
+          AND calba.billTypeId = 3
+          ${consultDateFilter}
+        GROUP BY calba.billTypeValue
+
+        UNION
+
+        SELECT talba.billTypeValue
+        FROM treatment_appointment_line_bills_associations talba
+        INNER JOIN treatment_appointments_associations taa ON taa.id = talba.appointmentId
+        INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+        WHERE vtca.visitId = :visitId
+          AND talba.isSpouse = 0
+          AND talba.billTypeId = 3
+          ${treatmentDateFilter}
+        GROUP BY talba.billTypeValue
+      ) prescriptionDetails
+    ) namedItems
+    WHERE itemName IS NOT NULL AND TRIM(itemName) <> ''
+  `;
+}
+
 function mergeMedicationRows(existingRows, additions) {
   const merged = Array.isArray(existingRows) ? [...existingRows] : [];
   const safeAdditions = Array.isArray(additions) ? additions : [];
@@ -120,7 +160,30 @@ async function getPrescribedMedicationRowsForCycle(
     })
     .catch(() => []);
 
-  return prescribedMeds
+  return mapPrescribedMedsToRows(prescribedMeds);
+}
+
+async function getPrescribedMedicationRowsForVisit(
+  mysqlConnection,
+  { visitId, startDate } = {}
+) {
+  if (!mysqlConnection || !visitId) {
+    return [];
+  }
+
+  const hasStartDate = Boolean(startDate);
+  const prescribedMeds = await mysqlConnection
+    .query(buildPrescribedMedsByVisitQuery(hasStartDate), {
+      replacements: hasStartDate ? { visitId, startDate } : { visitId },
+      type: Sequelize.QueryTypes.SELECT
+    })
+    .catch(() => []);
+
+  return mapPrescribedMedsToRows(prescribedMeds);
+}
+
+function mapPrescribedMedsToRows(prescribedMeds) {
+  return (Array.isArray(prescribedMeds) ? prescribedMeds : [])
     .filter(item => item?.itemName)
     .map(item => ({ label: item.itemName, value: item.itemName }));
 }
@@ -130,5 +193,6 @@ module.exports = {
   mergeMedicationRows,
   getMedicationRowsFromTemplate,
   applyPrescribedMedicationsToFetTemplate,
-  getPrescribedMedicationRowsForCycle
+  getPrescribedMedicationRowsForCycle,
+  getPrescribedMedicationRowsForVisit
 };

@@ -98,6 +98,11 @@ const VisitTreatmentsAssociations = require("../models/Associations/visitTreatme
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
 const VisitDonarsAssociation = require("../models/Associations/visitDonarsAssociation");
 const { getOtDefaultStaffForBranch } = require("../utils/otDefaultStaff");
+const {
+  getPrescribedMedicationRowsForVisit,
+  mergeMedicationRows,
+  DEFAULT_FET_MEDICATION_ROWS
+} = require("../utils/fetSheetMedicationUtils");
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -486,18 +491,31 @@ class AppointmentsPaymentService extends BaseService {
 
   async generateDateRange(startDate, numberOfDates) {
     const dates = [];
-    let currentDate = new Date(startDate);
-    if (isNaN(currentDate.getTime())) {
+    const tz = "Asia/Kolkata";
+    let currentDate = moment.tz(startDate, "YYYY-MM-DD", true, tz);
+    if (!currentDate.isValid()) {
+      currentDate = moment.tz(startDate, tz);
+    }
+    if (!currentDate.isValid()) {
       throw new Error("Invalid start date provided");
     }
     for (let i = 0; i < numberOfDates; i++) {
-      const day = String(currentDate.getDate()).padStart(2, "0");
-      const month = String(currentDate.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
-      dates.push(`${day}/${month}`);
-      currentDate = new Date(currentDate.setDate(currentDate.getDate() + 1));
+      dates.push(
+        currentDate
+          .clone()
+          .add(i, "days")
+          .format("DD/MM")
+      );
     }
 
     return dates;
+  }
+
+  async getPrescribedMedicationRowsForStart(visitId, startDate) {
+    return getPrescribedMedicationRowsForVisit(this.mysqlConnection, {
+      visitId,
+      startDate
+    });
   }
 
   // Function to give default values of Follicular Sheet
@@ -510,6 +528,10 @@ class AppointmentsPaymentService extends BaseService {
       );
     }
     const dateRange = await this.generateDateRange(startDate, 15);
+    const medicationsRows = await this.getPrescribedMedicationRowsForStart(
+      visitId,
+      startDate
+    );
 
     // Follicular Rows
     let follicularRows = [
@@ -537,8 +559,7 @@ class AppointmentsPaymentService extends BaseService {
       { value: "ET", label: "ET", color: "extra-dark" }
     ];
 
-    // Medications
-    let medicationsRows = [];
+    // Medications come from prescriptions dated on/after the selected start date
 
     // Scans
     let scansRows = [
@@ -552,8 +573,8 @@ class AppointmentsPaymentService extends BaseService {
     const template = {
       columns: dateRange,
       follicularSheet: {},
-      medicationRows: [],
-      medicationSheet: {},
+      medicationRows: medicationsRows,
+      medicationSheet: { rows: medicationsRows },
       rows: follicularRows,
       scanRows: scansRows,
       scanSheet: {}
@@ -602,6 +623,10 @@ class AppointmentsPaymentService extends BaseService {
       );
     }
     const dateRange = await this.generateDateRange(startDate, 15);
+    const medicationsRows = await this.getPrescribedMedicationRowsForStart(
+      visitId,
+      startDate
+    );
 
     let follicularRows = [
       { value: "<=10", label: "<=10", color: "light" },
@@ -645,12 +670,11 @@ class AppointmentsPaymentService extends BaseService {
 
     const template = {
       columns: dateRange,
-      medicationRows: [],
-      medicationSheet: { rows: [] },
+      medicationRows: medicationsRows,
+      medicationSheet: { rows: medicationsRows },
       scanRows: scansRows,
       scanSheet: []
     };
-    const medicationsRows = [];
 
     if (!lodash.isEmpty(treamentCycleInfo)) {
       // Adding default row into FET sheet table
@@ -683,6 +707,14 @@ class AppointmentsPaymentService extends BaseService {
       );
     }
     const dateRange = await this.generateDateRange(startDate, 15);
+    const prescribedRows = await this.getPrescribedMedicationRowsForStart(
+      visitId,
+      startDate
+    );
+    const medicationsRows = mergeMedicationRows(
+      DEFAULT_FET_MEDICATION_ROWS,
+      prescribedRows
+    );
 
     let follicularRows = [
       { value: "<=10", label: "<=10", color: "light" },
@@ -709,28 +741,14 @@ class AppointmentsPaymentService extends BaseService {
       { value: "ET", label: "ET", color: "extra-dark" }
     ];
 
-    const medicationsRows = [
-      { value: "endofert", label: "TAB ENDOFERT-H 2MG" },
-      { value: "estrobet", label: "ESTROBET GEL" },
-      { value: "ecospirin", label: "TAB. ECOSPIRIN 150 MG" },
-      { value: "asvit", label: "TAB.ASVIT E" },
-      { value: "nicardia", label: "TAB.NICARDIA" },
-      { value: "bifolate", label: "TAB.BIFOLATE-OD" },
-      { value: "pregnasur", label: "TAB.PREGNASUR E-HS" },
-      { value: "dolonex", label: "TAB. DOLONEX DT ½ TID" },
-      { value: "susten", label: "INJ.SUSTEN 100MG IM" },
-      { value: "michelle", label: "CAP.MICHELLE 200MG" },
-      { value: "dydropreg", label: "TAB.DYDROPREG" }
-    ];
-
     const scansRows = [];
 
     const template = {
       columns: dateRange,
       rows: follicularRows,
       follicularSheet: {},
-      medicationRows: [],
-      medicationSheet: [],
+      medicationRows: medicationsRows,
+      medicationSheet: { rows: medicationsRows },
       scanRows: scansRows,
       scanSheet: []
     };
@@ -764,7 +782,7 @@ class AppointmentsPaymentService extends BaseService {
       date: dateRange,
       follicularSheet: follicularRows,
       scanSheet: scansRows,
-      medicationSheet: []
+      medicationSheet: medicationsRows
     };
   }
 
