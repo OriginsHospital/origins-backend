@@ -196,10 +196,10 @@ class AuthService {
     const max = 999999;
     const otp = Math.floor(Math.random() * (max - min + 1)) + min;
 
-    //await this.otpObject.sendOtpToEmail(email, otp, fullName);
+    await this.otpObject.sendOtpToEmail(email, otp, fullName);
 
     await RedisConnection._instance
-      .SET(`otp:${email}`, 123456, "EX", 300)
+      .SET(`otp:${email}`, String(otp), "EX", 300)
       .catch(err => {
         console.log("Error with redis", err.message);
         throw new createError.InternalServerError(
@@ -233,7 +233,7 @@ class AuthService {
       throw new createError.BadRequest(constants.OTP_INVALID);
     }
 
-    if (otp != isExists) {
+    if (String(otp) !== String(isExists)) {
       throw new createError.BadRequest(constants.OTP_INVALID);
     }
 

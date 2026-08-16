@@ -34,16 +34,15 @@ const sessionDoesNotExists = (req, res, next) => {
 const otpExists = asyncHandler(async (req, res, next) => {
   const validPayload = await authSendOtpSchema.validateAsync(req.body);
   const { email } = validPayload;
-  const isExists = await RedisConnection._instance
-    .GET(`otp:${email}`)
-    .catch(err => {
-      console.log("Error with redisclient get", err.mesasge);
-      return next(
-        new createError.InternalServerError(constants.SESSION_ALREADY_EXISTS)
-      );
-    });
+  const ttl = await RedisConnection._instance.TTL(`otp:${email}`).catch(err => {
+    console.log("Error with redisclient ttl", err.message);
+    throw new createError.InternalServerError(
+      constants.SOMETHING_ERROR_OCCURRED
+    );
+  });
 
-  if (isExists) {
+  // Allow resend after 60 seconds (OTP TTL starts at 300 seconds)
+  if (typeof ttl === "number" && ttl > 240) {
     return next(new createError.BadRequest(constants.OTP_EXISTS));
   }
   next();

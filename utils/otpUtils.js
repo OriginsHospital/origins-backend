@@ -1,103 +1,88 @@
-const sendgrid = require("@sendgrid/mail");
 const path = require("path");
 const fs = require("fs");
 const constants = require("../constants/constants");
-const createError = require("http-errors");
-const axios = require("axios");
 const SimpleCrypto = require("simple-crypto-js").default;
+const { sendMail } = require("./mailer");
 
 class OTPHelper {
   constructor() {}
   sendOtpToEmail = (email, otp, fullName) => {
     return new Promise(async (resolve, reject) => {
-      const htmlTemplatePath = path.join(
-        __dirname,
-        "../templates/otpTemplate.html"
-      );
-      const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
-      const emailSender = sendgrid.setApiKey(process.env.EMAIL_API_KEY);
-      const messageBody = {
-        to: email,
-        from: process.env.EMAIL_SENDER,
-        subject: "Welcome to Origins Hospital",
-        html: emailTemplate
+      try {
+        const htmlTemplatePath = path.join(
+          __dirname,
+          "../templates/otpTemplate.html"
+        );
+        const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
+        const html = emailTemplate
           .replace("{{name}}", fullName)
-          .replace("{{otp}}", otp)
-      };
+          .replace("{{otp}}", otp);
 
-      emailSender
-        .send(messageBody)
-        .then(() => resolve(constants.OTP_SENT_SUCCESSFULLY))
-        .catch(error => {
-          console.error(error);
-          reject(
-            new createError.InternalServerError(
-              constants.SOMETHING_ERROR_OCCURRED
-            )
-          );
+        await sendMail({
+          to: email,
+          subject: "Origins Hospital - Verify your email",
+          html,
+          text: `Hi ${fullName}, your Origins Hospital registration OTP is ${otp}. It is valid for 5 minutes.`
         });
+        resolve(constants.OTP_SENT_SUCCESSFULLY);
+      } catch (error) {
+        console.error(error);
+        reject(error);
+      }
     });
   };
 
   sendResetLinkEmail = (email, link, name) => {
     return new Promise(async (resolve, reject) => {
-      const htmlTemplatePath = path.join(
-        __dirname,
-        "../templates/forgotPasswordTemplate.html"
-      );
-      const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
-      const emailSender = sendgrid.setApiKey(process.env.EMAIL_API_KEY);
-      const messageBody = {
-        to: email,
-        from: process.env.EMAIL_SENDER,
-        subject: "Welcome to Origins Hospital",
-        html: emailTemplate.replace("{{name}}", name).replace("{{link}}", link)
-      };
+      try {
+        const htmlTemplatePath = path.join(
+          __dirname,
+          "../templates/forgotPasswordTemplate.html"
+        );
+        const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
+        const html = emailTemplate
+          .replace("{{name}}", name)
+          .replace("{{link}}", link);
 
-      emailSender
-        .send(messageBody)
-        .then(() => resolve(constants.EMAIL_SENT_SUCCESSFULLY))
-        .catch(error => {
-          console.error(error);
-          reject(
-            new createError.InternalServerError(
-              constants.SOMETHING_ERROR_OCCURRED
-            )
-          );
+        await sendMail({
+          to: email,
+          subject: "Origins Hospital - Reset your password",
+          html,
+          text: `Hi ${name}, reset your Origins Hospital password using this link: ${link}`
         });
+        resolve(constants.EMAIL_SENT_SUCCESSFULLY);
+      } catch (error) {
+        console.error(error);
+        reject(error);
+      }
     });
   };
 
   sendDeviceLoginDetectedEmail = (email, link, name, agent) => {
     return new Promise(async (resolve, reject) => {
-      const htmlTemplatePath = path.join(
-        __dirname,
-        "../templates/loginOtherDevice.html"
-      );
-      const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
-      const emailSender = sendgrid.setApiKey(process.env.EMAIL_API_KEY);
-      const messageBody = {
-        to: email,
-        from: process.env.EMAIL_SENDER,
-        subject: "Origins HMS - New Login Device Detected",
-        html: emailTemplate
+      try {
+        const htmlTemplatePath = path.join(
+          __dirname,
+          "../templates/loginOtherDevice.html"
+        );
+        const emailTemplate = fs.readFileSync(htmlTemplatePath, "utf8");
+        const html = emailTemplate
           .replace("{{name}}", name)
           .replace("{{logoutLink}}", link)
           .replace("{{email}}", email)
-          .replace("{{agent}}", agent)
-      };
+          .replace("{{agent}}", agent);
 
-      emailSender
-        .send(messageBody)
-        .then(() => resolve(constants.EMAIL_SENT_SUCCESSFULLY))
-        .catch(error => {
-          console.error(error);
-          reject(
-            new createError.InternalServerError(
-              constants.SOMETHING_ERROR_OCCURRED
-            )
-          );
+        await sendMail({
+          to: email,
+          subject: "Origins HMS - New Login Device Detected",
+          html,
+          text: `Hi ${name}, a new login was detected for ${email} from ${agent}. Logout using: ${link}`
         });
+        resolve(constants.EMAIL_SENT_SUCCESSFULLY);
+      } catch (error) {
+        console.error(error);
+        reject(error);
+      }
     });
   };
 
