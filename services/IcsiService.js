@@ -16,6 +16,7 @@ const PatientMasterModel = require("../models/Master/patientMaster");
 const TriggerTimeStampsModel = require("../models/Master/triggerTimeStampsMaster");
 const VisitEraConsentsAssociations = require("../models/Associations/visitEraConsentsAssociations");
 const { assertPackageDefinedForConsent } = require("../utils/packageUtils");
+const { getOtDefaultStaffForBranch } = require("../utils/otDefaultStaff");
 
 const getS3KeyFromConsentRecord = consentRecord => {
   if (consentRecord?.key) {
@@ -259,16 +260,17 @@ class ConsentFormsTemplateService {
 
       // Schedule the OT Record creation after 35 hours
       const createOTRecord = async () => {
+        const defaultStaff = await getOtDefaultStaffForBranch(
+          currentUserBranchId,
+          t
+        );
         const createOTParams = {
           branchId: currentUserBranchId,
           patientName: `${patientInfo.firstName} ${patientInfo.lastName}`,
           procedureName: "OPU",
           procedureDate: procedureDate,
           time: procedureTime,
-          surgeonId: "1",
-          anesthetistId: 9,
-          otStaff: "7",
-          embryologistId: 5
+          ...defaultStaff
         };
 
         await OTListMasterModel.create(createOTParams, {

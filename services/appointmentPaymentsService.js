@@ -97,6 +97,7 @@ const AppointmentChargesBranchAssociation = require("../models/Associations/appo
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
 const TreatmentEraSheetAssociations = require("../models/Associations/treatmentEraSheetsAssociations");
 const VisitDonarsAssociation = require("../models/Associations/visitDonarsAssociation");
+const { getOtDefaultStaffForBranch } = require("../utils/otDefaultStaff");
 class AppointmentsPaymentService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -2347,17 +2348,19 @@ class AppointmentsPaymentService extends BaseService {
 
       // create the OT Record creation after 35 hours
       const createOTRecord = async () => {
+        const branchId = patientData[0]?.branchId || currentUserBranchId[0];
+        const defaultStaff = await getOtDefaultStaffForBranch(
+          branchId,
+          transaction
+        );
         const createOTParams = {
-          branchId: patientData[0]?.branchId || currentUserBranchId[0],
+          branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
           patientName: `${patientData[0]?.firstName} ${patientData[0]?.lastName}`,
           procedureName: "PickUp OT",
           procedureDate: procedureDate,
           time: procedureTime,
-          surgeonId: "1",
-          anesthetistId: 9,
-          otStaff: "7",
-          embryologistId: 5
+          ...defaultStaff
         };
 
         await OTListMasterModel.create(createOTParams, {
@@ -2513,17 +2516,19 @@ class AppointmentsPaymentService extends BaseService {
 
       // create the OT Record creation after 35 hours with donor name (patient name)
       const createOTRecord = async () => {
+        const branchId = patientData[0]?.branchId || currentUserBranchId[0];
+        const defaultStaff = await getOtDefaultStaffForBranch(
+          branchId,
+          transaction
+        );
         const createOTParams = {
-          branchId: patientData[0]?.branchId || currentUserBranchId[0],
+          branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
           patientName: `${donorData[0]?.donarName} (${patientData[0]?.lastName} ${patientData[0]?.firstName})`,
           procedureName: "PickUp OT",
           procedureDate: procedureDate,
           time: procedureTime,
-          surgeonId: "1",
-          anesthetistId: 9,
-          otStaff: "7",
-          embryologistId: 5
+          ...defaultStaff
         };
 
         await OTListMasterModel.create(createOTParams, {
@@ -2659,17 +2664,19 @@ class AppointmentsPaymentService extends BaseService {
 
       // create the OT Record creation
       const createOTRecord = async () => {
+        const branchId = patientData[0]?.branchId || currentUserBranchId[0];
+        const defaultStaff = await getOtDefaultStaffForBranch(
+          branchId,
+          transaction
+        );
         const createOTParams = {
-          branchId: patientData[0]?.branchId || currentUserBranchId[0],
+          branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
           patientName: `${patientData[0]?.firstName} ${patientData[0]?.lastName}`,
           procedureName: "HYSTEROSCOPY",
           procedureDate: procedureDate,
           time: procedureTime,
-          surgeonId: "1",
-          anesthetistId: 9,
-          otStaff: "7",
-          embryologistId: 5
+          ...defaultStaff
         };
 
         await OTListMasterModel.create(createOTParams, {
