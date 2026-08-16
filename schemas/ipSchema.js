@@ -52,10 +52,36 @@ const ipRoomChangeSchema = Joi.object({
   bedId: Joi.number().required()
 });
 
+const collectIPPaymentSchema = Joi.object({
+  ipId: Joi.number().required(),
+  paymentMode: Joi.string()
+    .valid("CASH", "UPI", "CARD", "SPLIT")
+    .required(),
+  roomAmount: Joi.number()
+    .min(0)
+    .default(0),
+  medicineAmount: Joi.number()
+    .min(0)
+    .default(0),
+  packageAmount: Joi.number()
+    .min(0)
+    .default(0),
+  otherAmount: Joi.number()
+    .min(0)
+    .default(0),
+  otherDescription: Joi.string()
+    .allow("", null)
+    .optional(),
+  remarks: Joi.string()
+    .allow("", null)
+    .optional()
+});
+
 module.exports = {
   addNewIndentSchema,
   createIPRegistrationSchema,
   createIPNotesSchema,
   closeIpRegistrationSchema,
-  ipRoomChangeSchema
+  ipRoomChangeSchema,
+  collectIPPaymentSchema
 };

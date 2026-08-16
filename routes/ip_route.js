@@ -69,6 +69,9 @@ class OtherPaymentModuleRoutes {
     this._route.post("/createIPNotes", checkActiveSession, tokenVerified, this.createIPNotesRoute);
     this._route.get("/getIPNotesHistoryById", checkActiveSession, tokenVerified, this.getIPNotesHistoryByIdRoute);
     this._route.get("/closeIpRegistration", checkActiveSession, tokenVerified, this.closeIpRegistrationRoute);
+    this._route.post("/closeIpRegistration", checkActiveSession, tokenVerified, this.closeIpRegistrationRoute);
+    this._route.get("/getIPBilling/:ipId", checkActiveSession, tokenVerified, this.getIPBillingRoute);
+    this._route.post("/collectIPPayment", checkActiveSession, tokenVerified, this.collectIPPaymentRoute);
     this._route.post("/ipRoomChange", checkActiveSession, tokenVerified, this.ipRoomChangeRoute);
 
     // ========== LAYOUT MANAGEMENT ROUTES ==========
@@ -173,6 +176,16 @@ class OtherPaymentModuleRoutes {
   closeIpRegistrationRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new IpController(req, res, next);
     await controllerObj.closeIpRegistrationHandler();
+  });
+
+  getIPBillingRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new IpController(req, res, next);
+    await controllerObj.getIPBillingHandler();
+  });
+
+  collectIPPaymentRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new IpController(req, res, next);
+    await controllerObj.collectIPPaymentHandler();
   });
 
   ipRoomChangeRoute = asyncHandler(async (req, res, next) => {

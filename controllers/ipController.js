@@ -128,6 +128,24 @@ class IpController {
     });
   }
 
+  async getIPBillingHandler() {
+    const data = await this._service.getIPBillingService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async collectIPPaymentHandler() {
+    const data = await this._service.collectIPPaymentService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async ipRoomChangeHandler() {
     const data = await this._service.ipRoomChangeService(this._request);
     this._response.status(200).send({

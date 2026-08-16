@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS ip_payments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ipId INT NOT NULL,
+  patientId INT NOT NULL,
+  paymentMode VARCHAR(30) NOT NULL,
+  roomAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  medicineAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  packageAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  otherAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  otherDescription VARCHAR(255) NULL,
+  totalAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  remarks VARCHAR(500) NULL,
+  createdBy INT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_ip_payments_ipId (ipId),
+  INDEX idx_ip_payments_patientId (patientId)
+);

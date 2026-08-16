@@ -8,7 +8,8 @@ const {
   createIPRegistrationSchema,
   createIPNotesSchema,
   closeIpRegistrationSchema,
-  ipRoomChangeSchema
+  ipRoomChangeSchema,
+  collectIPPaymentSchema
 } = require("../schemas/ipSchema");
 const ProcedureIndentAssociationModel = require("../models/Associations/procedureIndentAssociation");
 const IndentPharmacyAssociationModel = require("../models/Associations/indentPharmacyAssociation");
@@ -18,6 +19,7 @@ const BuildingFloorAssociationModel = require("../models/Associations/buildingFl
 const FloorRoomAssociationModel = require("../models/Associations/floorRoomAssociationModel");
 const RoomBedAssociationModel = require("../models/Associations/roomBedAssociationModel");
 const IpMasterModel = require("../models/Master/ipMasterModel");
+const IpPaymentsModel = require("../models/Master/ipPaymentsModel");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const patientVisitsAssociation = require("../models/Associations/patientVisitsAssociation");
 const IpNotesAssociationsModel = require("../models/Associations/ipNotesAssociationsModel");
@@ -386,6 +388,34 @@ class IpService {
     });
   }
 
+  async ensureIpPaymentsTable() {
+    await this.mysqlConnection.query(`
+      CREATE TABLE IF NOT EXISTS ip_payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ipId INT NOT NULL,
+        patientId INT NOT NULL,
+        paymentMode VARCHAR(30) NOT NULL,
+        roomAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        medicineAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        packageAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        otherAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        otherDescription VARCHAR(255) NULL,
+        totalAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        remarks VARCHAR(500) NULL,
+        createdBy INT NOT NULL,
+        createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_ip_payments_ipId (ipId),
+        INDEX idx_ip_payments_patientId (patientId)
+      )
+    `);
+  }
+
+  toAmount(value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? Number(num.toFixed(2)) : 0;
+  }
+
   async getIPListWithPatientName(isActive) {
     const { branchId } = this._request.query;
     if (!branchId) {
@@ -496,8 +526,12 @@ class IpService {
   }
 
   async closeIpRegistrationService() {
+    const payload = {
+      ...(this._request.query || {}),
+      ...(this._request.body || {})
+    };
     const validatedData = await closeIpRegistrationSchema.validateAsync(
-      this._request.body
+      payload
     );
 
     return await this.mysqlConnection.transaction(async t => {
@@ -523,6 +557,237 @@ class IpService {
       );
       return "SUCCESSFULLY CLOSED";
     });
+  }
+
+  async getMedicineBillsForVisit(patientId, visitId) {
+    try {
+      const items = await this.mysqlConnection.query(
+        `
+        SELECT
+          ipa.id,
+          im.itemName,
+          ipa.prescribedQuantity,
+          COALESCE(ipa.purchasedQuantity, ipa.prescribedQuantity) AS quantity,
+          COALESCE(ipm.price, 0) AS unitPrice,
+          ROUND(
+            COALESCE(ipa.purchasedQuantity, ipa.prescribedQuantity) * COALESCE(ipm.price, 0),
+            2
+          ) AS amount,
+          ipa.prescribedOn
+        FROM indent_pharmacy_association ipa
+        INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
+        LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
+        LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = ipa.itemId
+        WHERE pia.patientId = :patientId
+          AND pia.visitId = :visitId
+        ORDER BY ipa.prescribedOn DESC, ipa.id DESC
+        `,
+        {
+          replacements: { patientId, visitId },
+          type: QueryTypes.SELECT
+        }
+      );
+      return items || [];
+    } catch (err) {
+      console.log("Error while getting IP medicine bills", err.message);
+      return [];
+    }
+  }
+
+  async getIPBillingService() {
+    const { ipId } = this._request.params;
+    if (!ipId) {
+      throw new createError.BadRequest("IP ID is required");
+    }
+
+    await this.ensureIpPaymentsTable();
+
+    const rows = await this.mysqlConnection
+      .query(
+        `
+        SELECT
+          ip.id,
+          ip.branchId,
+          ip.patientId,
+          ip.visitId,
+          ip.procedureId,
+          ip.dateOfAdmission,
+          ip.timeOfAdmission,
+          ip.bedId,
+          ip.roomCode,
+          ip.packageAmount,
+          ip.dateOfDischarge,
+          ip.isActive,
+          TRIM(CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, ''))) AS patientName,
+          pm.patientId AS patientDisplayId,
+          pm.mobileNo,
+          rba.name AS bedName,
+          rba.bedNumber,
+          COALESCE(rba.charge, 0) AS bedCharge,
+          fra.name AS roomName,
+          fra.roomNumber,
+          fra.type AS roomType,
+          fra.roomCategory,
+          COALESCE(fra.charges, 0) AS roomChargePerDay,
+          GREATEST(
+            1,
+            DATEDIFF(
+              COALESCE(ip.dateOfDischarge, CURDATE()),
+              ip.dateOfAdmission
+            )
+          ) AS stayDays
+        FROM ip_master ip
+        LEFT JOIN patient_master pm ON pm.id = ip.patientId
+        LEFT JOIN room_bed_association rba ON rba.id = ip.bedId
+        LEFT JOIN floor_room_association fra ON fra.id = rba.roomId
+        WHERE ip.id = :ipId
+        LIMIT 1
+        `,
+        {
+          replacements: { ipId },
+          type: QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("Error while getting IP billing", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!rows || rows.length === 0) {
+      throw new createError.NotFound("IP registration not found");
+    }
+
+    const ip = rows[0];
+    const stayDays = Number(ip.stayDays) || 1;
+    const roomChargePerDay = this.toAmount(ip.roomChargePerDay);
+    const bedCharge = this.toAmount(ip.bedCharge);
+    const roomBilled = this.toAmount(stayDays * roomChargePerDay + bedCharge);
+    const packageBilled = this.toAmount(ip.packageAmount);
+
+    const medicines = await this.getMedicineBillsForVisit(
+      ip.patientId,
+      ip.visitId
+    );
+    const medicineBilled = this.toAmount(
+      medicines.reduce((sum, item) => sum + this.toAmount(item.amount), 0)
+    );
+
+    const payments = await IpPaymentsModel.findAll({
+      where: { ipId },
+      order: [["createdAt", "DESC"]]
+    });
+
+    const paid = payments.reduce(
+      (acc, payment) => {
+        acc.room += this.toAmount(payment.roomAmount);
+        acc.medicine += this.toAmount(payment.medicineAmount);
+        acc.package += this.toAmount(payment.packageAmount);
+        acc.other += this.toAmount(payment.otherAmount);
+        acc.total += this.toAmount(payment.totalAmount);
+        return acc;
+      },
+      { room: 0, medicine: 0, package: 0, other: 0, total: 0 }
+    );
+
+    const billed = {
+      room: roomBilled,
+      medicine: medicineBilled,
+      package: packageBilled,
+      other: this.toAmount(paid.other),
+      total: this.toAmount(
+        roomBilled + medicineBilled + packageBilled + paid.other
+      )
+    };
+
+    const pending = {
+      room: this.toAmount(Math.max(0, billed.room - paid.room)),
+      medicine: this.toAmount(Math.max(0, billed.medicine - paid.medicine)),
+      package: this.toAmount(Math.max(0, billed.package - paid.package)),
+      other: 0,
+      total: 0
+    };
+    pending.total = this.toAmount(
+      pending.room + pending.medicine + pending.package
+    );
+
+    return {
+      ip: {
+        id: ip.id,
+        branchId: ip.branchId,
+        patientId: ip.patientId,
+        patientDisplayId: ip.patientDisplayId,
+        patientName: (ip.patientName || "").trim() || "-",
+        mobileNo: ip.mobileNo,
+        visitId: ip.visitId,
+        roomCode: ip.roomCode,
+        roomName: ip.roomName,
+        roomNumber: ip.roomNumber,
+        roomType: ip.roomType,
+        roomCategory: ip.roomCategory,
+        bedName: ip.bedName,
+        bedNumber: ip.bedNumber,
+        dateOfAdmission: ip.dateOfAdmission,
+        timeOfAdmission: ip.timeOfAdmission,
+        dateOfDischarge: ip.dateOfDischarge,
+        isActive: Boolean(ip.isActive),
+        stayDays,
+        roomChargePerDay,
+        bedCharge
+      },
+      medicines,
+      billed,
+      paid,
+      pending,
+      payments
+    };
+  }
+
+  async collectIPPaymentService() {
+    const createdBy = this._request?.userDetails?.id;
+    const validatedData = await collectIPPaymentSchema.validateAsync(
+      this._request.body
+    );
+
+    const roomAmount = this.toAmount(validatedData.roomAmount);
+    const medicineAmount = this.toAmount(validatedData.medicineAmount);
+    const packageAmount = this.toAmount(validatedData.packageAmount);
+    const otherAmount = this.toAmount(validatedData.otherAmount);
+    const totalAmount = this.toAmount(
+      roomAmount + medicineAmount + packageAmount + otherAmount
+    );
+
+    if (totalAmount <= 0) {
+      throw new createError.BadRequest(
+        "Enter at least one amount to collect (room, medicines, package or other)"
+      );
+    }
+
+    const ip = await IpMasterModel.findOne({
+      where: { id: validatedData.ipId }
+    });
+    if (!ip) {
+      throw new createError.NotFound("IP registration not found");
+    }
+
+    await this.ensureIpPaymentsTable();
+
+    const payment = await IpPaymentsModel.create({
+      ipId: ip.id,
+      patientId: ip.patientId,
+      paymentMode: validatedData.paymentMode,
+      roomAmount,
+      medicineAmount,
+      packageAmount,
+      otherAmount,
+      otherDescription: validatedData.otherDescription || null,
+      totalAmount,
+      remarks: validatedData.remarks || null,
+      createdBy
+    });
+
+    return payment;
   }
 
   async ipRoomChangeService() {
