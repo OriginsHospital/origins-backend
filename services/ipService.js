@@ -386,36 +386,64 @@ class IpService {
     });
   }
 
-  async getActiveIPService() {
+  async getIPListWithPatientName(isActive) {
     const { branchId } = this._request.query;
     if (!branchId) {
       throw new createError.BadRequest("Branch ID is required");
     }
-    return await IpMasterModel.findAll({
-      where: { isActive: true, branchId: branchId },
-      order: [["updatedAt", "DESC"]]
-    }).catch(err => {
-      console.log("Error while getting active IPs", err.message);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
+
+    const rows = await this.mysqlConnection
+      .query(
+        `
+        SELECT
+          ip.id,
+          ip.branchId,
+          ip.patientId,
+          ip.visitId,
+          ip.procedureId,
+          ip.dateOfAdmission,
+          ip.timeOfAdmission,
+          ip.bedId,
+          ip.roomCode,
+          ip.packageAmount,
+          ip.dateOfDischarge,
+          ip.isActive,
+          ip.createdBy,
+          ip.createdAt,
+          ip.updatedAt,
+          TRIM(CONCAT(IFNULL(pm.lastName, ''), ' ', IFNULL(pm.firstName, ''))) AS patientName,
+          pm.patientId AS patientDisplayId
+        FROM ip_master ip
+        LEFT JOIN patient_master pm ON pm.id = ip.patientId
+        WHERE ip.isActive = :isActive
+          AND ip.branchId = :branchId
+        ORDER BY ip.updatedAt DESC
+        `,
+        {
+          replacements: { isActive: isActive ? 1 : 0, branchId },
+          type: QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("Error while getting IP list", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return rows.map(row => ({
+      ...row,
+      patientName: (row.patientName || "").trim() || "-",
+      Name: (row.patientName || "").trim() || "-"
+    }));
+  }
+
+  async getActiveIPService() {
+    return await this.getIPListWithPatientName(true);
   }
 
   async getClosedIPService() {
-    const { branchId } = this._request.query;
-    if (!branchId) {
-      throw new createError.BadRequest("Branch ID is required");
-    }
-    return await IpMasterModel.findAll({
-      where: { isActive: false, branchId: branchId },
-      order: [["updatedAt", "DESC"]]
-    }).catch(err => {
-      console.log("Error while getting closed IPs", err.message);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
+    return await this.getIPListWithPatientName(false);
   }
 
   async getIPDataByIdService() {
