@@ -25,6 +25,7 @@ const {
   getVendorsByDepartmentQuery,
   getSuppliesByDepartmentQuery,
   getReferralListQuery,
+  getStatesListQuery,
   getCitiesListQuery,
   getBranchesListQuery,
   getAllScansQuery,
@@ -53,6 +54,8 @@ const {
   editSuppliesSchema,
   createReferralSchema,
   editReferralsSchema,
+  createStateSchema,
+  editStateSchema,
   createCitySchema,
   editCitySchema,
   createBranchSchema,
@@ -79,6 +82,8 @@ const VendorMasterModel = require("../models/Master/vendorMaster");
 const SuppliesMasterModel = require("../models/Master/suppliesMaster");
 const ReferralsMasterModel = require("../models/Master/referralsMaster");
 const CityMasterModel = require("../models/Master/citiesMaster");
+const StateMasterModel = require("../models/Master/stateMaster");
+const PatientMasterModel = require("../models/Master/patientMaster");
 const BranchMasterModel = require("../models/Master/branchMaster");
 const LabTestMasterBranchAssociation = require("../models/Master/LabTestMasterBranchAssociation");
 const ScanMaster = require("../models/Master/ScanMaster");
@@ -1759,6 +1764,204 @@ class MasterDataService {
     });
 
     return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  //states
+  toStateStatus(isActive) {
+    return Number(isActive) === 0 ? "Inactive" : "Active";
+  }
+
+  async findStateByNormalizedName(name, excludeId) {
+    const validatedName = String(name || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const where = [
+      Sequelize.where(
+        Sequelize.fn(
+          "REPLACE",
+          Sequelize.fn("LOWER", Sequelize.col("name")),
+          " ",
+          ""
+        ),
+        validatedName
+      )
+    ];
+    if (excludeId) {
+      where.push({ id: { [Op.ne]: excludeId } });
+    }
+    return StateMasterModel.findOne({
+      where: { [Op.and]: where }
+    }).catch(err => {
+      console.log("Error while checking state name", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+  }
+
+  async getAllStatesService() {
+    const { searchQuery } = this._request.query;
+    const trimmedSearchQuery = searchQuery?.trim();
+    let query = getStatesListQuery;
+
+    if (!lodash.isEmpty(trimmedSearchQuery)) {
+      query += `
+        WHERE sm.name LIKE :searchQuery
+      `;
+    }
+
+    query += `
+      ORDER BY sm.name ASC
+    `;
+
+    const statesData = await this.mysqlConnection
+      .query(query, {
+        replacements: { searchQuery: `%${trimmedSearchQuery}%` },
+        type: Sequelize.QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting states", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    return statesData;
+  }
+
+  async addStateService() {
+    const validatedPayload = await createStateSchema.validateAsync(
+      this._request.body
+    );
+
+    const sameNameExists = await this.findStateByNormalizedName(
+      validatedPayload?.name
+    );
+
+    if (!lodash.isEmpty(sameNameExists)) {
+      throw new createError.BadRequest(Constants.STATE_NAME_EXISTS);
+    }
+
+    await StateMasterModel.create({
+      name: validatedPayload?.name.trim(),
+      status: this.toStateStatus(validatedPayload?.isActive),
+      createdBy: this._request?.userDetails?.id
+    }).catch(err => {
+      console.log("Error while addition of State", err);
+      if (err?.name === "SequelizeUniqueConstraintError") {
+        throw new createError.BadRequest(Constants.STATE_NAME_EXISTS);
+      }
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.SUCCESS;
+  }
+
+  async editStateService() {
+    const validatedPayload = await editStateSchema.validateAsync(
+      this._request.body
+    );
+
+    const state = await StateMasterModel.findOne({
+      where: { id: validatedPayload.id }
+    }).catch(err => {
+      console.log("Error while getting state for edit", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (lodash.isEmpty(state)) {
+      throw new createError.BadRequest("State not found");
+    }
+
+    const sameNameExists = await this.findStateByNormalizedName(
+      validatedPayload?.name,
+      validatedPayload.id
+    );
+
+    if (!lodash.isEmpty(sameNameExists)) {
+      throw new createError.BadRequest(Constants.STATE_NAME_EXISTS);
+    }
+
+    await StateMasterModel.update(
+      {
+        name: validatedPayload?.name.trim(),
+        status: this.toStateStatus(validatedPayload?.isActive),
+        updatedBy: this._request?.userDetails?.id
+      },
+      {
+        where: {
+          id: validatedPayload?.id
+        }
+      }
+    ).catch(err => {
+      console.log("Error while updating State", err);
+      if (err?.name === "SequelizeUniqueConstraintError") {
+        throw new createError.BadRequest(Constants.STATE_NAME_EXISTS);
+      }
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async deleteStateService() {
+    const { id } = this._request.params;
+    const stateId = Number(id);
+    if (!stateId) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replaceAll("{params}", "id")
+      );
+    }
+
+    const state = await StateMasterModel.findOne({ where: { id: stateId } });
+    if (lodash.isEmpty(state)) {
+      throw new createError.BadRequest("State not found");
+    }
+
+    const cityCount = await CityMasterModel.count({
+      where: { stateId }
+    }).catch(err => {
+      console.log("Error while checking cities for state delete", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    const patientCount = await PatientMasterModel.count({
+      where: { stateId }
+    }).catch(err => {
+      console.log("Error while checking patients for state delete", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (cityCount > 0 || patientCount > 0) {
+      const usage = [];
+      if (cityCount > 0) usage.push(`${cityCount} city(ies)`);
+      if (patientCount > 0) usage.push(`${patientCount} patient(s)`);
+      throw new createError.BadRequest(
+        `Cannot delete "${state.name}" because it is used by ${usage.join(
+          " and "
+        )}. Set it Inactive instead.`
+      );
+    }
+
+    await StateMasterModel.destroy({
+      where: { id: stateId }
+    }).catch(err => {
+      console.log("Error while deleting state", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DELETED_SUCCESSFULLY;
   }
 
   //cities

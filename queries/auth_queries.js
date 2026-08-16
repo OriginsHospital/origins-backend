@@ -47,7 +47,7 @@ SET isBlocked = CASE
 	ELSE isBlocked
 END WHERE id = :userId;
 `;
-const getStateQuery = `SELECT id,name FROM state_master`;
+const getStateQuery = `SELECT id,name FROM state_master WHERE COALESCE(status, 'Active') = 'Active' ORDER BY name ASC`;
 
 const userPasswordLogsQuery = `
 INSERT INTO user_password_logs (userId, email, password)

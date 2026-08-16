@@ -162,6 +162,9 @@ module.exports = {
     "Lab/Scan/Pharmacy/Embryology Pending. Cannot move to Completed",
   REFERRAL_NAME_EXISTS: "Referral Name Already Exists",
   CITY_NAME_EXISTS: "City Name Already Exists",
+  STATE_NAME_EXISTS: "State Name Already Exists",
+  STATE_IN_USE:
+    "Cannot delete this state because it is used by existing records. Set it Inactive instead.",
   BRANCH_NAME_EXISTS: "Branch Name Already Exists In This City",
   BRANCH_CODE_EXISTS: "Branch Code Already Exists",
   TREATMENT_EXISTS_CLOSE_IN_TREATMENT:

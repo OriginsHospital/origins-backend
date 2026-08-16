@@ -315,6 +315,28 @@ const editReferralsSchema = Joi.object({
     .required()
 });
 
+const createStateSchema = Joi.object({
+  name: Joi.string()
+    .max(100)
+    .required(),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .allow(null)
+    .optional()
+    .default(1)
+});
+
+const editStateSchema = Joi.object({
+  id: Joi.number().required(),
+  name: Joi.string()
+    .max(100)
+    .required(),
+  isActive: Joi.number()
+    .valid(0, 1)
+    .allow(null)
+    .required()
+});
+
 const createCitySchema = Joi.object({
   name: Joi.string()
     .max(100)
@@ -475,6 +497,8 @@ module.exports = {
   editSuppliesSchema,
   createReferralSchema,
   editReferralsSchema,
+  createStateSchema,
+  editStateSchema,
   createCitySchema,
   editCitySchema,
   createBranchSchema,

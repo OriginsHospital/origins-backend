@@ -408,6 +408,42 @@ class MasterDataController {
     });
   }
 
+  async getAllStatesController() {
+    const data = await this._service.getAllStatesService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async addStateController() {
+    const data = await this._service.addStateService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async editStateController() {
+    const data = await this._service.editStateService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteStateController() {
+    const data = await this._service.deleteStateService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getAllCitiesController() {
     const data = await this._service.getAllCitiesService(this._request);
     this._response.status(200).send({

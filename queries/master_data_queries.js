@@ -202,6 +202,19 @@ from
 	defaultdb.referral_type_master rtm
 `;
 
+const getStatesListQuery = `
+select
+	sm.id,
+	sm.name,
+	CASE WHEN sm.status = 'Inactive' THEN 0 ELSE 1 END as isActive,
+	(select u.fullName from users u where u.id = sm.createdBy) as createdBy,
+	(select u.fullName from users u where u.id = sm.updatedBy) as updatedBy,
+	sm.createdAt,
+	sm.updatedAt
+from
+	defaultdb.state_master sm
+`;
+
 const getCitiesListQuery = `
 select
 	cm.id,
@@ -328,6 +341,7 @@ module.exports = {
   getSuppliesListQuery,
   getSuppliesByDepartmentQuery,
   getReferralListQuery,
+  getStatesListQuery,
   getCitiesListQuery,
   getBranchesListQuery,
   getOtDefaultPersonQuery,

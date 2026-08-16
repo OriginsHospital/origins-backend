@@ -341,6 +341,35 @@ class ManageMasterDataRoute {
             this.editReferralRoute
         );
 
+        //states
+        this._route.get(
+            "/states/getAllStates",
+            checkActiveSession,
+            tokenVerified,
+            this.getAllStatesRoute
+        );
+
+        this._route.post(
+            "/states/addState",
+            checkActiveSession,
+            tokenVerified,
+            this.addStateRoute
+        );
+
+        this._route.post(
+            "/states/editState",
+            checkActiveSession,
+            tokenVerified,
+            this.editStateRoute
+        );
+
+        this._route.delete(
+            "/states/deleteState/:id",
+            checkActiveSession,
+            tokenVerified,
+            this.deleteStateRoute
+        );
+
         //cities
         this._route.get(
             "/cities/getAllcities",
@@ -687,6 +716,27 @@ class ManageMasterDataRoute {
     editReferralRoute = asyncHandler(async (req, res, next) => {
         const controllerObj = new MasterDataController(req, res, next);
         await controllerObj.editReferralController();
+    });
+
+    //states
+    getAllStatesRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.getAllStatesController();
+    });
+
+    addStateRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.addStateController();
+    });
+
+    editStateRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.editStateController();
+    });
+
+    deleteStateRoute = asyncHandler(async (req, res, next) => {
+        const controllerObj = new MasterDataController(req, res, next);
+        await controllerObj.deleteStateController();
     });
 
     //cities

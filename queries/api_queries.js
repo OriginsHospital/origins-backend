@@ -1,4 +1,4 @@
-const getStateQuery = `SELECT id,name FROM state_master`;
+const getStateQuery = `SELECT id,name FROM state_master WHERE COALESCE(status, 'Active') = 'Active' ORDER BY name ASC`;
 const getCitiesQuery = `SELECT id, name FROM city_master where stateId=:stateId`;
 
 const getBillTypeValuesQuery = `
@@ -85,8 +85,9 @@ const getDropdownInfo = `
     select 'referralTypes' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',rtm.id, 'name',rtm.name)) AS "List"
     from referral_type_master rtm
     UNION 
-    select 'states' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',sm.id, 'name',sm.name)) AS "List"
+    select 'states' as "Type", COALESCE(JSON_ARRAYAGG(JSON_OBJECT('id',sm.id, 'name',sm.name)), JSON_ARRAY()) AS "List"
     from state_master sm
+    WHERE COALESCE(sm.status, 'Active') = 'Active'
     UNION 
     select 'visitTypes' as "Type", JSON_ARRAYAGG(JSON_OBJECT('id',vtm.id, 'name',vtm.name)) AS "List"
     from visit_type_master vtm
