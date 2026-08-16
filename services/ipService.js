@@ -100,6 +100,7 @@ class IpService {
           );
         });
 
+      const activeVisitId = activeVisit?.[0]?.id;
       if (!activeVisitId) {
         throw new createError.NotFound("Active visit not found for patient");
       }
@@ -559,38 +560,147 @@ class IpService {
     });
   }
 
-  async getMedicineBillsForVisit(patientId, visitId) {
+  async getMedicineBillsForVisit({
+    patientId,
+    visitId,
+    admissionDate,
+    dischargeDate,
+    branchId
+  }) {
+    if (!patientId) return [];
+
+    const replacements = {
+      patientId,
+      visitId: visitId || 0,
+      admissionDate: admissionDate || "1970-01-01",
+      endDate: dischargeDate || new Date().toISOString().slice(0, 10),
+      branchId: branchId || null
+    };
+
+    const selectSql = `
+      SELECT
+        ipa.id,
+        ipa.indentId,
+        ipa.itemId,
+        im.itemName,
+        ipa.prescribedQuantity,
+        COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) AS quantity,
+        CAST(
+          COALESCE(
+            NULLIF(ipm.price, 0),
+            NULLIF(gpBranch.mrpPerTablet, 0),
+            NULLIF(gpBranch.ratePerTablet, 0),
+            NULLIF(gpAny.mrpPerTablet, 0),
+            NULLIF(gpAny.ratePerTablet, 0),
+            0
+          ) AS DECIMAL(18, 2)
+        ) AS unitPrice,
+        ROUND(
+          COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) * COALESCE(
+            NULLIF(ipm.price, 0),
+            NULLIF(gpBranch.mrpPerTablet, 0),
+            NULLIF(gpBranch.ratePerTablet, 0),
+            NULLIF(gpAny.mrpPerTablet, 0),
+            NULLIF(gpAny.ratePerTablet, 0),
+            0
+          ),
+          2
+        ) AS amount,
+        ipa.prescribedOn
+      FROM indent_pharmacy_association ipa
+      INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
+      LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
+      LEFT JOIN (
+        SELECT itemId, MAX(price) AS price
+        FROM stockmanagement.item_price_master
+        GROUP BY itemId
+      ) ipm ON ipm.itemId = ipa.itemId
+      LEFT JOIN (
+        SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+        FROM stockmanagement.grn_items_associations gi
+        INNER JOIN (
+          SELECT gia.itemId, MAX(gia.id) AS maxId
+          FROM stockmanagement.grn_items_associations gia
+          INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+          WHERE IFNULL(gia.isReturned, 0) = 0
+            AND (:branchId IS NULL OR gm.branchId = :branchId)
+          GROUP BY gia.itemId
+        ) lm ON lm.maxId = gi.id
+      ) gpBranch ON gpBranch.itemId = ipa.itemId
+      LEFT JOIN (
+        SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
+        FROM stockmanagement.grn_items_associations gi
+        INNER JOIN (
+          SELECT itemId, MAX(id) AS maxId
+          FROM stockmanagement.grn_items_associations
+          WHERE IFNULL(isReturned, 0) = 0
+          GROUP BY itemId
+        ) lm ON lm.maxId = gi.id
+      ) gpAny ON gpAny.itemId = ipa.itemId
+    `;
+
+    const runQuery = async whereSql => {
+      return this.mysqlConnection.query(`${selectSql} ${whereSql}`, {
+        replacements,
+        type: QueryTypes.SELECT
+      });
+    };
+
     try {
-      const items = await this.mysqlConnection.query(
-        `
-        SELECT
-          ipa.id,
-          im.itemName,
-          ipa.prescribedQuantity,
-          COALESCE(ipa.purchasedQuantity, ipa.prescribedQuantity) AS quantity,
-          COALESCE(ipm.price, 0) AS unitPrice,
-          ROUND(
-            COALESCE(ipa.purchasedQuantity, ipa.prescribedQuantity) * COALESCE(ipm.price, 0),
-            2
-          ) AS amount,
-          ipa.prescribedOn
-        FROM indent_pharmacy_association ipa
-        INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
-        LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
-        LEFT JOIN stockmanagement.item_price_master ipm ON ipm.itemId = ipa.itemId
+      let items = await runQuery(`
         WHERE pia.patientId = :patientId
-          AND pia.visitId = :visitId
+          AND (
+            pia.visitId = :visitId
+            OR (
+              ipa.prescribedOn >= :admissionDate
+              AND ipa.prescribedOn <= :endDate
+            )
+          )
         ORDER BY ipa.prescribedOn DESC, ipa.id DESC
-        `,
-        {
-          replacements: { patientId, visitId },
-          type: QueryTypes.SELECT
-        }
-      );
+      `);
+
+      if (!items || items.length === 0) {
+        items = await runQuery(`
+          WHERE pia.patientId = :patientId
+          ORDER BY ipa.prescribedOn DESC, ipa.id DESC
+        `);
+      }
+
       return items || [];
     } catch (err) {
       console.log("Error while getting IP medicine bills", err.message);
-      return [];
+      try {
+        const fallbackItems = await this.mysqlConnection.query(
+          `
+          SELECT
+            ipa.id,
+            ipa.indentId,
+            ipa.itemId,
+            im.itemName,
+            ipa.prescribedQuantity,
+            COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) AS quantity,
+            0 AS unitPrice,
+            0 AS amount,
+            ipa.prescribedOn
+          FROM indent_pharmacy_association ipa
+          INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
+          LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
+          WHERE pia.patientId = :patientId
+          ORDER BY ipa.prescribedOn DESC, ipa.id DESC
+          `,
+          {
+            replacements: { patientId },
+            type: QueryTypes.SELECT
+          }
+        );
+        return fallbackItems || [];
+      } catch (fallbackErr) {
+        console.log(
+          "Error while getting IP medicine bills fallback",
+          fallbackErr.message
+        );
+        return [];
+      }
     }
   }
 
@@ -666,10 +776,13 @@ class IpService {
     const roomBilled = this.toAmount(stayDays * roomChargePerDay + bedCharge);
     const packageBilled = this.toAmount(ip.packageAmount);
 
-    const medicines = await this.getMedicineBillsForVisit(
-      ip.patientId,
-      ip.visitId
-    );
+    const medicines = await this.getMedicineBillsForVisit({
+      patientId: ip.patientId,
+      visitId: ip.visitId,
+      admissionDate: ip.dateOfAdmission,
+      dischargeDate: ip.dateOfDischarge,
+      branchId: ip.branchId
+    });
     const medicineBilled = this.toAmount(
       medicines.reduce((sum, item) => sum + this.toAmount(item.amount), 0)
     );
@@ -740,7 +853,8 @@ class IpService {
       billed,
       paid,
       pending,
-      payments
+      payments,
+      medicineSource: "IP_INDENT"
     };
   }
 
