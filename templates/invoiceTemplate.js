@@ -1,31 +1,31 @@
 let invoiceTemplate = `
-<div style="width: 148mm; height: 210mm; margin: 0 auto; padding: 5mm; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 9px; page-break-after: always;">
+<div style="width: 148mm; height: 210mm; margin: 0 auto; padding: 6mm 5mm 6mm 25mm; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 12px; font-weight: 700; page-break-after: always;">
     
     {{{hospitalLogoInformation}}}
 
     {{{patientHeaderInformation}}}
 
-    <h3 style="font-size: 12px; font-weight: bold; color: black; text-align: center; margin: 5px 0;">Purchase Details</h3>
+    <h3 style="font-size: 16px; font-weight: 700; color: black; text-align: center; margin: 6px 0;">Purchase Details</h3>
     
     <div style="width: 100%; margin-top: 5px;">
         {{#if isPharmacy}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 8%; padding: 2px; text-align: left;">S.No</th>
-                <th style="width: 24%; padding: 2px; text-align: left;">Item Name</th>
-                <th style="width: 18%; padding: 2px; text-align: left;">Batch Number</th>
-                <th style="width: 14%; padding: 2px; text-align: left;">Prescribe Qty</th>
-                <th style="width: 14%; padding: 2px; text-align: left;">Purchase Qty</th>
-                <th style="width: 14%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 8%; padding: 3px; text-align: left; font-weight: 700;">S.No</th>
+                <th style="width: 24%; padding: 3px; text-align: left; font-weight: 700;">Item Name</th>
+                <th style="width: 18%; padding: 3px; text-align: left; font-weight: 700;">Batch Number</th>
+                <th style="width: 14%; padding: 3px; text-align: left; font-weight: 700;">Prescribe Qty</th>
+                <th style="width: 14%; padding: 3px; text-align: left; font-weight: 700;">Purchase Qty</th>
+                <th style="width: 14%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.batchNo}}</td>
-                <td style="padding: 2px;">{{this.presQty}}</td>
-                <td style="padding: 2px;">{{this.purcQty}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.batchNo}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.presQty}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.purcQty}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -34,23 +34,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td colspan="3" style="width: 50%; padding: 2px;">
+                <td colspan="3" style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td colspan="3" style="width: 50%; padding: 2px;">
+                <td colspan="3" style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td colspan="3" style="padding: 2px;">
+                <td colspan="3" style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td colspan="3" style="padding: 2px;">
+                <td colspan="3" style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="6" style="padding: 2px;">
+                <td colspan="6" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -60,17 +60,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isScan}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Scan</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Scan</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -79,23 +79,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -105,17 +105,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isLab}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Lab Test</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Lab Test</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -124,23 +124,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -150,17 +150,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isEmbryology}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Embryology</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Embryology</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -169,23 +169,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -195,17 +195,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isConsultationFee}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Order Type</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Order Type</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">Consultation Fee</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">Consultation Fee</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -214,23 +214,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -240,17 +240,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isMileStone}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Milestone</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Milestone</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -259,23 +259,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -284,17 +284,17 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isAppointment}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Appointment Reason</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Appointment Reason</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -303,23 +303,23 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
@@ -328,17 +328,17 @@ let invoiceTemplate = `
         {{/if}}
 
         {{#if isAdvancePayment}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 8px; border: 1px solid #000;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 2px; text-align: left;">S.No.</th>
-                <th style="width: 60%; padding: 2px; text-align: left;">Payment Reason</th>
-                <th style="width: 30%; padding: 2px; text-align: left;">Rate</th>
+                <th style="width: 10%; padding: 3px; text-align: left; font-weight: 700;">S.No.</th>
+                <th style="width: 60%; padding: 3px; text-align: left; font-weight: 700;">Payment Reason</th>
+                <th style="width: 30%; padding: 3px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 2px;">{{this.serialNumber}}</td>
-                <td style="padding: 2px;">{{this.itemName}}</td>
-                <td style="padding: 2px;">{{this.totalCost}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.serialNumber}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 3px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
@@ -347,29 +347,29 @@ let invoiceTemplate = `
             </tr>
             
             <tr>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>Grand Total:</strong> {{Currency}}.{{totalAmount}}
                 </td>
-                <td style="width: 50%; padding: 2px;">
+                <td style="width: 50%; padding: 3px; font-weight: 700;">
                     <strong>GST:</strong> {{Currency}}.{{gst}}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Discount:</strong> {{Currency}}.{{discount}}
                 </td>
-                <td style="padding: 2px;">
+                <td style="padding: 3px; font-weight: 700;">
                     <strong>Amount Paid:</strong> {{Currency}}.{{paidAmount}}
                 </td>
             </tr>
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Amount in Words:</strong> {{amountInWords}}
                 </td>
             </tr>
             {{#if isSplitPayment}}
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Split Payment:</strong>
                     Cash {{Currency}}.{{splitCashAmount}} |
                     UPI {{Currency}}.{{splitUpiAmount}}
@@ -377,7 +377,7 @@ let invoiceTemplate = `
             </tr>
             {{#if splitPaymentSummary}}
             <tr>
-                <td colspan="2" style="padding: 2px;">
+                <td colspan="2" style="padding: 3px; font-weight: 700;">
                     <strong>Payment Division:</strong> {{splitPaymentSummary}}
                 </td>
             </tr>
@@ -388,7 +388,7 @@ let invoiceTemplate = `
         {{/if}}
     </div>
 
-    <div style="margin-top: 25px; font-size: 9px; text-align: right;">
+    <div style="margin-top: 25px; font-size: 12px; font-weight: 700; text-align: right;">
         <p>Authorized Signature</p>
     </div>
 

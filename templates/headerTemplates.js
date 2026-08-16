@@ -55,54 +55,54 @@ const hospitalLogoTemplate = `
 const hopsitalLogoTemplateForInvoice = `
 <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid black; padding: 3px 0; margin: 2px 0; position: relative;">
     <div style="display: flex; flex-direction: column; align-items: center; z-index: 1;">
-        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 60px; height: auto;">
-        <div style="font-size: 8px; margin-top: 2px; color: black;">{logoText}</div>
+        <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 72px; height: auto;">
+        <div style="font-size: 11px; font-weight: 700; margin-top: 2px; color: black;">{logoText}</div>
     </div>
 
     <!-- Hospital Info -->
     <div style="text-align: center; flex-grow: 1; z-index: 1; padding: 0 5px;">
         <!-- Big Title in the Middle -->
-        <div style="font-size: 12px; font-weight: bold; color: #0073e6; margin-bottom: 10px;">ORIGINS IVF</div>
-        <div style="font-size: 8px; font-weight: bold; color: black; margin-bottom: 5px;">{branchName}</div>
-        <div class="header-branch-address" style="font-size: 7px; font-weight: 700; color: black; margin-bottom: 5px;">
+        <div style="font-size: 16px; font-weight: 700; color: #0073e6; margin-bottom: 6px;">ORIGINS IVF</div>
+        <div style="font-size: 12px; font-weight: 700; color: black; margin-bottom: 4px;">{branchName}</div>
+        <div class="header-branch-address" style="font-size: 11px; font-weight: 700; color: black; margin-bottom: 4px;">
         <strong>{branchAddress}</strong>
         </div>
-        <div style="font-size: 8px; color: black;">Phone: {branchPhoneNumber}</div>
+        <div style="font-size: 11px; font-weight: 700; color: black;">Phone: {branchPhoneNumber}</div>
     </div>
 </div>
 `;
 
 let patientHeaderForInvoice = `
-<table style="width: 100%; padding:5px; margin-bottom: 5px; margin-top: 5px; font-size: 8px;border: 1px solid #000;">
+<table style="width: 100%; padding:5px; margin-bottom: 5px; margin-top: 5px; font-size: 12px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
     <tr>
-        <td style="width: 50%; padding: 2px; ">
+        <td style="width: 50%; padding: 3px; font-weight: 700;">
             <strong>Order No:</strong> {{orderNo}}
         </td>
-        <td style="width: 50%; padding: 2px; ">
+        <td style="width: 50%; padding: 3px; font-weight: 700;">
             <strong>Order Date:</strong> {{orderDate}}
         </td>
     </tr>
     <tr>
-        <td style="width: 50%; padding: 2px;">
+        <td style="width: 50%; padding: 3px; font-weight: 700;">
             <strong>Patient Id:</strong> {{patientId}}
         </td>
-        <td style="width: 50%; padding: 2px;">
+        <td style="width: 50%; padding: 3px; font-weight: 700;">
             <strong>Patient Name:</strong> {{name}}
         </td>
     </tr>
     <tr>
-        <td style="padding: 2px;">
+        <td style="padding: 3px; font-weight: 700;">
             <strong>Consultant Name:</strong> {{doctorName}}
         </td>
-        <td style="padding: 2px;">
+        <td style="padding: 3px; font-weight: 700;">
             <strong>Age / Gender:</strong> {{ageGender}}
         </td>
     </tr>
     <tr>
-        <td style="padding: 2px;">
+        <td style="padding: 3px; font-weight: 700;">
             <strong>Phone:</strong> {{mobileNumber}}
         </td>
-            <td style="padding: 2px; ">
+            <td style="padding: 3px; font-weight: 700;">
             <strong>Payment Mode:</strong> {{paymentMode}}
         </td>
     </tr>
