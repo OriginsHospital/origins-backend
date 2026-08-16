@@ -29,6 +29,7 @@ const {
   hysteroscopyUpdateSheetSchema,
   printPrescriptionSchema,
   applyOptOutScema,
+  deleteLineBillItemSchema,
   rescheduleAppointmentSchema,
   createOtherAppointmentSchema
 } = require("../schemas/appointmentPaymentsSchema");
@@ -92,6 +93,9 @@ const GenerateHtmlTemplate = require("../utils/templateUtils");
 const printPrescriptionTemplate = require("../templates/prescriptionDetailsTemplate");
 const BaseService = require("../services/baseService");
 const DoctorsService = require("./doctorsService");
+const {
+  assertBillingItemDeleteAccess
+} = require("../constants/billingItemDeleteAccess");
 const AppointmentReasonMaster = require("../models/Master/appointmentReasonMaster");
 const AppointmentChargesBranchAssociation = require("../models/Associations/appointmentChargesBranchAssocitation");
 const VisitTreatmentsAssociations = require("../models/Associations/visitTreatmentsAssociations");
@@ -4320,6 +4324,56 @@ class AppointmentsPaymentService extends BaseService {
     }
 
     return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  async deleteLineBillItemService() {
+    assertBillingItemDeleteAccess(this._request);
+
+    const validatedPayload = await deleteLineBillItemSchema.validateAsync(
+      this._request.body
+    );
+
+    const LineBillsModel =
+      validatedPayload.type === "Consultation"
+        ? consultationAppointmentLineBillsAssociations
+        : treatmentAppointmentLineBillsAssociations;
+
+    const item = await LineBillsModel.findOne({
+      where: {
+        id: validatedPayload.id,
+        appointmentId: validatedPayload.appointmentId
+      }
+    }).catch(err => {
+      console.log("Error while fetching billing item for delete", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (!item) {
+      throw new createError.NotFound("Billing item not found");
+    }
+
+    if (item.status !== "DUE") {
+      throw new createError.BadRequest(
+        "Only unpaid pending billing items can be deleted."
+      );
+    }
+
+    await LineBillsModel.destroy({
+      where: {
+        id: validatedPayload.id,
+        appointmentId: validatedPayload.appointmentId,
+        status: "DUE"
+      }
+    }).catch(err => {
+      console.log("Error while deleting billing item", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    return Constants.DATA_DELETED_SUCCESS;
   }
 
   async getPendingInformationService() {

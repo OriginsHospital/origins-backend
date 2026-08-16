@@ -274,6 +274,15 @@ class AppointmentsPaymentController {
     });
   }
 
+  async deleteLineBillItemHandler() {
+    const data = await this._service.deleteLineBillItemService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getPendingInformationHandler() {
     const data = await this._service.getPendingInformationService();
     this._response.status(200).send({

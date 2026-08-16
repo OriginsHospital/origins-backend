@@ -221,6 +221,13 @@ class AppointmentPaymentRoute {
       this.applyOptOut
     );
 
+    this._route.delete(
+      "/appointments/deleteLineBillItem",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteLineBillItem
+    );
+
     // Get Pending Information
     this._route.get(
       "/appointments/getPendingInformation",
@@ -387,6 +394,11 @@ class AppointmentPaymentRoute {
   applyOptOut = asyncHandler(async (req, res, next) => {
     const controllerObj = new AppointmentsPaymentController(req, res, next);
     await controllerObj.applyOptOutHandler();
+  });
+
+  deleteLineBillItem = asyncHandler(async (req, res, next) => {
+    const controllerObj = new AppointmentsPaymentController(req, res, next);
+    await controllerObj.deleteLineBillItemHandler();
   });
 
   getPendingInformation = asyncHandler(async (req, res, next) => {

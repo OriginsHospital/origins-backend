@@ -571,12 +571,7 @@ WITH BillDetails AS (
                         )
                         ELSE NULL
                     END,
-                    'refId', 
-                    CASE 
-                        WHEN lb.billTypeId = 1 THEN lb.id 
-                        WHEN lb.billTypeId = 2 THEN lb.id
-                        WHEN lb.billTypeId = 4 THEN lb.id
-                    END,
+                    'refId', lb.id,
                     'status',
                     lb.status,
                     'isSpouse',
@@ -695,12 +690,7 @@ WITH BillDetails AS (
                         )
                         ELSE NULL
                     END,
-                    'refId', 
-                    CASE 
-                        WHEN lb.billTypeId = 1 THEN lb.id 
-                        WHEN lb.billTypeId = 2 THEN lb.id
-                        WHEN lb.billTypeId = 4 THEN lb.id 
-                    END,
+                    'refId', lb.id,
                     'status',
                     lb.status,
                     'isSpouse',

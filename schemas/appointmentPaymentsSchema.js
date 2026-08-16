@@ -342,6 +342,18 @@ const applyOptOutScema = Joi.object({
   isOptOut: Joi.number().required()
 });
 
+const deleteLineBillItemSchema = Joi.object({
+  id: Joi.number()
+    .integer()
+    .required(),
+  appointmentId: Joi.number()
+    .integer()
+    .required(),
+  type: Joi.string()
+    .valid("Consultation", "Treatment")
+    .required()
+});
+
 const rescheduleAppointmentSchema = Joi.object({
   type: Joi.string().required(),
   consultationDoctorId: Joi.number().required(),
@@ -382,6 +394,7 @@ module.exports = {
   hysteroscopyUpdateSheetSchema,
   printPrescriptionSchema,
   applyOptOutScema,
+  deleteLineBillItemSchema,
   rescheduleAppointmentSchema,
   createOtherAppointmentSchema
 };
