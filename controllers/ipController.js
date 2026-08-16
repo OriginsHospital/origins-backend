@@ -27,6 +27,17 @@ class IpController {
     });
   }
 
+  async getIndentPharmacyItemsHandler() {
+    const data = await this._service.getIndentPharmacyItemsService(
+      this._request
+    );
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getBuildingsHandler() {
     const data = await this._service.getBuildingsService(this._request);
     this._response.status(200).send({

@@ -27,6 +27,13 @@ class OtherPaymentModuleRoutes {
       this.addNewIndentRoute
     );
 
+    this._route.get(
+      "/getIndentPharmacyItems",
+      checkActiveSession,
+      tokenVerified,
+      this.getIndentPharmacyItemsRoute
+    );
+
     //Room Hierarchy Routes
     this._route.get(
       "/getBuildings/:branchId",
@@ -121,6 +128,11 @@ class OtherPaymentModuleRoutes {
   addNewIndentRoute = asyncHandler(async (req, res, next) => {
     const controllerObj = new IpController(req, res, next);
     await controllerObj.addNewIndentHandler();
+  });
+
+  getIndentPharmacyItemsRoute = asyncHandler(async (req, res, next) => {
+    const controllerObj = new IpController(req, res, next);
+    await controllerObj.getIndentPharmacyItemsHandler();
   });
 
   getBuildingsRoute = asyncHandler(async (req, res, next) => {

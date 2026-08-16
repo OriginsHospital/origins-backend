@@ -2,11 +2,15 @@ const Joi = require("@hapi/joi");
 
 const addNewIndentSchema = Joi.object({
   patientId: Joi.number().required(),
+  branchId: Joi.number().required(),
   items: Joi.array()
     .items(
       Joi.object({
         itemId: Joi.number().required(),
-        prescribedQuantity: Joi.number().required()
+        prescribedQuantity: Joi.number()
+          .integer()
+          .min(1)
+          .required()
       })
     )
     .min(1)

@@ -13,7 +13,10 @@ const {
 } = require("../schemas/ipSchema");
 const ProcedureIndentAssociationModel = require("../models/Associations/procedureIndentAssociation");
 const IndentPharmacyAssociationModel = require("../models/Associations/indentPharmacyAssociation");
-const { getIndentDetailsQuery } = require("../queries/ip_queries");
+const {
+  getIndentDetailsQuery,
+  getIndentPharmacyItemsQuery
+} = require("../queries/ip_queries");
 const BranchBuildingAssociationModel = require("../models/Associations/branchBuildingAssociation");
 const BuildingFloorAssociationModel = require("../models/Associations/buildingFloorAssociationModel");
 const FloorRoomAssociationModel = require("../models/Associations/floorRoomAssociationModel");
@@ -42,9 +45,31 @@ class IpService {
     this.bucketName = AWSConnection.getS3BucketName();
   }
 
+  getUserAllowedBranchIds() {
+    return (this._request?.userDetails?.branchDetails || [])
+      .map(branch => Number(branch.id))
+      .filter(id => Number.isFinite(id) && id > 0);
+  }
+
+  assertUserCanAccessBranch(branchId) {
+    const allowed = this.getUserAllowedBranchIds();
+    if (!allowed.includes(Number(branchId))) {
+      throw new createError.Forbidden(
+        "You can only manage IP indent for patients admitted in your branch"
+      );
+    }
+  }
+
   async getIndentDetailsService() {
+    const branchId = Number(this._request.query.branchId);
+    if (!branchId) {
+      throw new createError.BadRequest("Branch ID is required");
+    }
+    this.assertUserCanAccessBranch(branchId);
+
     const indentDetails = await this.mysqlConnection
       .query(getIndentDetailsQuery, {
+        replacements: { branchId },
         type: Sequelize.QueryTypes.SELECT
       })
       .catch(err => {
@@ -56,67 +81,157 @@ class IpService {
     return indentDetails;
   }
 
+  async getIndentPharmacyItemsService() {
+    const branchId = Number(this._request.query.branchId);
+    if (!branchId) {
+      throw new createError.BadRequest("Branch ID is required");
+    }
+    this.assertUserCanAccessBranch(branchId);
+
+    const items = await this.mysqlConnection
+      .query(getIndentPharmacyItemsQuery, {
+        replacements: { branchId },
+        type: QueryTypes.SELECT
+      })
+      .catch(err => {
+        console.log("Error while getting indent pharmacy items", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return (items || []).map(item => ({
+      ...item,
+      availableQuantity: Number(item.availableQuantity || 0)
+    }));
+  }
+
+  async deductBranchPharmacyStock(itemId, quantity, branchId, transaction) {
+    const stockSql = `
+      SELECT gia.id, gia.totalQuantity, im.itemName
+      FROM stockmanagement.grn_items_associations gia
+      INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+      LEFT JOIN stockmanagement.item_master im ON im.id = gia.itemId
+      WHERE gia.itemId = :itemId
+        AND gm.branchId = :branchId
+        AND IFNULL(gia.isReturned, 0) = 0
+        AND gia.totalQuantity > 0
+        AND CAST(NOW() AS DATE) < gia.expiryDate
+      ORDER BY gia.expiryDate ASC, gia.id ASC
+    `;
+    const queryOptions = {
+      replacements: { itemId, branchId },
+      type: QueryTypes.SELECT,
+      transaction
+    };
+
+    let lots;
+    try {
+      lots = await this.mysqlConnection.query(
+        `${stockSql} FOR UPDATE`,
+        queryOptions
+      );
+    } catch (err) {
+      console.log("Indent stock lock fallback without FOR UPDATE", err.message);
+      lots = await this.mysqlConnection.query(stockSql, queryOptions);
+    }
+
+    const itemName = lots?.[0]?.itemName || `Item ${itemId}`;
+    const available = (lots || []).reduce(
+      (sum, lot) => sum + Number(lot.totalQuantity || 0),
+      0
+    );
+
+    if (available < Number(quantity)) {
+      throw new createError.BadRequest(
+        `Insufficient stock in admitted branch pharmacy for ${itemName}. Available: ${available}, required: ${quantity}`
+      );
+    }
+
+    let remaining = Number(quantity);
+    for (const lot of lots) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, Number(lot.totalQuantity || 0));
+      if (take <= 0) continue;
+      await this.mysqlConnection.query(
+        `
+        UPDATE stockmanagement.grn_items_associations
+        SET totalQuantity = totalQuantity - :take
+        WHERE id = :id
+        `,
+        {
+          replacements: { take, id: lot.id },
+          transaction
+        }
+      );
+      remaining -= take;
+    }
+  }
+
   async addNewIndentService() {
     const createdByUserId = this._request?.userDetails?.id;
-    console.log(this._request.body);
     const indentData = await addNewIndentSchema.validateAsync(
       this._request.body
     );
 
-    const { patientId, items } = indentData;
-    indentData.createdBy = createdByUserId;
+    const { patientId, branchId, items } = indentData;
+    this.assertUserCanAccessBranch(branchId);
 
     return await this.mysqlConnection.transaction(async t => {
-      const patientExists = await this.mysqlConnection
-        .query("SELECT id FROM patient_master WHERE id = :patientId", {
-          replacements: { patientId },
-          type: QueryTypes.SELECT,
-          transaction: t
-        })
-        .catch(err => {
-          console.log("Error while uploading Iui Consent", err.message);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
-
-      if (!patientExists || patientExists.length === 0) {
-        throw new createError.NotFound("Patient not found");
-      }
-
-      const activeVisit = await this.mysqlConnection
+      const activeIp = await this.mysqlConnection
         .query(
-          "select pva.id from patient_visits_association pva where pva.patientId = :patientId and pva.isActive = 1",
+          `
+          SELECT ip.id, ip.branchId, ip.visitId, ip.roomCode, ip.isActive
+          FROM ip_master ip
+          WHERE ip.patientId = :patientId
+            AND ip.branchId = :branchId
+            AND ip.isActive = 1
+          ORDER BY ip.id DESC
+          LIMIT 1
+          `,
           {
-            replacements: { patientId },
+            replacements: { patientId, branchId },
             type: QueryTypes.SELECT,
             transaction: t
           }
         )
         .catch(err => {
-          console.log("Error while uploading Iui Consent", err.message);
+          console.log("Error while getting active IP for indent", err.message);
           throw new createError.InternalServerError(
             Constants.SOMETHING_ERROR_OCCURRED
           );
         });
 
-      const activeVisitId = activeVisit?.[0]?.id;
-      if (!activeVisitId) {
+      if (!activeIp || activeIp.length === 0) {
+        throw new createError.Forbidden(
+          "Patient is not admitted or booked in this branch. Only current IP patients of this branch can be added."
+        );
+      }
+
+      const visitId = activeIp[0].visitId;
+      if (!visitId) {
         throw new createError.NotFound("Active visit not found for patient");
       }
 
-      const indentDataToInsert = {
-        patientId,
-        visitId: activeVisitId,
-        createdBy: createdByUserId,
-        procedureId: 6
-      };
+      for (const item of items) {
+        await this.deductBranchPharmacyStock(
+          item.itemId,
+          item.prescribedQuantity,
+          branchId,
+          t
+        );
+      }
 
       const indent = await ProcedureIndentAssociationModel.create(
-        indentDataToInsert,
+        {
+          patientId,
+          visitId,
+          createdBy: createdByUserId,
+          procedureId: 6
+        },
         { transaction: t }
       ).catch(err => {
-        console.log("Error while uploading Iui Consent", err.message);
+        console.log("Error while creating indent", err.message);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
@@ -126,6 +241,7 @@ class IpService {
         indentId: indent.id,
         itemId: item.itemId,
         prescribedQuantity: item.prescribedQuantity,
+        purchasedQuantity: item.prescribedQuantity,
         prescribedOn: new Date(),
         createdBy: createdByUserId
       }));
@@ -133,7 +249,7 @@ class IpService {
       await IndentPharmacyAssociationModel.bulkCreate(indentItems, {
         transaction: t
       }).catch(err => {
-        console.log("Error while uploading Iui Consent", err.message);
+        console.log("Error while adding indent items", err.message);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
