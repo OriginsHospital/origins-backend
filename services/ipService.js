@@ -188,19 +188,41 @@ class IpService {
     });
   }
 
+  resolveBedDisplayStatus(bed) {
+    const status = String(bed?.status || "").trim();
+    if (bed?.isBooked) return "Occupied";
+    if (status === "Maintenance") return "Maintenance";
+    if (status === "Reserved") return "Reserved";
+    if (status === "Occupied") return "Occupied";
+    return "Available";
+  }
+
+  isBedUnavailableForBooking(bed) {
+    const status = this.resolveBedDisplayStatus(bed);
+    return (
+      Boolean(bed?.isBooked) ||
+      status === "Occupied" ||
+      status === "Reserved" ||
+      status === "Maintenance"
+    );
+  }
+
   async getBedsService() {
     const { roomId } = this._request.params;
-    return await RoomBedAssociationModel.findAll({
-      where: {
-        roomId,
-        status: "Available" // Only return available beds for IP creation
-      },
-      order: [["bedNumber", "ASC"]]
+    const beds = await RoomBedAssociationModel.findAll({
+      where: { roomId },
+      order: [["bedNumber", "ASC"], ["name", "ASC"]]
     }).catch(err => {
       console.log("Error while getting beds", err.message);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
+    });
+
+    return beds.map(bed => {
+      const json = typeof bed.toJSON === "function" ? bed.toJSON() : bed;
+      json.status = this.resolveBedDisplayStatus(json);
+      return json;
     });
   }
 
@@ -309,12 +331,19 @@ class IpService {
         throw new createError.NotFound("Bed not found");
       }
 
-      if (bed.isBooked) {
+      if (this.isBedUnavailableForBooking(bed)) {
+        const displayStatus = this.resolveBedDisplayStatus(bed);
+        if (displayStatus === "Maintenance") {
+          throw new createError.Conflict("Bed is under maintenance");
+        }
+        if (displayStatus === "Reserved") {
+          throw new createError.Conflict("Bed is already reserved");
+        }
         throw new createError.Conflict("Bed is already booked");
       }
 
-      //mark the bed as booked
       bed.isBooked = true;
+      bed.status = "Occupied";
       await bed.save({ transaction: t }).catch(err => {
         console.log("Error while saving bed", err.message);
         throw new createError.InternalServerError(
@@ -455,9 +484,8 @@ class IpService {
       }
 
       const bedId = checkExistingIP.bedId;
-      //mark bed isBooked as false
       await RoomBedAssociationModel.update(
-        { isBooked: false },
+        { isBooked: false, status: "Available" },
         { where: { id: bedId }, transaction: t }
       );
 
@@ -485,13 +513,23 @@ class IpService {
         );
       }
 
-      //check new Bed is not booked
-      const isNewBedBooked = await RoomBedAssociationModel.findOne({
-        where: { id: validatedData.bedId, isBooked: true },
+      const newBed = await RoomBedAssociationModel.findOne({
+        where: { id: validatedData.bedId },
         transaction: t
       });
 
-      if (isNewBedBooked) {
+      if (!newBed) {
+        throw new createError.NotFound("Bed not found");
+      }
+
+      if (this.isBedUnavailableForBooking(newBed)) {
+        const displayStatus = this.resolveBedDisplayStatus(newBed);
+        if (displayStatus === "Maintenance") {
+          throw new createError.Conflict("New bed is under maintenance");
+        }
+        if (displayStatus === "Reserved") {
+          throw new createError.Conflict("New bed is already reserved");
+        }
         throw new createError.Conflict("New bed is already booked");
       }
 
@@ -522,15 +560,13 @@ class IpService {
         throw new createError.NotFound("Building not found");
       }
 
-      // Free the previous bed for checkExistingIP
       await RoomBedAssociationModel.update(
-        { isBooked: false },
+        { isBooked: false, status: "Available" },
         { where: { id: checkExistingIP.bedId }, transaction: t }
       );
 
-      // Book the new bed
       await RoomBedAssociationModel.update(
-        { isBooked: true },
+        { isBooked: true, status: "Occupied" },
         { where: { id: validatedData.bedId }, transaction: t }
       );
 
@@ -1378,6 +1414,13 @@ class IpService {
     if (status) {
       bed.status = status;
       bed.isBooked = status === "Occupied";
+      if (
+        status === "Available" ||
+        status === "Reserved" ||
+        status === "Maintenance"
+      ) {
+        bed.isBooked = false;
+      }
     }
 
     if (isActive !== undefined) {
