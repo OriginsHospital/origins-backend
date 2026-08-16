@@ -27,25 +27,40 @@ class App {
   }
 
   async startApp() {
+    const allowedOrigins = [
+      "http://localhost:3001",
+      "https://localhost:3001",
+      "http://localhost:3000",
+      "https://localhost:3000",
+      "http://localhost:3002",
+      "https://localhost:3002",
+      "http://localhost",
+      "https://localhost",
+      "capacitor://localhost",
+      "ionic://localhost",
+      "http://13.234.149.138:42000",
+      "https://hms-app-alpha.vercel.app",
+      "https://www.originshms.com",
+      "https://originshms.com"
+    ];
+
     this.app.use(
       cors({
         exposedHeaders: ["filename", "Content-Disposition"],
-        origin: [
-          "http://localhost:3001",
-          "https://localhost:3001",
-          "http://localhost:3000",
-          "https://localhost:3000",
-          "http://localhost:3002",
-          "https://localhost:3002",
-          "http://localhost",
-          "https://localhost",
-          "capacitor://localhost",
-          "ionic://localhost",
-          "http://13.234.149.138:42000",
-          "https://hms-app-alpha.vercel.app",
-          "https://www.originshms.com"
-        ], // Replace with your frontend domain
-        credentials: true
+        origin: (origin, callback) => {
+          if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+          }
+          return callback(null, false);
+        },
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: [
+          "Content-Type",
+          "Authorization",
+          "Access-Control-Allow-Origin",
+          "Access-Control-Allow-Credentials"
+        ]
       })
     );
     this.app.use(cookieParser());
