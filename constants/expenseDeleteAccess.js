@@ -2,7 +2,8 @@ const createError = require("http-errors");
 
 const EXPENSE_DELETE_ALLOWED_EMAILS = [
   "nikhilsuvva77@gmail.com",
-  "ajaysivaramburri@gmail.com"
+  "ajaysivaramburri@gmail.com",
+  "soujanyaadmin4@gmail.com"
 ];
 
 function hasExpenseDeleteAccess(userDetails) {
