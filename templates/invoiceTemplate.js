@@ -242,20 +242,18 @@ let invoiceTemplate = `
         {{#if isMileStone}}
         <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
-                <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
-                <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Milestone</th>
+                <th style="width: 70%; padding: 4px; text-align: left; font-weight: 700;"></th>
                 <th style="width: 30%; padding: 4px; text-align: left; font-weight: 700;">Rate</th>
             </tr>
             {{#each productTable}}
             <tr>
-                <td style="padding: 4px; font-weight: 700;">{{this.serialNumber}}</td>
-                <td style="padding: 4px; font-weight: 700;">{{this.itemName}}</td>
+                <td style="padding: 4px; font-weight: 700;">IVF treatment</td>
                 <td style="padding: 4px; font-weight: 700;">{{this.totalCost}}</td>
             </tr>
             {{/each}}
             
              <tr>
-                <td colspan="3"><hr></td>
+                <td colspan="2"><hr></td>
             </tr>
             
             <tr>

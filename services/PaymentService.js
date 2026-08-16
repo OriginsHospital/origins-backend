@@ -1367,7 +1367,7 @@ class PaymentService extends BaseService {
       return [
         {
           serialNumber: 1,
-          itemName: productType,
+          itemName: "IVF treatment",
           totalCost: purchaseDetails?.paidOrderAmountBeforeDiscount,
           prescribedTo: "PATIENT" // Always Patient for Milestone Package Based
         }
