@@ -453,7 +453,15 @@ class PaymentService extends BaseService {
       if (totalPayableAmount !== normalizedPaidOrderAmount) {
         throw new createError.BadRequest(Constants.PAYABLE_AMOUNT_WRONG);
       }
-      if (paymentMode === "ONLINE") {
+
+      // Razorpay rejects orders below ₹1. Fully discounted (₹0) bills must skip the gateway
+      // and be settled immediately so pharmacy/package coupons can complete billing.
+      const amountInPaise = Math.round(normalizedPaidOrderAmount * 100);
+      const canCreateRazorpayOrder = amountInPaise >= 100;
+      const shouldSettleImmediately =
+        paymentMode !== "ONLINE" || !canCreateRazorpayOrder;
+
+      if (paymentMode === "ONLINE" && canCreateRazorpayOrder) {
         let refId = orderDetails[0].refId;
         let type = orderDetails[0].type;
         console.log("productType:", productType);
@@ -531,8 +539,7 @@ class PaymentService extends BaseService {
           .format("YYYY-MM-DD HH:mm:ss"),
         paymentMode,
         productType,
-        paymentStatus:
-          paymentMode === "CASH" || paymentMode === "UPI" ? "PAID" : "DUE"
+        paymentStatus: shouldSettleImmediately ? "PAID" : "DUE"
       };
 
       const orderDetailsResponse = await OrderDetailsMasterModel.create(
@@ -547,7 +554,7 @@ class PaymentService extends BaseService {
         );
       }
 
-      if (paymentMode != "ONLINE") {
+      if (shouldSettleImmediately) {
         const getExistingOrderDetails = JSON.parse(
           orderDetailsResponse.dataValues.orderDetails
         );
@@ -675,6 +682,9 @@ class PaymentService extends BaseService {
       return orderDetailsResponse;
     } catch (err) {
       console.error("Error while adding order details:", err.message);
+      if (err.status || err.statusCode) {
+        throw err;
+      }
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
       );
