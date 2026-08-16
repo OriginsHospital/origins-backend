@@ -13,9 +13,11 @@ const {
 const { Sequelize } = require("sequelize");
 const {
   saveLabTestResultSchema,
-  saveOutsourcingLabTestResultSchema
+  saveOutsourcingLabTestResultSchema,
+  uploadLabPatientImageSchema
 } = require("../schemas/labSchema");
 const LabTestResultsModel = require("../models/Master/labTestResults");
+const LabPatientImages = require("../models/Master/labPatientImages");
 const LabTestTemplatesMaster = require("../models/Master/labTemplatesMaster");
 const GenerateHtmlTemplate = require("../utils/templateUtils");
 const moment = require("moment-timezone");
@@ -619,6 +621,210 @@ class LabsService extends BaseService {
     });
 
     this._response.send(pdf_buffer);
+  }
+
+  isAntenatalVisit(visitTypeId, visitTypeName) {
+    const typeName = String(visitTypeName || "").toLowerCase();
+    return Number(visitTypeId) === 2 || typeName.includes("antenatal");
+  }
+
+  async getVisitTypeForAppointment(appointmentId, type) {
+    const isConsultation = String(type).toUpperCase() === "CONSULTATION";
+    const query = isConsultation
+      ? `SELECT pva.type AS visitTypeId,
+          (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) AS visitType
+         FROM consultation_appointments_associations caa
+         INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+         INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+         WHERE caa.id = :appointmentId
+         LIMIT 1`
+      : `SELECT pva.type AS visitTypeId,
+          (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) AS visitType
+         FROM treatment_appointments_associations taa
+         INNER JOIN visit_treatment_cycles_associations vtca ON taa.treatmentCycleId = vtca.id
+         INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+         WHERE taa.id = :appointmentId
+         LIMIT 1`;
+
+    const rows = await this.mysqlConnection
+      .query(query, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { appointmentId }
+      })
+      .catch(err => {
+        console.log("Error while getting visit type for appointment", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return rows?.[0] || null;
+  }
+
+  async uploadLabPatientImageToS3(file, appointmentId, type, imageType) {
+    const uniqueFileName = `${file.originalname.split(".")[0]}_${Date.now()}`;
+    const extension = file.originalname.split(".").pop();
+    const key = `labs/patient-images/${type}/${appointmentId}/${imageType}/${uniqueFileName}.${extension}`;
+
+    const uploadParams = {
+      Bucket: this.bucketName,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype
+    };
+
+    const uploadResult = await this.s3.upload(uploadParams).promise();
+    return {
+      imageUrl: uploadResult.Location,
+      imageKey: key
+    };
+  }
+
+  async uploadLabPatientImagesService() {
+    const payload = await uploadLabPatientImageSchema.validateAsync(
+      this._request.body
+    );
+    const { appointmentId, type, imageType } = payload;
+    const files = this._request.files?.labPatientImages;
+
+    if (!files || files.length === 0) {
+      throw new createError.BadRequest(Constants.LAB_PATIENT_IMAGE_REQUIRED);
+    }
+
+    const allowedMimeTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp"
+    ];
+    const maxFileSize = 5 * 1024 * 1024;
+
+    for (const file of files) {
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new createError.BadRequest(Constants.LAB_PATIENT_IMAGE_INVALID);
+      }
+      if (file.size > maxFileSize) {
+        throw new createError.BadRequest(Constants.LAB_PATIENT_IMAGE_TOO_LARGE);
+      }
+    }
+
+    if (imageType === "NST") {
+      const visitInfo = await this.getVisitTypeForAppointment(
+        appointmentId,
+        type
+      );
+      if (
+        !visitInfo ||
+        !this.isAntenatalVisit(visitInfo.visitTypeId, visitInfo.visitType)
+      ) {
+        throw new createError.BadRequest(Constants.NST_ONLY_FOR_ANTENATAL);
+      }
+    }
+
+    const uploadedBy = this._request.userDetails?.id || null;
+
+    return await this.mysqlConnection.transaction(async t => {
+      const uploadedImages = [];
+
+      for (const file of files) {
+        const { imageUrl, imageKey } = await this.uploadLabPatientImageToS3(
+          file,
+          appointmentId,
+          type,
+          imageType
+        );
+
+        const createdImage = await LabPatientImages.create(
+          {
+            appointmentId,
+            type,
+            imageType,
+            imageUrl,
+            imageKey,
+            uploadedBy
+          },
+          { transaction: t }
+        ).catch(err => {
+          console.log("Error while saving lab patient image", err.message);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+        uploadedImages.push({
+          id: createdImage.id,
+          appointmentId,
+          type,
+          imageType,
+          imageUrl,
+          imageKey
+        });
+      }
+
+      return uploadedImages;
+    });
+  }
+
+  async getLabPatientImagesService() {
+    const { appointmentId, type, imageType } = this._request.query;
+
+    if (lodash.isEmpty(String(appointmentId || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "appointmentId")
+      );
+    }
+    if (lodash.isEmpty(String(type || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "type")
+      );
+    }
+
+    const where = {
+      appointmentId,
+      type: String(type).toUpperCase()
+    };
+
+    if (imageType) {
+      where.imageType = String(imageType).toUpperCase();
+    }
+
+    return LabPatientImages.findAll({
+      where,
+      order: [["createdAt", "DESC"]]
+    }).catch(err => {
+      console.log("Error while fetching lab patient images", err.message);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+  }
+
+  async deleteLabPatientImageService() {
+    const { imageId } = this._request.params;
+    if (lodash.isEmpty(String(imageId || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "imageId")
+      );
+    }
+
+    const imageRecord = await LabPatientImages.findByPk(imageId);
+    if (!imageRecord) {
+      throw new createError.NotFound(Constants.LAB_PATIENT_IMAGE_NOT_FOUND);
+    }
+
+    try {
+      await this.s3
+        .deleteObject({ Bucket: this.bucketName, Key: imageRecord.imageKey })
+        .promise();
+    } catch (err) {
+      console.log(
+        "Error while deleting lab patient image from S3:",
+        err.message
+      );
+    }
+
+    await LabPatientImages.destroy({ where: { id: imageId } });
+    return Constants.DELETED_SUCCESSFULLY;
   }
 }
 

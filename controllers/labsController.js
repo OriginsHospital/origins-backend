@@ -93,6 +93,33 @@ class LabsController {
   async downloadLabReportHandler() {
     await this._service.downloadLabReportService(this._request);
   }
+
+  async uploadLabPatientImagesHandler() {
+    const data = await this._service.uploadLabPatientImagesService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.UPLOADED_TO_S3_BUCKET_SUCCESSFULLY,
+      data: data
+    });
+  }
+
+  async getLabPatientImagesHandler() {
+    const data = await this._service.getLabPatientImagesService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async deleteLabPatientImageHandler() {
+    const data = await this._service.deleteLabPatientImageService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = LabsController;

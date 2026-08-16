@@ -85,6 +85,28 @@ class LabsRoute {
       tokenVerified, 
       this.downloadLabReport 
     );
+
+    this._route.post(
+      "/uploadLabPatientImage",
+      checkActiveSession,
+      tokenVerified,
+      upload.fields([{ name: "labPatientImages", maxCount: 10 }]),
+      this.uploadLabPatientImages
+    );
+
+    this._route.get(
+      "/getLabPatientImages",
+      checkActiveSession,
+      tokenVerified,
+      this.getLabPatientImages
+    );
+
+    this._route.delete(
+      "/deleteLabPatientImage/:imageId",
+      checkActiveSession,
+      tokenVerified,
+      this.deleteLabPatientImage
+    );
   }
 
   getLabtestsByDate = asyncHandler(async (req, res, next) => {
@@ -135,6 +157,21 @@ class LabsRoute {
   downloadLabReport = asyncHandler(async (req, res, next) => {
     const controllerObj = new LabsController(req, res, next);
     await controllerObj.downloadLabReportHandler();
+  });
+
+  uploadLabPatientImages = asyncHandler(async (req, res, next) => {
+    const controllerObj = new LabsController(req, res, next);
+    await controllerObj.uploadLabPatientImagesHandler();
+  });
+
+  getLabPatientImages = asyncHandler(async (req, res, next) => {
+    const controllerObj = new LabsController(req, res, next);
+    await controllerObj.getLabPatientImagesHandler();
+  });
+
+  deleteLabPatientImage = asyncHandler(async (req, res, next) => {
+    const controllerObj = new LabsController(req, res, next);
+    await controllerObj.deleteLabPatientImageHandler();
   });
 }
 

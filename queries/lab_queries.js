@@ -12,6 +12,10 @@ calba.isSpouse,
 caa.branchId ,
 calba.appointmentId as appointmentId,
 'CONSULTATION' as type,
+pva.type as visitTypeId,
+(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
+(SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = calba.appointmentId AND lpi.type = 'CONSULTATION' AND lpi.imageType = 'ECG') as ecgImageCount,
+(SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = calba.appointmentId AND lpi.type = 'CONSULTATION' AND lpi.imageType = 'NST') as nstImageCount,
 JSON_ARRAYAGG(
     JSON_OBJECT(
         'labTestId', ltm.id,
@@ -38,7 +42,7 @@ INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
 INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
 WHERE caa.appointmentDate = :appointmentDate AND calba.status = 'PAID' AND calba.billTypeId = 1
     AND (:labCategoryType IS NULL OR ltmba.isOutSourced = :labCategoryType)
-GROUP BY pva.patientId, patientName, calba.appointmentId
+GROUP BY pva.patientId, patientName, calba.appointmentId, pva.type
 
 UNION ALL
 
@@ -56,6 +60,10 @@ SELECT
     taa.branchId,
     talba.appointmentId AS appointmentId,
     'TREATMENT' AS type,
+    pva.type as visitTypeId,
+    (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
+    (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = talba.appointmentId AND lpi.type = 'TREATMENT' AND lpi.imageType = 'ECG') as ecgImageCount,
+    (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = talba.appointmentId AND lpi.type = 'TREATMENT' AND lpi.imageType = 'NST') as nstImageCount,
     JSON_ARRAYAGG(
     JSON_OBJECT(
         'labTestId', ltm.id,
@@ -82,7 +90,7 @@ INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
 INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
 WHERE taa.appointmentDate = :appointmentDate AND talba.status = 'PAID' AND talba.billTypeId = 1
     AND (:labCategoryType IS NULL OR ltmba.isOutSourced = :labCategoryType)
-GROUP BY pva.patientId, patientName, talba.appointmentId
+GROUP BY pva.patientId, patientName, talba.appointmentId, pva.type
 )
 SELECT * FROM getLabsByDate
 WHERE (:branchId IS NULL OR branchId = :branchId);

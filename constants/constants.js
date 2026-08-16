@@ -206,5 +206,11 @@ module.exports = {
   PACKAGE_EDIT_FORBIDDEN: "You are not authorized to edit patient packages",
   CLONE_SOURCE_TARGET_SAME: "Source and target branches must be different",
   CLONE_TYPES_REQUIRED: "Select at least one type of data to clone",
-  CLONE_MASTER_DATA_SUCCESS: "Master data cloned successfully"
+  CLONE_MASTER_DATA_SUCCESS: "Master data cloned successfully",
+  NST_ONLY_FOR_ANTENATAL:
+    "NST images can be uploaded only for antenatal visit types",
+  LAB_PATIENT_IMAGE_REQUIRED: "Please select at least one image to upload",
+  LAB_PATIENT_IMAGE_INVALID: "Please upload JPG, JPEG, PNG or WEBP images only",
+  LAB_PATIENT_IMAGE_TOO_LARGE: "Each image must be less than 5MB",
+  LAB_PATIENT_IMAGE_NOT_FOUND: "Lab patient image not found"
 };

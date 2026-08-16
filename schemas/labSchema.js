@@ -27,7 +27,20 @@ const saveOutsourcingLabTestResultSchema = Joi.object({
     .required()
 });
 
+const uploadLabPatientImageSchema = Joi.object({
+  appointmentId: Joi.number().required(),
+  type: Joi.string()
+    .uppercase()
+    .valid("CONSULTATION", "TREATMENT")
+    .required(),
+  imageType: Joi.string()
+    .uppercase()
+    .valid("ECG", "NST")
+    .required()
+});
+
 module.exports = {
   saveLabTestResultSchema,
-  saveOutsourcingLabTestResultSchema
+  saveOutsourcingLabTestResultSchema,
+  uploadLabPatientImageSchema
 };
