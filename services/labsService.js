@@ -35,6 +35,23 @@ class LabsService extends BaseService {
     this.htmlTemplateGenerationObj = new GenerateHtmlTemplate();
   }
 
+  parseOptionalBranchId(branchId) {
+    if (
+      branchId === undefined ||
+      branchId === null ||
+      String(branchId).trim() === "" ||
+      ["null", "undefined"].includes(
+        String(branchId)
+          .trim()
+          .toLowerCase()
+      )
+    ) {
+      return null;
+    }
+    const parsed = Number(branchId);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   async getLabtestsByDateService() {
     const { appointmentDate } = this._request.params;
     const { labCategoryType, branchId } = this._request.query;
@@ -48,8 +65,13 @@ class LabsService extends BaseService {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           appointmentDate: appointmentDate,
-          labCategoryType: labCategoryType || null,
-          branchId: branchId || null
+          labCategoryType:
+            labCategoryType === undefined ||
+            labCategoryType === null ||
+            String(labCategoryType).trim() === ""
+              ? null
+              : labCategoryType,
+          branchId: this.parseOptionalBranchId(branchId)
         }
       })
       .catch(err => {
@@ -81,7 +103,7 @@ class LabsService extends BaseService {
         replacements: {
           fromDate: fromDate,
           toDate: toDate,
-          branchId: branchId || null
+          branchId: this.parseOptionalBranchId(branchId)
         }
       })
       .catch(err => {
@@ -97,7 +119,7 @@ class LabsService extends BaseService {
   async getAllOutsourcingLabTestsService() {
     const { searchQuery, branchId = null } = this._request.query;
     const trimmedSearchQuery = searchQuery?.trim();
-    const parsedBranchId = branchId ? Number(branchId) : null;
+    const parsedBranchId = this.parseOptionalBranchId(branchId);
 
     let query = getAllOutsourcingLabtestsQuery;
     const conditions = [];
@@ -167,7 +189,7 @@ class LabsService extends BaseService {
         replacements: {
           fromDate,
           toDate,
-          branchId: branchId || null,
+          branchId: this.parseOptionalBranchId(branchId),
           labCategoryType: parsedCategoryType
         }
       })

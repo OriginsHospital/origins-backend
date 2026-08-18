@@ -40,9 +40,10 @@ INNER JOIN patient_master pm ON pm.id = pva.patientId
 LEFT JOIN patient_guardian_associations pga on pm.id = pga.patientId 
 INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
 INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
-WHERE caa.appointmentDate = :appointmentDate AND calba.status = 'PAID' AND calba.billTypeId = 1
+WHERE DATE(caa.appointmentDate) = DATE(:appointmentDate) AND calba.status = 'PAID' AND calba.billTypeId = 1
     AND (:labCategoryType IS NULL OR ltmba.isOutSourced = :labCategoryType)
-GROUP BY pva.patientId, patientName, calba.appointmentId, pva.type
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
+GROUP BY pva.patientId, patientName, calba.appointmentId, pva.type, caa.branchId, calba.isSpouse
 
 UNION ALL
 
@@ -88,9 +89,10 @@ INNER JOIN patient_master pm ON pm.id = pva.patientId
 LEFT JOIN patient_guardian_associations pga on pm.id = pga.patientId 
 INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
 INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
-WHERE taa.appointmentDate = :appointmentDate AND talba.status = 'PAID' AND talba.billTypeId = 1
+WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate) AND talba.status = 'PAID' AND talba.billTypeId = 1
     AND (:labCategoryType IS NULL OR ltmba.isOutSourced = :labCategoryType)
-GROUP BY pva.patientId, patientName, talba.appointmentId, pva.type
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
+GROUP BY pva.patientId, patientName, talba.appointmentId, pva.type, taa.branchId, talba.isSpouse
 )
 SELECT * FROM getLabsByDate
 WHERE (:branchId IS NULL OR branchId = :branchId);
@@ -135,7 +137,8 @@ WITH Labs AS (
     INNER JOIN patient_master pm ON pm.id = pva.patientId
     INNER JOIN lab_test_master ltm ON ltm.id = calba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = caa.branchId
-    WHERE calba.status = 'PAID' AND calba.billTypeId = 1 AND ltmba.isOutSourced = 0 
+    WHERE calba.status = 'PAID' AND calba.billTypeId = 1 AND ltmba.isOutSourced = 0
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
 
     UNION ALL
 
@@ -177,6 +180,7 @@ WITH Labs AS (
     INNER JOIN lab_test_master ltm ON ltm.id = talba.billTypeValue
     INNER JOIN lab_test_master_branch_association ltmba ON ltmba.labTestId = ltm.id AND ltmba.branchId = taa.branchId
     WHERE talba.status = 'PAID' AND talba.billTypeId = 1 AND ltmba.isOutSourced = 0
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
 )SELECT * FROM Labs where 
 DATE(appointmentDate) BETWEEN :fromDate AND :toDate 
 AND (:branchId IS NULL OR branchId = :branchId) 
