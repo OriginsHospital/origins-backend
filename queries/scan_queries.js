@@ -543,6 +543,113 @@ WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
 ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 `;
 
+const getDischargeCardsByDateQuery = `
+SELECT * FROM (
+  SELECT
+    caa.id AS appointmentId,
+    'Consultation' AS appointmentType,
+    pm.id AS patientId,
+    pm.patientId AS uhid,
+    pva.id AS visitId,
+    pva.type AS visitTypeId,
+    vtm.name AS visitType,
+    NULL AS treatmentCycleId,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(pm.firstName, '') AS firstName,
+    COALESCE(pm.lastName, '') AS lastName,
+    pm.dateOfBirth,
+    pm.gender,
+    pm.addressLine1,
+    pm.addressLine2,
+    (SELECT cm.name FROM city_master cm WHERE cm.id = pm.cityId) AS cityName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = caa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = caa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    caa.branchId,
+    TIME_FORMAT(caa.timeStart, '%H:%i') AS timeStart,
+    TIME_FORMAT(caa.timeEnd, '%H:%i') AS timeEnd,
+    CASE WHEN pdc.id IS NOT NULL THEN 1 ELSE 0 END AS hasSavedCard
+  FROM consultation_appointments_associations caa
+  INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
+  INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
+  INNER JOIN visit_type_master vtm ON vtm.id = pva.type
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  LEFT JOIN appointment_reason_master arm ON arm.id = caa.appointmentReasonId
+  LEFT JOIN patient_discharge_cards pdc ON pdc.visitId = pva.id
+  WHERE DATE(caa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR caa.branchId = :branchId)
+    AND caa.noShow = 0
+    AND (arm.isSpouse = 0 OR arm.isSpouse IS NULL)
+    AND (
+      pva.type = 2
+      OR pva.type = '2'
+      OR LOWER(vtm.name) LIKE '%antenatal%'
+    )
+
+  UNION ALL
+
+  SELECT
+    taa.id AS appointmentId,
+    'Treatment' AS appointmentType,
+    pm.id AS patientId,
+    pm.patientId AS uhid,
+    pva.id AS visitId,
+    pva.type AS visitTypeId,
+    vtm.name AS visitType,
+    taa.treatmentCycleId AS treatmentCycleId,
+    CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+    COALESCE(pm.firstName, '') AS firstName,
+    COALESCE(pm.lastName, '') AS lastName,
+    pm.dateOfBirth,
+    pm.gender,
+    pm.addressLine1,
+    pm.addressLine2,
+    (SELECT cm.name FROM city_master cm WHERE cm.id = pm.cityId) AS cityName,
+    COALESCE(
+      (SELECT pga.name FROM patient_guardian_associations pga WHERE pga.patientId = pm.id LIMIT 1),
+      ''
+    ) AS spouseName,
+    COALESCE(
+      (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+      ''
+    ) AS appointmentReason,
+    COALESCE(
+      (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+      ''
+    ) AS doctorName,
+    taa.branchId,
+    TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
+    TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd,
+    CASE WHEN pdc.id IS NOT NULL THEN 1 ELSE 0 END AS hasSavedCard
+  FROM treatment_appointments_associations taa
+  INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+  INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+  INNER JOIN visit_type_master vtm ON vtm.id = pva.type
+  INNER JOIN patient_master pm ON pm.id = pva.patientId
+  LEFT JOIN appointment_reason_master arm ON arm.id = taa.appointmentReasonId
+  LEFT JOIN patient_discharge_cards pdc ON pdc.visitId = pva.id
+  WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+    AND (:branchId IS NULL OR taa.branchId = :branchId)
+    AND taa.noShow = 0
+    AND (arm.isSpouse = 0 OR arm.isSpouse IS NULL)
+    AND (
+      pva.type = 2
+      OR pva.type = '2'
+      OR LOWER(vtm.name) LIKE '%antenatal%'
+    )
+) AS discharge_card_appointments
+ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
+`;
+
 const getUptResultsQuery = `
 SELECT
   ur.id,
@@ -575,5 +682,6 @@ module.exports = {
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
   getHysteroLapByDateQuery,
+  getDischargeCardsByDateQuery,
   getUptResultsQuery
 };

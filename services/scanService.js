@@ -10,6 +10,7 @@ const {
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
   getHysteroLapByDateQuery,
+  getDischargeCardsByDateQuery,
   getUptResultsQuery
 } = require("../queries/scan_queries");
 const { Sequelize } = require("sequelize");
@@ -19,10 +20,12 @@ const {
   uploadFormFForScanSchema,
   deleteFormFForScanSchema,
   saveUptResultSchema,
-  editUptResultSchema
+  editUptResultSchema,
+  saveDischargeCardSchema
 } = require("../schemas/scanSchema");
 const ScanResultModel = require("../models/Master/ScanResultMaster");
 const UptResultsMaster = require("../models/Master/uptResultsMaster");
+const PatientDischargeCardAssociations = require("../models/Associations/patientDischargeCardAssociations");
 const patientScanFormFAssociations = require("../models/Associations/patientScanFormFAssociation");
 const AWSConnection = require("../connections/aws_connection");
 const { getPatientInfoForTemplate } = require("../queries/lab_queries");
@@ -943,6 +946,135 @@ class ScanService extends BaseService {
     });
 
     return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  parseDischargeCardData(cardData) {
+    if (!cardData) return null;
+    if (typeof cardData === "string") {
+      try {
+        return JSON.parse(cardData);
+      } catch (err) {
+        return null;
+      }
+    }
+    return cardData;
+  }
+
+  async getDischargeCardsByDateService() {
+    const { appointmentDate } = this._request.params;
+    const { branchId } = this._request.query;
+    if (lodash.isEmpty(String(appointmentDate || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "appointmentDate")
+      );
+    }
+
+    return this.mysqlConnection
+      .query(getDischargeCardsByDateQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          appointmentDate,
+          branchId: branchId || null
+        }
+      })
+      .catch(err => {
+        console.log("Error while getting discharge cards by date", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+  }
+
+  async getDischargeCardService() {
+    const { visitId } = this._request.query;
+    if (!visitId) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "visitId")
+      );
+    }
+
+    const data = await PatientDischargeCardAssociations.findOne({
+      where: { visitId }
+    }).catch(err => {
+      console.log("Error while fetching discharge card", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    if (lodash.isEmpty(data)) {
+      return null;
+    }
+
+    const plain = data.toJSON ? data.toJSON() : data;
+    return {
+      ...plain,
+      cardData: this.parseDischargeCardData(plain.cardData)
+    };
+  }
+
+  async saveDischargeCardService() {
+    const validatedPayload = await saveDischargeCardSchema.validateAsync(
+      this._request.body
+    );
+    const userId = this._request?.userDetails?.id || null;
+    const {
+      visitId,
+      patientId,
+      appointmentId = null,
+      appointmentType = null,
+      treatmentCycleId = null,
+      cardData
+    } = validatedPayload;
+
+    const existing = await PatientDischargeCardAssociations.findOne({
+      where: { visitId }
+    }).catch(err => {
+      console.log("Error while fetching discharge card for save", err);
+      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
+    });
+
+    if (existing) {
+      await PatientDischargeCardAssociations.update(
+        {
+          patientId,
+          appointmentId,
+          appointmentType: appointmentType || null,
+          treatmentCycleId,
+          cardData,
+          updatedBy: userId
+        },
+        { where: { visitId } }
+      ).catch(err => {
+        console.log("Error while updating discharge card", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    } else {
+      await PatientDischargeCardAssociations.create({
+        visitId,
+        patientId,
+        appointmentId,
+        appointmentType: appointmentType || null,
+        treatmentCycleId,
+        cardData,
+        createdBy: userId,
+        updatedBy: userId
+      }).catch(err => {
+        console.log("Error while creating discharge card", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+
+    const saved = await PatientDischargeCardAssociations.findOne({
+      where: { visitId }
+    });
+    const plain = saved?.toJSON ? saved.toJSON() : saved;
+    return {
+      ...plain,
+      cardData: this.parseDischargeCardData(plain?.cardData)
+    };
   }
 }
 

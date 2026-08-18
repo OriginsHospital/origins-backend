@@ -51,6 +51,27 @@ const saveUptResultSchema = Joi.object({
     .required()
 });
 
+const saveDischargeCardSchema = Joi.object({
+  visitId: Joi.number()
+    .integer()
+    .required(),
+  patientId: Joi.number()
+    .integer()
+    .required(),
+  appointmentId: Joi.number()
+    .integer()
+    .optional()
+    .allow(null),
+  appointmentType: Joi.string()
+    .optional()
+    .allow(null, ""),
+  treatmentCycleId: Joi.number()
+    .integer()
+    .optional()
+    .allow(null),
+  cardData: Joi.object().required()
+});
+
 const editUptResultSchema = Joi.object({
   id: Joi.number()
     .integer()
@@ -81,5 +102,6 @@ module.exports = {
   deleteFormFForScanSchema,
   formFTemplatesByScanAppointmentSchema,
   saveUptResultSchema,
-  editUptResultSchema
+  editUptResultSchema,
+  saveDischargeCardSchema
 };

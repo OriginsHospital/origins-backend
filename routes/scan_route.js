@@ -34,6 +34,9 @@ class ScanRoute {
     this._route.post( "/saveUptResult", checkActiveSession, tokenVerified, this.saveUptResult );
     this._route.put( "/editUptResult", checkActiveSession, tokenVerified, this.editUptResult );
     this._route.delete( "/deleteUptResult/:id", checkActiveSession, tokenVerified, this.deleteUptResult );
+    this._route.get( "/getDischargeCardsByDate/:appointmentDate", checkActiveSession, tokenVerified, this.getDischargeCardsByDate );
+    this._route.get( "/getDischargeCard", checkActiveSession, tokenVerified, this.getDischargeCard );
+    this._route.post( "/saveDischargeCard", checkActiveSession, tokenVerified, this.saveDischargeCard );
   }
 
   getScansByDate = asyncHandler(async (req, res, next) => {
@@ -126,6 +129,21 @@ class ScanRoute {
   deleteUptResult = asyncHandler(async (req, res, next) => {
     const controllerObj = new ScanController(req, res, next);
     await controllerObj.deleteUptResultHandler();
+  });
+
+  getDischargeCardsByDate = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.getDischargeCardsByDateHandler();
+  });
+
+  getDischargeCard = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.getDischargeCardHandler();
+  });
+
+  saveDischargeCard = asyncHandler(async (req, res, next) => {
+    const controllerObj = new ScanController(req, res, next);
+    await controllerObj.saveDischargeCardHandler();
   });
 
 }

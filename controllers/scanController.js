@@ -160,6 +160,33 @@ class ScanController {
       data: data
     });
   }
+
+  async getDischargeCardsByDateHandler() {
+    const data = await this._service.getDischargeCardsByDateService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async getDischargeCardHandler() {
+    const data = await this._service.getDischargeCardService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
+  async saveDischargeCardHandler() {
+    const data = await this._service.saveDischargeCardService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
 }
 
 module.exports = ScanController;
