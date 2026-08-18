@@ -577,7 +577,7 @@ SELECT * FROM (
     caa.branchId,
     TIME_FORMAT(caa.timeStart, '%H:%i') AS timeStart,
     TIME_FORMAT(caa.timeEnd, '%H:%i') AS timeEnd,
-    CASE WHEN pdc.id IS NOT NULL THEN 1 ELSE 0 END AS hasSavedCard
+    CAST(IF(pdc.id IS NOT NULL, 1, 0) AS UNSIGNED) AS hasSavedCard
   FROM consultation_appointments_associations caa
   INNER JOIN visit_consultations_associations vca ON caa.consultationId = vca.id
   INNER JOIN patient_visits_association pva ON pva.id = vca.visitId
@@ -629,7 +629,7 @@ SELECT * FROM (
     taa.branchId,
     TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
     TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd,
-    CASE WHEN pdc.id IS NOT NULL THEN 1 ELSE 0 END AS hasSavedCard
+    CAST(IF(pdc.id IS NOT NULL, 1, 0) AS UNSIGNED) AS hasSavedCard
   FROM treatment_appointments_associations taa
   INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
   INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId

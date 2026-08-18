@@ -960,6 +960,16 @@ class ScanService extends BaseService {
     return cardData;
   }
 
+  normalizeFlag(value) {
+    if (value === true || value === 1 || value === "1") return 1;
+    if (Buffer.isBuffer(value)) return value[0] ? 1 : 0;
+    if (value && typeof value === "object" && Array.isArray(value.data)) {
+      return value.data[0] ? 1 : 0;
+    }
+    const parsed = Number(value);
+    return parsed === 1 ? 1 : 0;
+  }
+
   async getDischargeCardsByDateService() {
     const { appointmentDate } = this._request.params;
     const { branchId } = this._request.query;
@@ -977,6 +987,12 @@ class ScanService extends BaseService {
           branchId: branchId || null
         }
       })
+      .then(rows =>
+        (rows || []).map(row => ({
+          ...row,
+          hasSavedCard: this.normalizeFlag(row.hasSavedCard)
+        }))
+      )
       .catch(err => {
         console.log("Error while getting discharge cards by date", err);
         throw createError.InternalServerError(
@@ -986,19 +1002,36 @@ class ScanService extends BaseService {
   }
 
   async getDischargeCardService() {
-    const { visitId } = this._request.query;
-    if (!visitId) {
+    const { visitId, patientId } = this._request.query;
+    if (!visitId && !patientId) {
       throw new createError.BadRequest(
-        Constants.PARAMS_ERROR.replace("{params}", "visitId")
+        Constants.PARAMS_ERROR.replace("{params}", "visitId or patientId")
       );
     }
 
-    const data = await PatientDischargeCardAssociations.findOne({
-      where: { visitId }
-    }).catch(err => {
-      console.log("Error while fetching discharge card", err);
-      throw createError.InternalServerError(Constants.SOMETHING_ERROR_OCCURRED);
-    });
+    let data = null;
+    if (visitId) {
+      data = await PatientDischargeCardAssociations.findOne({
+        where: { visitId }
+      }).catch(err => {
+        console.log("Error while fetching discharge card", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
+
+    if (lodash.isEmpty(data) && patientId) {
+      data = await PatientDischargeCardAssociations.findOne({
+        where: { patientId },
+        order: [["updatedAt", "DESC"], ["id", "DESC"]]
+      }).catch(err => {
+        console.log("Error while fetching discharge card by patient", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    }
 
     if (lodash.isEmpty(data)) {
       return null;
