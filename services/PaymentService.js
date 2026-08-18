@@ -51,6 +51,7 @@ const formFTemplate = require("../templates/formFTemplate");
 const patientScanFormFAssociationsModel = require("../models/Associations/patientScanFormFAssociation");
 const BaseService = require("../services/baseService");
 const GenerateHtmlTemplate = require("../utils/templateUtils");
+const treatmentConstants = require("../constants/treatmentConstants");
 const PatientPurchaseReturnsModel = require("../models/Master/patientPurchaseReturnsModel");
 const PatientPharmacyPurchaseReturnsModel = require("../models/Master/PatientPharmacyPurchaseReturnsModel");
 class PaymentService extends BaseService {
@@ -1345,6 +1346,23 @@ class PaymentService extends BaseService {
     return []; // IF NONE MATCHED
   }
 
+  getMilestoneInvoiceItemName(productType) {
+    const mapping = (
+      treatmentConstants.PACKAGE_AMOUNT_PRODUCT_TYPE_MAPPING || []
+    ).find(item => item.productEnum === productType);
+
+    if (mapping?.displayName) {
+      const displayName = mapping.displayName;
+      const lowerName = displayName.toLowerCase();
+      if (lowerName.includes("amount") || lowerName.includes("fee")) {
+        return displayName;
+      }
+      return `${displayName} Amount`;
+    }
+
+    return productType || "IVF treatment";
+  }
+
   async generateProductInformationTableForTreatmentOrders(
     type,
     productType,
@@ -1367,7 +1385,7 @@ class PaymentService extends BaseService {
       return [
         {
           serialNumber: 1,
-          itemName: "IVF treatment",
+          itemName: this.getMilestoneInvoiceItemName(productType),
           totalCost: purchaseDetails?.paidOrderAmountBeforeDiscount,
           prescribedTo: "PATIENT" // Always Patient for Milestone Package Based
         }
