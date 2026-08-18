@@ -2375,6 +2375,13 @@ class AppointmentsPaymentService extends BaseService {
           branchId,
           transaction
         );
+        if (!defaultStaff.anesthetistId || !defaultStaff.embryologistId) {
+          console.log(
+            "Skipping PickUp OT record: no valid anesthetist/embryologist for branch",
+            branchId
+          );
+          return;
+        }
         const createOTParams = {
           branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
@@ -2389,7 +2396,7 @@ class AppointmentsPaymentService extends BaseService {
           transaction: transaction
         }).catch(err => {
           console.log("Error while saving the details of OT master", err);
-          throw new createError();
+          // Trigger start must still succeed if OT scheduler insert fails
         });
       };
 
@@ -2543,6 +2550,13 @@ class AppointmentsPaymentService extends BaseService {
           branchId,
           transaction
         );
+        if (!defaultStaff.anesthetistId || !defaultStaff.embryologistId) {
+          console.log(
+            "Skipping donor PickUp OT record: no valid anesthetist/embryologist for branch",
+            branchId
+          );
+          return;
+        }
         const createOTParams = {
           branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
@@ -2557,7 +2571,7 @@ class AppointmentsPaymentService extends BaseService {
           transaction: transaction
         }).catch(err => {
           console.log("Error while saving the details of OT master", err);
-          throw new createError();
+          // Trigger start must still succeed if OT scheduler insert fails
         });
       };
 
@@ -2691,6 +2705,13 @@ class AppointmentsPaymentService extends BaseService {
           branchId,
           transaction
         );
+        if (!defaultStaff.anesthetistId || !defaultStaff.embryologistId) {
+          console.log(
+            "Skipping hysteroscopy OT record: no valid anesthetist/embryologist for branch",
+            branchId
+          );
+          return;
+        }
         const createOTParams = {
           branchId,
           treatmentCycleId: treatmentCycleInfo[0].id,
@@ -2705,7 +2726,7 @@ class AppointmentsPaymentService extends BaseService {
           transaction: transaction
         }).catch(err => {
           console.log("Error while saving the details of OT master", err);
-          throw new createError();
+          // Hysteroscopy start must still succeed if OT scheduler insert fails
         });
       };
 

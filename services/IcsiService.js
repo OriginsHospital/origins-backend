@@ -264,8 +264,16 @@ class ConsentFormsTemplateService {
           currentUserBranchId,
           t
         );
+        if (!defaultStaff.anesthetistId || !defaultStaff.embryologistId) {
+          console.log(
+            "Skipping OPU OT record: no valid anesthetist/embryologist"
+          );
+          return;
+        }
         const createOTParams = {
-          branchId: currentUserBranchId,
+          branchId: Array.isArray(currentUserBranchId)
+            ? currentUserBranchId[0]
+            : currentUserBranchId,
           patientName: `${patientInfo.firstName} ${patientInfo.lastName}`,
           procedureName: "OPU",
           procedureDate: procedureDate,
@@ -277,7 +285,6 @@ class ConsentFormsTemplateService {
           transaction: t
         }).catch(err => {
           console.log("Error while saving the details of OT master", err);
-          throw new createError();
         });
       };
 
