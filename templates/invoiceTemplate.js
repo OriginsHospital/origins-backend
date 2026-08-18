@@ -1,15 +1,15 @@
 let invoiceTemplate = `
-<div style="width: 148mm; height: 210mm; margin: 0 auto; padding: 6mm 5mm 6mm 25mm; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 15px; font-weight: 700; page-break-after: always;">
+<div style="width: 148mm; height: 210mm; margin: 0 auto; padding: 6mm 5mm 6mm 25mm; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 9px; font-weight: 700; page-break-after: always;">
     
     {{{hospitalLogoInformation}}}
 
     {{{patientHeaderInformation}}}
 
-    <h3 style="font-size: 19px; font-weight: 700; color: black; text-align: center; margin: 8px 0;">Purchase Details</h3>
+    <h3 style="font-size: 11.4px; font-weight: 700; color: black; text-align: center; margin: 8px 0;">Purchase Details</h3>
     
     <div style="width: 100%; margin-top: 5px;">
         {{#if isPharmacy}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 8%; padding: 4px; text-align: left; font-weight: 700;">S.No</th>
                 <th style="width: 24%; padding: 4px; text-align: left; font-weight: 700;">Item Name</th>
@@ -60,7 +60,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isScan}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Scan</th>
@@ -105,7 +105,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isLab}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Lab Test</th>
@@ -150,7 +150,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isEmbryology}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Embryology</th>
@@ -195,7 +195,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isConsultationFee}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Order Type</th>
@@ -240,7 +240,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isMileStone}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Milestone</th>
@@ -284,7 +284,7 @@ let invoiceTemplate = `
         {{/if}}
         
         {{#if isAppointment}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Appointment Reason</th>
@@ -328,7 +328,7 @@ let invoiceTemplate = `
         {{/if}}
 
         {{#if isAdvancePayment}}
-        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+        <table style="width: 100%; padding: 5px; margin-bottom: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
             <tr>
                 <th style="width: 10%; padding: 4px; text-align: left; font-weight: 700;">S.No.</th>
                 <th style="width: 60%; padding: 4px; text-align: left; font-weight: 700;">Payment Reason</th>
@@ -388,7 +388,7 @@ let invoiceTemplate = `
         {{/if}}
     </div>
 
-    <div style="margin-top: 25px; font-size: 15px; font-weight: 700; text-align: right;">
+    <div style="margin-top: 25px; font-size: 9px; font-weight: 700; text-align: right;">
         <p>Authorized Signature</p>
     </div>
 

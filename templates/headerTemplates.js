@@ -56,24 +56,24 @@ const hopsitalLogoTemplateForInvoice = `
 <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid black; padding: 4px 0; margin: 2px 0; position: relative;">
     <div style="display: flex; flex-direction: column; align-items: center; z-index: 1;">
         <img src="https://origins-hms.s3.amazonaws.com/base/uploads/OriginsNewLogo_1742044006551" alt="Hospital Logo" style="width: 82px; height: auto;">
-        <div style="font-size: 13px; font-weight: 700; margin-top: 2px; color: black;">{logoText}</div>
+        <div style="font-size: 7.8px; font-weight: 700; margin-top: 2px; color: black;">{logoText}</div>
     </div>
 
     <!-- Hospital Info -->
     <div style="text-align: center; flex-grow: 1; z-index: 1; padding: 0 5px;">
         <!-- Big Title in the Middle -->
-        <div style="font-size: 20px; font-weight: 700; color: #0073e6; margin-bottom: 6px;">ORIGINS IVF</div>
-        <div style="font-size: 15px; font-weight: 700; color: black; margin-bottom: 4px;">{branchName}</div>
-        <div class="header-branch-address" style="font-size: 13px; font-weight: 700; color: black; margin-bottom: 4px;">
+        <div style="font-size: 12px; font-weight: 700; color: #0073e6; margin-bottom: 6px;">ORIGINS IVF</div>
+        <div style="font-size: 9px; font-weight: 700; color: black; margin-bottom: 4px;">{branchName}</div>
+        <div class="header-branch-address" style="font-size: 7.8px; font-weight: 700; color: black; margin-bottom: 4px;">
         <strong>{branchAddress}</strong>
         </div>
-        <div style="font-size: 13px; font-weight: 700; color: black;">Phone: {branchPhoneNumber}</div>
+        <div style="font-size: 7.8px; font-weight: 700; color: black;">Phone: {branchPhoneNumber}</div>
     </div>
 </div>
 `;
 
 let patientHeaderForInvoice = `
-<table style="width: 100%; padding:5px; margin-bottom: 5px; margin-top: 5px; font-size: 15px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
+<table style="width: 100%; padding:5px; margin-bottom: 5px; margin-top: 5px; font-size: 9px; font-weight: 700; border: 1px solid #000; border-collapse: collapse;">
     <tr>
         <td style="width: 50%; padding: 4px; font-weight: 700;">
             <strong>Order No:</strong> {{orderNo}}
