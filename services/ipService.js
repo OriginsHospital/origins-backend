@@ -533,6 +533,32 @@ class IpService {
     return Number.isFinite(num) ? Number(num.toFixed(2)) : 0;
   }
 
+  /**
+   * Pharmacy selling rate per unit, matching GRN / pharmacy POS.
+   * Uses mrpPerTablet (pack MRP / pack size). If mrpPerTablet was stored as
+   * pack MRP, divide by pack so syringes/consumables are not billed at box price.
+   */
+  pharmacyUnitRateExpr(alias) {
+    return `
+      CASE
+        WHEN IFNULL(${alias}.pack, 0) > 1
+          AND IFNULL(${alias}.mrp, 0) > 0
+          AND IFNULL(${alias}.mrpPerTablet, 0) > 0
+          AND ABS(${alias}.mrpPerTablet - ${alias}.mrp) < 0.011
+          THEN ROUND(${alias}.mrp / ${alias}.pack, 2)
+        WHEN IFNULL(${alias}.mrpPerTablet, 0) > 0
+          THEN ${alias}.mrpPerTablet
+        WHEN IFNULL(${alias}.pack, 0) > 1 AND IFNULL(${alias}.mrp, 0) > 0
+          THEN ROUND(${alias}.mrp / ${alias}.pack, 2)
+        WHEN IFNULL(${alias}.ratePerTablet, 0) > 0
+          THEN ${alias}.ratePerTablet
+        WHEN IFNULL(${alias}.pack, 0) > 1 AND IFNULL(${alias}.rate, 0) > 0
+          THEN ROUND(${alias}.rate / ${alias}.pack, 2)
+        ELSE NULL
+      END
+    `;
+  }
+
   async getIPListWithPatientName(isActive) {
     const { branchId } = this._request.query;
     if (!branchId) {
@@ -693,70 +719,71 @@ class IpService {
       branchId: branchId || null
     };
 
-    const selectSql = `
+    const selectSql = whereSql => `
       SELECT
-        ipa.id,
-        ipa.indentId,
-        ipa.itemId,
-        im.itemName,
-        ipa.prescribedQuantity,
-        COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) AS quantity,
-        CAST(
-          COALESCE(
-            NULLIF(ipm.price, 0),
-            NULLIF(gpBranch.mrpPerTablet, 0),
-            NULLIF(gpBranch.ratePerTablet, 0),
-            NULLIF(gpAny.mrpPerTablet, 0),
-            NULLIF(gpAny.ratePerTablet, 0),
-            0
-          ) AS DECIMAL(18, 2)
-        ) AS unitPrice,
-        ROUND(
-          COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) * COALESCE(
-            NULLIF(ipm.price, 0),
-            NULLIF(gpBranch.mrpPerTablet, 0),
-            NULLIF(gpBranch.ratePerTablet, 0),
-            NULLIF(gpAny.mrpPerTablet, 0),
-            NULLIF(gpAny.ratePerTablet, 0),
-            0
-          ),
-          2
-        ) AS amount,
-        ipa.prescribedOn
-      FROM indent_pharmacy_association ipa
-      INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
-      LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
-      LEFT JOIN (
-        SELECT itemId, MAX(price) AS price
-        FROM stockmanagement.item_price_master
-        GROUP BY itemId
-      ) ipm ON ipm.itemId = ipa.itemId
-      LEFT JOIN (
-        SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
-        FROM stockmanagement.grn_items_associations gi
-        INNER JOIN (
-          SELECT gia.itemId, MAX(gia.id) AS maxId
-          FROM stockmanagement.grn_items_associations gia
-          INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-          WHERE IFNULL(gia.isReturned, 0) = 0
-            AND (:branchId IS NULL OR gm.branchId = :branchId)
-          GROUP BY gia.itemId
-        ) lm ON lm.maxId = gi.id
-      ) gpBranch ON gpBranch.itemId = ipa.itemId
-      LEFT JOIN (
-        SELECT gi.itemId, gi.mrpPerTablet, gi.ratePerTablet
-        FROM stockmanagement.grn_items_associations gi
-        INNER JOIN (
-          SELECT itemId, MAX(id) AS maxId
-          FROM stockmanagement.grn_items_associations
-          WHERE IFNULL(isReturned, 0) = 0
+        priced.id,
+        priced.indentId,
+        priced.itemId,
+        priced.itemName,
+        priced.prescribedQuantity,
+        priced.quantity,
+        priced.unitPrice,
+        ROUND(priced.quantity * priced.unitPrice, 2) AS amount,
+        priced.prescribedOn
+      FROM (
+        SELECT
+          ipa.id,
+          ipa.indentId,
+          ipa.itemId,
+          im.itemName,
+          ipa.prescribedQuantity,
+          COALESCE(NULLIF(ipa.purchasedQuantity, 0), ipa.prescribedQuantity) AS quantity,
+          CAST(
+            COALESCE(
+              ${this.pharmacyUnitRateExpr("gpBranch")},
+              ${this.pharmacyUnitRateExpr("gpAny")},
+              NULLIF(ipm.price, 0),
+              0
+            ) AS DECIMAL(18, 2)
+          ) AS unitPrice,
+          ipa.prescribedOn
+        FROM indent_pharmacy_association ipa
+        INNER JOIN procedure_indent_associations pia ON pia.id = ipa.indentId
+        LEFT JOIN stockmanagement.item_master im ON im.id = ipa.itemId
+        LEFT JOIN (
+          SELECT gi.itemId, gi.mrp, gi.rate, gi.mrpPerTablet, gi.ratePerTablet, gi.pack
+          FROM stockmanagement.grn_items_associations gi
+          INNER JOIN (
+            SELECT gia.itemId, MAX(gia.id) AS maxId
+            FROM stockmanagement.grn_items_associations gia
+            INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
+            WHERE IFNULL(gia.isReturned, 0) = 0
+              AND (:branchId IS NULL OR gm.branchId = :branchId)
+            GROUP BY gia.itemId
+          ) lm ON lm.maxId = gi.id
+        ) gpBranch ON gpBranch.itemId = ipa.itemId
+        LEFT JOIN (
+          SELECT gi.itemId, gi.mrp, gi.rate, gi.mrpPerTablet, gi.ratePerTablet, gi.pack
+          FROM stockmanagement.grn_items_associations gi
+          INNER JOIN (
+            SELECT itemId, MAX(id) AS maxId
+            FROM stockmanagement.grn_items_associations
+            WHERE IFNULL(isReturned, 0) = 0
+            GROUP BY itemId
+          ) lm ON lm.maxId = gi.id
+        ) gpAny ON gpAny.itemId = ipa.itemId
+        LEFT JOIN (
+          SELECT itemId, MAX(price) AS price
+          FROM stockmanagement.item_price_master
           GROUP BY itemId
-        ) lm ON lm.maxId = gi.id
-      ) gpAny ON gpAny.itemId = ipa.itemId
+        ) ipm ON ipm.itemId = ipa.itemId
+        ${whereSql}
+      ) priced
+      ORDER BY priced.prescribedOn DESC, priced.id DESC
     `;
 
     const runQuery = async whereSql => {
-      return this.mysqlConnection.query(`${selectSql} ${whereSql}`, {
+      return this.mysqlConnection.query(selectSql(whereSql), {
         replacements,
         type: QueryTypes.SELECT
       });
@@ -772,13 +799,11 @@ class IpService {
               AND ipa.prescribedOn <= :endDate
             )
           )
-        ORDER BY ipa.prescribedOn DESC, ipa.id DESC
       `);
 
       if (!items || items.length === 0) {
         items = await runQuery(`
           WHERE pia.patientId = :patientId
-          ORDER BY ipa.prescribedOn DESC, ipa.id DESC
         `);
       }
 
@@ -902,6 +927,8 @@ class IpService {
     const medicineBilled = this.toAmount(
       medicines.reduce((sum, item) => sum + this.toAmount(item.amount), 0)
     );
+    const medicinesIncludedInPackage = packageBilled > 0;
+    const medicinePayable = medicinesIncludedInPackage ? 0 : medicineBilled;
 
     const payments = await IpPaymentsModel.findAll({
       where: { ipId },
@@ -926,13 +953,13 @@ class IpService {
       package: packageBilled,
       other: this.toAmount(paid.other),
       total: this.toAmount(
-        roomBilled + medicineBilled + packageBilled + paid.other
+        roomBilled + medicinePayable + packageBilled + paid.other
       )
     };
 
     const pending = {
       room: this.toAmount(Math.max(0, billed.room - paid.room)),
-      medicine: this.toAmount(Math.max(0, billed.medicine - paid.medicine)),
+      medicine: this.toAmount(Math.max(0, medicinePayable - paid.medicine)),
       package: this.toAmount(Math.max(0, billed.package - paid.package)),
       other: 0,
       total: 0
@@ -970,6 +997,7 @@ class IpService {
       paid,
       pending,
       payments,
+      medicinesIncludedInPackage,
       medicineSource: "IP_INDENT"
     };
   }
@@ -980,8 +1008,18 @@ class IpService {
       this._request.body
     );
 
+    const ip = await IpMasterModel.findOne({
+      where: { id: validatedData.ipId }
+    });
+    if (!ip) {
+      throw new createError.NotFound("IP registration not found");
+    }
+
+    const medicinesIncludedInPackage = this.toAmount(ip.packageAmount) > 0;
     const roomAmount = this.toAmount(validatedData.roomAmount);
-    const medicineAmount = this.toAmount(validatedData.medicineAmount);
+    const medicineAmount = medicinesIncludedInPackage
+      ? 0
+      : this.toAmount(validatedData.medicineAmount);
     const packageAmount = this.toAmount(validatedData.packageAmount);
     const otherAmount = this.toAmount(validatedData.otherAmount);
     const totalAmount = this.toAmount(
@@ -990,15 +1028,10 @@ class IpService {
 
     if (totalAmount <= 0) {
       throw new createError.BadRequest(
-        "Enter at least one amount to collect (room, medicines, package or other)"
+        medicinesIncludedInPackage
+          ? "Enter at least one amount to collect (room, package or other)"
+          : "Enter at least one amount to collect (room, medicines, package or other)"
       );
-    }
-
-    const ip = await IpMasterModel.findOne({
-      where: { id: validatedData.ipId }
-    });
-    if (!ip) {
-      throw new createError.NotFound("IP registration not found");
     }
 
     await this.ensureIpPaymentsTable();
