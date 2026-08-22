@@ -360,12 +360,16 @@ class AppointmentsPaymentService extends BaseService {
         Constants.PARAMS_ERROR.replace("{params}", "date")
       );
     }
+    const parsedBranchId =
+      branchId === undefined || branchId === null || branchId === ""
+        ? null
+        : Number(branchId);
     let data = await this.mysqlConnection
       .query(getAppointmentsByDateQuery, {
         type: Sequelize.QueryTypes.SELECT,
         replacements: {
           date: date,
-          branchId: branchId || null
+          branchId: Number.isNaN(parsedBranchId) ? null : parsedBranchId
         }
       })
       .catch(err => {
