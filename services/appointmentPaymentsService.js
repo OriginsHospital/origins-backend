@@ -1713,6 +1713,22 @@ class AppointmentsPaymentService extends BaseService {
           "Trigger already started. Cannot perform this operation."
         );
       }
+    } else if (validationType == "TRIGGER_STARTED") {
+      const existingTrigger = await TriggerTimeStampsMaster.findOne({
+        where: {
+          visitId: visitId,
+          [Sequelize.Op.or]: [
+            { triggerStartDate: { [Sequelize.Op.ne]: null } },
+            { triggerStartedBy: { [Sequelize.Op.ne]: null } }
+          ]
+        }
+      });
+
+      if (!existingTrigger) {
+        throw new createError.BadRequest(
+          "Trigger has not been started yet. Cannot update trigger time."
+        );
+      }
     } else if (validationType == "DONOR_PAYMENT_NOT_COMPLETED") {
       const donorPaymentDetails = await this.mysqlConnection
         .query(donorPaymentCheckQuery, {
@@ -1781,6 +1797,22 @@ class AppointmentsPaymentService extends BaseService {
       if (existingHysteroscopy) {
         throw new createError.BadRequest(
           "Hysteroscopy already started. Cannot perform this operation."
+        );
+      }
+    } else if (validationType == "HYSTEROSCOPY_STARTED") {
+      const existingHysteroscopy = await TriggerTimeStampsMaster.findOne({
+        where: {
+          visitId: visitId,
+          [Sequelize.Op.or]: [
+            { hysteroscopyTime: { [Sequelize.Op.ne]: null } },
+            { hysteroscopyStartedBy: { [Sequelize.Op.ne]: null } }
+          ]
+        }
+      });
+
+      if (!existingHysteroscopy) {
+        throw new createError.BadRequest(
+          "Hystero/Lap has not been started yet. Cannot update start time."
         );
       }
     } else if (validationType == "FET_CONSENTS_EXISTS") {
@@ -2023,6 +2055,226 @@ class AppointmentsPaymentService extends BaseService {
     }
 
     return selectedDay;
+  }
+
+  parseSheetTemplate(template) {
+    if (!template) return {};
+    if (typeof template === "object") return { ...template };
+    try {
+      return JSON.parse(template || "{}") || {};
+    } catch (err) {
+      console.log("Invalid treatment sheet template JSON", err.message);
+      return null;
+    }
+  }
+
+  remapTemplateDateKeys(value, oldCols, newCols) {
+    if (!oldCols?.length || !newCols?.length) return value;
+    if (Array.isArray(value)) {
+      return value.map(item =>
+        this.remapTemplateDateKeys(item, oldCols, newCols)
+      );
+    }
+    if (!value || typeof value !== "object") return value;
+
+    const remapped = {};
+    Object.entries(value).forEach(([key, nested]) => {
+      let newKey = key;
+      for (let i = 0; i < oldCols.length; i++) {
+        const oldCol = oldCols[i];
+        const newCol = newCols[i];
+        if (!oldCol || !newCol || oldCol === newCol) continue;
+        if (key === `${oldCol}-note` || String(key).startsWith(`${oldCol}-`)) {
+          newKey = `${newCol}${String(key).slice(oldCol.length)}`;
+          break;
+        }
+      }
+      remapped[newKey] = this.remapTemplateDateKeys(nested, oldCols, newCols);
+    });
+    return remapped;
+  }
+
+  async shiftSheetTemplateToStartDate(template, newStartDate) {
+    const parsed = this.parseSheetTemplate(template);
+    if (!parsed) return null;
+    const oldCols = Array.isArray(parsed.columns) ? parsed.columns : [];
+    const newCols = await this.generateDateRange(
+      newStartDate,
+      oldCols.length || 15
+    );
+    const remapped =
+      oldCols.length > 0
+        ? this.remapTemplateDateKeys(parsed, oldCols, newCols)
+        : parsed;
+    remapped.columns = newCols;
+    return remapped;
+  }
+
+  async getVisitTreatmentCycle(visitId, transaction) {
+    return VisitTreatmentsAssociations.findOne({
+      where: { visitId },
+      attributes: ["id"],
+      transaction
+    }).catch(err => {
+      console.log("Error while fetching treatment cycle id", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+  }
+
+  async persistShiftedSheet(
+    model,
+    treatmentCycleId,
+    newStartDate,
+    transaction
+  ) {
+    const existingSheet = await model
+      .findOne({
+        where: { treatmentCycleId },
+        transaction
+      })
+      .catch(err => {
+        console.log("Error while fetching treatment sheet for start date", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (lodash.isEmpty(existingSheet)) {
+      return this.generateDateRange(newStartDate, 15);
+    }
+
+    const shifted = await this.shiftSheetTemplateToStartDate(
+      existingSheet.template,
+      newStartDate
+    );
+    if (!shifted) {
+      return this.generateDateRange(newStartDate, 15);
+    }
+    await model
+      .update(
+        { template: JSON.stringify(shifted) },
+        {
+          where: { treatmentCycleId },
+          transaction
+        }
+      )
+      .catch(err => {
+        console.log("Error while updating treatment sheet columns", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return shifted.columns;
+  }
+
+  resolveTriggerSchedule(triggerTime) {
+    if (isNaN(new Date(triggerTime).getTime())) {
+      throw new createError.BadRequest("Invalid triggerTime format.");
+    }
+
+    const currentTimestamp = new Date(triggerTime);
+    const adjustedTimestamp = new Date(
+      currentTimestamp.getTime() - (5 * 60 + 30) * 60 * 1000
+    );
+    const futureTimestamp = new Date(
+      adjustedTimestamp.getTime() + 35 * 60 * 60 * 1000
+    );
+
+    return {
+      adjustedTimestamp,
+      procedureDate: futureTimestamp.toISOString().split("T")[0],
+      procedureTime: futureTimestamp.toTimeString().slice(0, 5)
+    };
+  }
+
+  async upsertOtProcedureRecord({
+    visitId,
+    treatmentCycleId,
+    patientData,
+    currentUserBranchId,
+    procedureNames,
+    procedureDate,
+    procedureTime,
+    transaction
+  }) {
+    const existing = await OTListMasterModel.findOne({
+      where: {
+        treatmentCycleId,
+        procedureName: { [Sequelize.Op.in]: procedureNames }
+      },
+      order: [["id", "DESC"]],
+      transaction
+    }).catch(err => {
+      console.log("Error while finding OT record for start date update", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (existing) {
+      await existing
+        .update(
+          {
+            procedureDate,
+            time: procedureTime
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log("Error while updating OT record start time", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      return;
+    }
+
+    const branchId = patientData?.[0]?.branchId || currentUserBranchId?.[0];
+    const defaultStaff = await getOtDefaultStaffForBranch(
+      branchId,
+      transaction
+    );
+    if (!defaultStaff.anesthetistId || !defaultStaff.embryologistId) {
+      return;
+    }
+
+    await OTListMasterModel.create(
+      {
+        branchId,
+        treatmentCycleId,
+        patientName: `${patientData[0]?.firstName || ""} ${patientData[0]
+          ?.lastName || ""}`.trim(),
+        procedureName: procedureNames[0],
+        procedureDate,
+        time: procedureTime,
+        ...defaultStaff
+      },
+      { transaction }
+    ).catch(err => {
+      console.log("Error while creating OT record for start date update", err);
+    });
+  }
+
+  buildTreatmentStartTimestamp(treatmentStartMoment) {
+    const tz = "Asia/Kolkata";
+    return treatmentStartMoment
+      .clone()
+      .startOf("day")
+      .isSame(
+        moment()
+          .tz(tz)
+          .startOf("day")
+      )
+      ? moment()
+          .tz(tz)
+          .format("YYYY-MM-DD HH:mm:ss")
+      : treatmentStartMoment
+          .clone()
+          .startOf("day")
+          .format("YYYY-MM-DD HH:mm:ss");
   }
 
   async updateTreatmentStatusModifications(
@@ -3057,58 +3309,399 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
-      const dateRange = await this.generateDateRange(eraDateFormatted, 15);
-      const treatmentCycleInfo = await VisitTreatmentsAssociations.findOne({
-        where: {
-          visitId: visitId
-        },
-        attributes: ["id"],
-        transaction: transaction
-      }).catch(err => {
-        console.log("Error while fetching treatment cycle id", err);
-        throw new createError.InternalServerError(
-          Constants.SOMETHING_ERROR_OCCURRED
-        );
-      });
-
+      const treatmentCycleInfo = await this.getVisitTreatmentCycle(
+        visitId,
+        transaction
+      );
+      let dateRange = await this.generateDateRange(eraDateFormatted, 15);
       if (!lodash.isEmpty(treatmentCycleInfo)) {
-        const existingSheet = await TreatmentEraSheetAssociations.findOne({
-          where: {
-            treatmentCycleId: treatmentCycleInfo.id
-          },
-          transaction: transaction
-        }).catch(err => {
-          console.log("Error while fetching era sheet", err);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
-
-        if (!lodash.isEmpty(existingSheet)) {
-          const template = JSON.parse(existingSheet.template || "{}");
-          template.columns = dateRange;
-          await TreatmentEraSheetAssociations.update(
-            {
-              template: JSON.stringify(template)
-            },
-            {
-              where: {
-                treatmentCycleId: treatmentCycleInfo.id
-              },
-              transaction: transaction
-            }
-          ).catch(err => {
-            console.log("Error while updating era sheet columns", err);
-            throw new createError.InternalServerError(
-              Constants.SOMETHING_ERROR_OCCURRED
-            );
-          });
-        }
+        dateRange = await this.persistShiftedSheet(
+          TreatmentEraSheetAssociations,
+          treatmentCycleInfo.id,
+          eraDateFormatted,
+          transaction
+        );
       }
 
       return {
         date: dateRange,
         eraStartDate: eraStartDateFormatted
+      };
+    } else if (updateType == "UPDATE_TREATMENT_START_DATE") {
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = this.buildTreatmentStartTimestamp(
+        treatmentStartMoment
+      );
+
+      const existingRecord = await TriggerTimeStampsMaster.findOne({
+        where: { visitId, treatmentType },
+        transaction
+      });
+
+      if (existingRecord) {
+        await TriggerTimeStampsMaster.update(
+          {
+            startDate: treatmentStartTimestamp,
+            startedBy: this._request?.userDetails?.id
+          },
+          {
+            where: { visitId, treatmentType },
+            transaction
+          }
+        ).catch(err => {
+          console.log("Error while updating treatment start date", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      } else {
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId,
+            treatmentType,
+            startDate: treatmentStartTimestamp,
+            startedBy: this._request?.userDetails?.id
+          },
+          { transaction }
+        ).catch(err => {
+          console.log("Error while creating treatment start date record", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+
+      if ([4, 5, 6, 7].includes(Number(treatmentType))) {
+        await VisitPackagesAssociation.update(
+          { day1Date: treatmentStartDateFormatted },
+          {
+            where: { visitId },
+            transaction
+          }
+        ).catch(err => {
+          console.log("Error while updating day1 date", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+
+      const treatmentCycleInfo = await this.getVisitTreatmentCycle(
+        visitId,
+        transaction
+      );
+      let dateRange = await this.generateDateRange(
+        treatmentStartDateFormatted,
+        15
+      );
+      if (!lodash.isEmpty(treatmentCycleInfo)) {
+        dateRange = await this.persistShiftedSheet(
+          TreatmentSheetsAssociationModel,
+          treatmentCycleInfo.id,
+          treatmentStartDateFormatted,
+          transaction
+        );
+      }
+
+      return {
+        date: dateRange,
+        startDate: treatmentStartDateFormatted
+      };
+    } else if (updateType == "UPDATE_FET_START_DATE") {
+      const treatmentStartMoment = this.resolveTreatmentStartMoment(
+        treatmentStartDate
+      );
+      const treatmentStartDateFormatted = treatmentStartMoment.format(
+        "YYYY-MM-DD"
+      );
+      const treatmentStartTimestamp = this.buildTreatmentStartTimestamp(
+        treatmentStartMoment
+      );
+
+      const existingFetRecord = await TriggerTimeStampsMaster.findOne({
+        where: { visitId, treatmentType },
+        transaction
+      });
+
+      if (existingFetRecord) {
+        await TriggerTimeStampsMaster.update(
+          {
+            fetStartDate: treatmentStartTimestamp,
+            fetStartedBy: this._request?.userDetails?.id
+          },
+          {
+            where: { visitId, treatmentType },
+            transaction
+          }
+        ).catch(err => {
+          console.log("Error while updating FET start date", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      } else {
+        await TriggerTimeStampsMaster.create(
+          {
+            visitId,
+            treatmentType,
+            fetStartDate: treatmentStartTimestamp,
+            fetStartedBy: this._request?.userDetails?.id
+          },
+          { transaction }
+        ).catch(err => {
+          console.log("Error while creating FET start date record", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
+
+      await VisitPackagesAssociation.update(
+        { fetDate: treatmentStartDateFormatted },
+        {
+          where: { visitId },
+          transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating FET date in visit packages", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      const treatmentCycleInfo = await this.getVisitTreatmentCycle(
+        visitId,
+        transaction
+      );
+      let dateRange = await this.generateDateRange(
+        treatmentStartDateFormatted,
+        15
+      );
+      if (!lodash.isEmpty(treatmentCycleInfo)) {
+        dateRange = await this.persistShiftedSheet(
+          TreatmentFetSheetAssociations,
+          treatmentCycleInfo.id,
+          treatmentStartDateFormatted,
+          transaction
+        );
+      }
+
+      return {
+        date: dateRange,
+        fetStartDate: treatmentStartDateFormatted
+      };
+    } else if (updateType == "UPDATE_TRIGGER_START_TIME") {
+      if (treatmentType === 2 || treatmentType === 3) {
+        throw new createError.BadRequest("Invalid operation to be performed");
+      }
+
+      const {
+        adjustedTimestamp,
+        procedureDate,
+        procedureTime
+      } = this.resolveTriggerSchedule(triggerTime);
+
+      const patientData = await this.mysqlConnection
+        .query(
+          getPatientFromVisitId,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: { visitId }
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log("Error while getting patient info from visit Id", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      const treatmentCycleInfo = await this.mysqlConnection
+        .query(
+          getTreatmentCycleInfoFromVisitId,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: { visitId }
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log(
+            "Error while getting treatmentcycle info from visit Id",
+            err
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      if (!patientData.length || !treatmentCycleInfo.length) {
+        throw new createError.NotFound(
+          "Patient or Treatment Cycle data not found."
+        );
+      }
+
+      const [updatedRows] = await TriggerTimeStampsMaster.update(
+        {
+          triggerStartDate: adjustedTimestamp,
+          triggerStartedBy: parseInt(this._request.userDetails?.id, 10)
+        },
+        {
+          where: { visitId, treatmentType },
+          transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating trigger timestamps", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (updatedRows === 0) {
+        throw new createError.BadRequest(
+          "Trigger has not been started yet. Cannot update trigger time."
+        );
+      }
+
+      const currentUserBranchId = this._request.userDetails.branchDetails.map(
+        branch => branch.id
+      );
+
+      await this.upsertOtProcedureRecord({
+        visitId,
+        treatmentCycleId: treatmentCycleInfo[0].id,
+        patientData,
+        currentUserBranchId,
+        procedureNames: ["PickUp OT", "OPU"],
+        procedureDate,
+        procedureTime,
+        transaction
+      });
+
+      await VisitPackagesAssociation.update(
+        { pickUpDate: procedureDate },
+        {
+          where: { visitId },
+          transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating pickup date", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return Constants.TRIGGER_STARTED_SUCCESSFULLY;
+    } else if (updateType == "UPDATE_HYSTEROSCOPY_START_TIME") {
+      if (isNaN(new Date(hysteroscopyTime).getTime())) {
+        throw new createError.BadRequest("Invalid HysteroscopyTime format.");
+      }
+
+      const tz = "Asia/Kolkata";
+      const hysteroscopyMoment = moment(hysteroscopyTime).tz(tz);
+      const procedureDate = hysteroscopyMoment.format("YYYY-MM-DD");
+      const procedureTime = hysteroscopyMoment.format("HH:mm");
+      const currentTimestamp = hysteroscopyMoment.toDate();
+
+      const patientData = await this.mysqlConnection
+        .query(
+          getPatientFromVisitId,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: { visitId }
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log("Error while getting patient info from visit Id", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      const treatmentCycleInfo = await this.mysqlConnection
+        .query(
+          getTreatmentCycleInfoFromVisitId,
+          {
+            type: Sequelize.QueryTypes.SELECT,
+            replacements: { visitId }
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log(
+            "Error while getting treatmentcycle info from visit Id",
+            err
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
+      if (!patientData.length || !treatmentCycleInfo.length) {
+        throw new createError.NotFound(
+          "Patient or Treatment Cycle data not found."
+        );
+      }
+
+      const [updatedRows] = await TriggerTimeStampsMaster.update(
+        {
+          hysteroscopyTime: currentTimestamp,
+          hysteroscopyStartedBy: this._request.userDetails?.id
+        },
+        {
+          where: { visitId, treatmentType },
+          transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating hysteroscopy start time", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      if (updatedRows === 0) {
+        throw new createError.BadRequest(
+          "Hystero/Lap has not been started yet. Cannot update start time."
+        );
+      }
+
+      const currentUserBranchId = this._request.userDetails.branchDetails.map(
+        branch => branch.id
+      );
+
+      await this.upsertOtProcedureRecord({
+        visitId,
+        treatmentCycleId: treatmentCycleInfo[0].id,
+        patientData,
+        currentUserBranchId,
+        procedureNames: ["HYSTEROSCOPY", "Hysteroscopy", "Hystero/Lap"],
+        procedureDate,
+        procedureTime,
+        transaction
+      });
+
+      await VisitPackagesAssociation.update(
+        { hysteroscopyDate: procedureDate },
+        {
+          where: { visitId },
+          transaction
+        }
+      ).catch(err => {
+        console.log("Error while updating hysteroscopy date", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return {
+        hysteroscopyTime: hysteroscopyMoment.format("YYYY-MM-DD HH:mm:ss")
       };
     } else if (
       updateType == "END_ICSI" ||

@@ -246,6 +246,10 @@ const updateTreatmentStatusSchema = Joi.object({
       "FET_START",
       "ERA_START",
       "UPDATE_ERA_START_TIME",
+      "UPDATE_TREATMENT_START_DATE",
+      "UPDATE_FET_START_DATE",
+      "UPDATE_TRIGGER_START_TIME",
+      "UPDATE_HYSTEROSCOPY_START_TIME",
       "END_ICSI",
       "END_IUI",
       "END_OITI",
@@ -254,14 +258,18 @@ const updateTreatmentStatusSchema = Joi.object({
     )
     .required(),
   triggerTime: Joi.when("stage", {
-    is: Joi.valid("TRIGGER_START", "START_DONOR_TRIGGER"),
+    is: Joi.valid(
+      "TRIGGER_START",
+      "START_DONOR_TRIGGER",
+      "UPDATE_TRIGGER_START_TIME"
+    ),
     then: Joi.date()
       .iso()
       .required(),
     otherwise: Joi.forbidden()
   }),
   hysteroscopyTime: Joi.when("stage", {
-    is: "START_HYSTEROSCOPY",
+    is: Joi.valid("START_HYSTEROSCOPY", "UPDATE_HYSTEROSCOPY_START_TIME"),
     then: Joi.date()
       .iso()
       .required(),
@@ -297,11 +305,17 @@ const updateTreatmentStatusSchema = Joi.object({
       "START_OITI",
       "START_HYSTEROSCOPY",
       "FET_START",
-      "ERA_START"
+      "ERA_START",
+      "UPDATE_TREATMENT_START_DATE",
+      "UPDATE_FET_START_DATE"
     ),
     then: Joi.string()
       .pattern(/^\d{4}-\d{2}-\d{2}$/)
-      .optional(),
+      .when("stage", {
+        is: Joi.valid("UPDATE_TREATMENT_START_DATE", "UPDATE_FET_START_DATE"),
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      }),
     otherwise: Joi.forbidden()
   })
 });

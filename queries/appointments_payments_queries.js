@@ -505,6 +505,10 @@ SELECT JSON_OBJECT(
         ELSE -1
     END,
     'eraStartDate', tt.eraStartDate,
+    'startDate', COALESCE(DATE(tt.startDate), vpa.day1Date),
+    'triggerStartDate', tt.triggerStartDate,
+    'fetStartDate', COALESCE(tt.fetStartDate, vpa.fetDate),
+    'hysteroscopyTime', tt.hysteroscopyTime,
     'END_ERA',
     CASE 
         WHEN :treatmentType IN (4, 5, 6, 7) THEN 
