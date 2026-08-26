@@ -28,12 +28,18 @@ const AWSConnection = require("../connections/aws_connection");
 const embryologyTemplate = require("../templates/embyologyTemplate");
 const GenerateHtmlTemplate = require("../utils/templateUtils");
 const EmbryologyFormatMaster = require("../models/Master/embryologyFormatsMaster");
+const EmbryologyMaster = require("../models/Master/EmbryologyMaster");
 const BaseService = require("./baseService");
 const treatmentEmbryologyImages = require("../models/Associations/treatmentEmbryologyImages");
 const consultationEmbryologyImages = require("../models/Associations/consultationEmbryologyImages");
 const {
   embryologyImagesTemplate
 } = require("../templates/embryologyImagesTemplate");
+const {
+  formatEmbryologyReportTitle,
+  injectEmbryologyReportTitle,
+  EMBRYOLOGY_PDF_STYLES
+} = require("../utils/embryologyPrintUtils");
 class EmbryologyService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -836,385 +842,47 @@ class EmbryologyService extends BaseService {
       )
       .replace("{spouseName}", patientInfo[0].spouseName);
 
+    const embryologyMaster = await EmbryologyMaster.findOne({
+      where: { id },
+      attributes: ["name"]
+    }).catch(() => null);
+
+    data.embryologyTemplate = injectEmbryologyReportTitle(
+      data.embryologyTemplate,
+      embryologyMaster?.name
+    );
+
     return data;
   }
 
-  optimizeTemplateForSinglePage(template, categoryType) {
-    // CSS for single-page optimization - MANDATORY FIXES
-    const optimizationCSS = `
-      <style>
-        /* 1️⃣ Lock Page Size & Remove Browser Margins */
-        @page {
-          size: A4 portrait;
-          margin: 0mm;
-        }
-        
-        /* 4️⃣ KILL ALL PAGE BREAKS COMPLETELY */
-        * {
-          box-sizing: border-box;
-          page-break-before: avoid !important;
-          page-break-after: avoid !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          break-before: avoid !important;
-          break-after: avoid !important;
-        }
-        
-        html, body {
-          font-family: Arial, Helvetica, sans-serif;
-          font-size: 10px;
-          line-height: 1.05;
-          margin: 0;
-          padding: 0;
-          width: 100%;
-          height: 100%;
-        }
-        
-        /* 2️⃣ Wrap Entire Report in a Fixed Container - HARD LIMIT PAGE HEIGHT */
-        #print-root {
-          width: 100%;
-          height: 100%;
-          margin: 0;
-          padding: 0;
-        }
-        
-        .a4-page, .report-page {
-          width: 210mm !important;
-          height: 297mm !important;
-          max-height: 297mm !important;
-          box-sizing: border-box !important;
-          overflow: hidden !important;  /* 🔥 PREVENTS PAGE 2 */
-          padding: 2mm !important;
-          margin: 0 auto !important;
-          display: block !important;
-        }
-        
-        body > *:not(.report-page) {
-          margin: 0;
-          padding: 0;
-        }
-        
-        /* 6️⃣ HEADER HEIGHT REDUCTION (HUGE SPACE SAVER) */
-        .report-header, [class*="header"], [class*="Header"] {
-          margin-bottom: 4px !important;
-          margin-top: 0 !important;
-          padding: 0 !important;
-        }
-        
-        .report-header h1, h1 {
-          font-size: 13px !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          line-height: 1.05 !important;
-        }
-        
-        .report-header p, header p {
-          margin: 0 !important;
-          line-height: 1.05 !important;
-          font-size: 9px !important;
-          padding: 0 !important;
-        }
-        
-        img[src*="logo"], img[alt*="logo"], .logo, [class*="logo"], [id*="logo"] {
-          max-height: 30px !important;
-          width: auto !important;
-          margin: 0 !important;
-        }
-        
-        h2, h3, h4, h5, h6 {
-          margin: 0 !important;
-          padding: 0 !important;
-          font-size: 11px !important;
-          line-height: 1.05 !important;
-          font-weight: bold !important;
-        }
-        
-        /* 5️⃣ TABLE COMPRESSION (YOU MUST DO THIS) */
-        table {
-          width: 100% !important;
-          border-collapse: collapse !important;
-          margin: 0 !important;
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          display: table !important;
-          border-spacing: 0 !important;
-        }
-        
-        table tr {
-          page-break-inside: avoid !important;
-          page-break-after: avoid !important;
-          break-inside: avoid !important;
-          height: auto !important;
-          min-height: 0 !important;
-          max-height: none !important;
-        }
-        
-        /* Remove gaps between tables */
-        table + table {
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-        }
-        
-        /* Remove <br> tags inside tables */
-        table br {
-          display: none !important;
-        }
-        
-        /* Remove empty rows */
-        tr:empty {
-          display: none !important;
-        }
-        
-        th, td {
-          padding: 3px 5px !important;
-          font-size: 10px !important;
-          line-height: 1.05 !important;
-          border: 1px solid #000 !important;
-          vertical-align: top !important;
-          margin: 0 !important;
-        }
-        
-        /* 5️⃣ Reduce Font Size (THIS IS REQUIRED) */
-        body {
-          font-size: 10px !important;
-          font-family: Arial, Helvetica, sans-serif !important;
-        }
-        
-        th {
-          font-weight: bold !important;
-          background-color: #f5f5f5 !important;
-        }
-        
-        /* 7️⃣ MERGE TABLES - Section Rows */
-        tr.section td, tr[class*="section"] td {
-          font-weight: bold !important;
-          background: #f2f2f2 !important;
-          padding: 2px 5px !important;
-        }
-        
-        /* 7️⃣ Merge Tables - Section Rows */
-        .section-row td, tr[class*="section"] td {
-          font-weight: bold !important;
-          background: #f5f5f5 !important;
-          padding: 2px 4px !important;
-        }
-        
-        /* Remove all margins and spacing */
-        p {
-          margin: 0 !important;
-          padding: 0 !important;
-          line-height: 1.05 !important;
-          font-size: 10px !important;
-        }
-        
-        div {
-          margin: 0 !important;
-          padding: 0 !important;
-          line-height: 1.05 !important;
-        }
-        
-        /* Remove min-height and display block from tables */
-        table {
-          min-height: 0 !important;
-          display: table !important;
-        }
-        
-        /* 8️⃣ SIGNATURE SECTION (COMMON BREAK CAUSE) */
-        .signature-section, [class*="signature"], [class*="Signature"], [class*="footer"] {
-          display: flex !important;
-          justify-content: space-between !important;
-          margin-top: 4px !important;
-          margin-bottom: 0 !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          font-size: 9px !important;
-          padding: 0 !important;
-        }
-        
-        .signature-section div, [class*="signature"] div {
-          width: 45% !important;
-          text-align: center !important;
-        }
-        
-        /* Remove <br> in signature section */
-        .signature-section br, [class*="signature"] br {
-          display: none !important;
-        }
-        
-        /* Remove extra breaks */
-        br {
-          line-height: 0.1 !important;
-          margin: 0 !important;
-        }
-        
-        /* Remove <br> in tables */
-        table br {
-          display: none !important;
-        }
-        
-        /* Remove fixed heights */
-        [style*="height"], [style*="min-height"] {
-          height: auto !important;
-          min-height: 0 !important;
-        }
-        
-        /* Patient details optimization */
-        .patient-details, [class*="patient"], [class*="Patient"] {
-          margin: 2px 0 !important;
-          padding: 0 !important;
-        }
-        
-        /* Address blocks */
-        [class*="address"], [class*="Address"] {
-          margin: 0 !important;
-          padding: 0 !important;
-          font-size: 8px !important;
-          line-height: 1.0 !important;
-        }
-        
-        /* Force single page - remove all vertical spacing */
-        * {
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-        }
-        
-        table, p, div, h1, h2, h3, h4, h5, h6, tr {
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-        }
-        
-        /* Reduce row height in tables */
-        tr {
-          height: auto !important;
-          min-height: 0 !important;
-        }
-        
-        /* Compact impression and note sections */
-        [class*="impression"], [class*="Impression"], [class*="note"], [class*="Note"] {
-          margin: 2px 0 !important;
-          padding: 0 !important;
-          font-size: 10px !important;
-          line-height: 1.05 !important;
-        }
-        
-        /* Override ALL inline styles */
-        [style*="margin"], [style*="padding"], [style*="font-size"], [style*="line-height"] {
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        
-        table[style], tr[style], td[style], th[style] {
-          margin: 0 !important;
-          padding: 2px 4px !important;
-          font-size: 9px !important;
-          line-height: 1.0 !important;
-        }
-        
-        /* 9️⃣ FINAL SAFETY NET (GUARANTEED ONE PAGE) */
-        @media print {
-          body {
-            zoom: 0.90 !important;   /* 🔥 FINAL GUARANTEE */
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          
-          .no-print {
-            display: none !important;
-          }
-          
-          .a4-page, .report-page {
-            width: 210mm !important;
-            height: 297mm !important;
-            max-height: 297mm !important;
-            overflow: hidden !important;
-            padding: 2mm !important;
-            margin: 0 auto !important;
-          }
-          
-          /* Kill all page breaks in print */
-          * {
-            page-break-before: avoid !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            break-before: avoid !important;
-            break-after: avoid !important;
-          }
-          
-          table {
-            margin: 0 !important;
-            padding: 0 !important;
-            border-spacing: 0 !important;
-          }
-          
-          td, th {
-            padding: 3px 5px !important;
-            font-size: 10px !important;
-            line-height: 1.05 !important;
-          }
-        }
-      </style>
-      <script>
-        // Force single page by removing all inline styles and applying optimizations
-        (function() {
-          // Remove all inline styles that cause spacing
-          document.querySelectorAll('[style*="margin"], [style*="padding"], [style*="height"], [style*="min-height"]').forEach(el => {
-            const style = el.getAttribute('style') || '';
-            let newStyle = style
-              .replace(/margin[^;]*;?/gi, '')
-              .replace(/padding[^;]*;?/gi, '')
-              .replace(/height[^;]*;?/gi, '')
-              .replace(/min-height[^;]*;?/gi, '')
-              .replace(/line-height[^;]*;?/gi, '');
-            if (newStyle.trim()) {
-              el.setAttribute('style', newStyle);
-            } else {
-              el.removeAttribute('style');
-            }
-          });
-          
-          // Force table cells to minimal padding
-          document.querySelectorAll('td, th').forEach(cell => {
-            cell.style.padding = '1px 2px';
-            cell.style.fontSize = '8px';
-            cell.style.lineHeight = '1.0';
-            cell.style.margin = '0';
-          });
-          
-          // Force tables to no margins
-          document.querySelectorAll('table').forEach(table => {
-            table.style.margin = '0';
-            table.style.padding = '0';
-            table.style.fontSize = '8px';
-          });
-          
-          // Remove all br spacing
-          document.querySelectorAll('br').forEach(br => {
-            br.style.lineHeight = '0.3';
-            br.style.margin = '0';
-          });
-        })();
-      </script>
-    `;
+  async resolveEmbryologyReportTitle(embryologyTypeId, categoryType) {
+    let name = "";
+    if (embryologyTypeId) {
+      const master = await EmbryologyMaster.findOne({
+        where: { id: embryologyTypeId },
+        attributes: ["name"]
+      }).catch(() => null);
+      name = master?.name || "";
+    }
+    return formatEmbryologyReportTitle(name || categoryType);
+  }
 
-    // Check if template already has a style tag or head tag
+  optimizeTemplateForSinglePage(template, categoryType) {
+    const optimizationCSS = EMBRYOLOGY_PDF_STYLES;
+
     let optimizedTemplate = template;
 
-    // Helper function to wrap body content in print-root and a4-page divs (MANDATORY STRUCTURE)
     const wrapInReportPage = bodyContent => {
       return `<div id="print-root"><div class="a4-page report-page">${bodyContent}</div></div>`;
     };
 
-    // If template doesn't have HTML structure, wrap it
     if (!template.includes("<html") && !template.includes("<!DOCTYPE")) {
       optimizedTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${categoryType || "Report"}</title>
+  <title></title>
   ${optimizationCSS}
 </head>
 <body>
@@ -1222,12 +890,14 @@ class EmbryologyService extends BaseService {
 </body>
 </html>`;
     } else if (template.includes("<head>")) {
-      // Insert CSS before closing head tag and wrap body content
       optimizedTemplate = template.replace(
         "</head>",
         `${optimizationCSS}</head>`
       );
-      // Wrap body content if body tag exists
+      optimizedTemplate = optimizedTemplate.replace(
+        /<title[^>]*>[\s\S]*?<\/title>/i,
+        "<title></title>"
+      );
       if (
         optimizedTemplate.includes("<body>") &&
         optimizedTemplate.includes("</body>")
@@ -1239,18 +909,16 @@ class EmbryologyService extends BaseService {
           }
         );
       } else {
-        // If no body tag, wrap everything after head
         optimizedTemplate = optimizedTemplate.replace(
           /<\/head>([\s\S]*)$/,
           `</head><body>${wrapInReportPage("$1")}</body>`
         );
       }
     } else if (template.includes("<html")) {
-      // Add head section with CSS and wrap body
       if (template.includes("<body>") && template.includes("</body>")) {
         optimizedTemplate = template.replace(
           /<html[^>]*>/,
-          `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head>`
+          `<html lang="en"><head><meta charset="UTF-8"><title></title>${optimizationCSS}</head>`
         );
         optimizedTemplate = optimizedTemplate.replace(
           /<body[^>]*>([\s\S]*?)<\/body>/,
@@ -1261,14 +929,13 @@ class EmbryologyService extends BaseService {
       } else {
         optimizedTemplate = template.replace(
           "<html",
-          `<html lang="en"><head><meta charset="UTF-8">${optimizationCSS}</head><body>${wrapInReportPage(
+          `<html lang="en"><head><meta charset="UTF-8"><title></title>${optimizationCSS}</head><body>${wrapInReportPage(
             ""
           )}`
         );
         optimizedTemplate += "</body></html>";
       }
     } else {
-      // Prepend CSS and wrap content
       optimizedTemplate = optimizationCSS + wrapInReportPage(template);
     }
 
@@ -1338,10 +1005,17 @@ class EmbryologyService extends BaseService {
       throw new createError.BadRequest(Constants.EMBRYOLOGY_RECORD_NOT_FOUND);
     }
 
-    // Optimize template for single-page layout (especially for Semen Analysis)
-    const optimizedTemplate = this.optimizeTemplateForSinglePage(
+    const reportTitle = await this.resolveEmbryologyReportTitle(
+      data.embryologyType,
+      data.categoryType || categoryType
+    );
+    const templateWithTitle = injectEmbryologyReportTitle(
       data.template,
-      categoryType
+      reportTitle
+    );
+    const optimizedTemplate = this.optimizeTemplateForSinglePage(
+      templateWithTitle,
+      ""
     );
 
     const browser = await puppeteer.launch({
@@ -1355,120 +1029,14 @@ class EmbryologyService extends BaseService {
       waitUntil: ["load", "domcontentloaded", "networkidle0"]
     });
 
-    // Wait for script to execute and modify DOM
-    await page.waitForTimeout(500);
-
-    // Force single page by setting viewport and applying scale
-    await page.setViewport({
-      width: 794, // A4 width in pixels at 96 DPI
-      height: 1123 // A4 height in pixels at 96 DPI
-    });
-
-    // Execute additional JavaScript to force single page
     await page.evaluate(() => {
-      // Remove all inline styles that cause spacing
-      document.querySelectorAll("*").forEach(el => {
-        const style = el.getAttribute("style") || "";
-        if (
-          style.includes("margin") ||
-          style.includes("padding") ||
-          style.includes("height") ||
-          style.includes("min-height")
-        ) {
-          let newStyle = style
-            .replace(/margin[^;]*;?/gi, "")
-            .replace(/padding[^;]*;?/gi, "")
-            .replace(/height[^;]*;?/gi, "")
-            .replace(/min-height[^;]*;?/gi, "")
-            .replace(/line-height[^;]*;?/gi, "");
-          if (newStyle.trim()) {
-            el.setAttribute("style", newStyle);
-          } else {
-            el.removeAttribute("style");
-          }
-        }
-      });
-
-      // Force table cells to proper padding (as per requirements)
-      document.querySelectorAll("td, th").forEach(cell => {
-        cell.style.padding = "3px 5px";
-        cell.style.fontSize = "10px";
-        cell.style.lineHeight = "1.05";
-        cell.style.margin = "0";
-      });
-
-      // Force tables to no margins
-      document.querySelectorAll("table").forEach(table => {
-        table.style.margin = "0";
-        table.style.padding = "0";
-        table.style.fontSize = "10px";
-        table.style.borderCollapse = "collapse";
-        table.style.borderSpacing = "0";
-        table.style.marginTop = "0";
-        table.style.marginBottom = "0";
-      });
-
-      // Remove <br> tags inside tables only
-      document.querySelectorAll("table br").forEach(br => {
-        br.style.display = "none";
-      });
-
-      // Remove empty rows
-      document.querySelectorAll("tr:empty").forEach(row => {
-        row.style.display = "none";
-      });
-
-      // Remove all gaps between elements
-      document.querySelectorAll("*").forEach(el => {
-        el.style.marginTop = "0";
-        el.style.marginBottom = "0";
-      });
-
-      // Force body margins to zero
-      document.body.style.margin = "0";
-      document.body.style.padding = "0";
-
-      // Force a4-page container (MANDATORY STRUCTURE)
-      const a4Page = document.querySelector(".a4-page, .report-page");
-      if (a4Page) {
-        a4Page.style.width = "210mm";
-        a4Page.style.height = "297mm";
-        a4Page.style.maxHeight = "297mm";
-        a4Page.style.overflow = "hidden";
-        a4Page.style.padding = "2mm";
-        a4Page.style.boxSizing = "border-box";
-      }
-
-      // Ensure print-root exists
-      let printRoot = document.querySelector("#print-root");
-      if (!printRoot) {
-        printRoot = document.createElement("div");
-        printRoot.id = "print-root";
-        const a4Page = document.querySelector(".a4-page, .report-page");
-        if (a4Page && a4Page.parentNode) {
-          a4Page.parentNode.insertBefore(printRoot, a4Page);
-          printRoot.appendChild(a4Page);
-        }
-      }
-
-      // Calculate if content fits, if not, reduce scale further
-      const bodyHeight = document.body.scrollHeight;
-      const maxHeight = 1123; // A4 height in pixels (297mm at 96 DPI)
-
-      if (bodyHeight > maxHeight) {
-        const scaleFactor = (maxHeight / bodyHeight) * 0.95; // 95% to ensure fit
-        document.body.style.transform = `scale(${scaleFactor})`;
-        document.body.style.transformOrigin = "top left";
-      }
+      document.title = "";
     });
-
-    // Wait a bit more for all transformations
-    await page.waitForTimeout(300);
 
     let pdf_buffer = await page.pdf({
       format: "a4",
-      scale: parseFloat("0.90"), // Scale to match print zoom
-      margin: { top: `8mm`, bottom: `8mm`, left: `8mm`, right: `8mm` },
+      scale: 1,
+      margin: { top: `10mm`, bottom: `10mm`, left: `12mm`, right: `12mm` },
       printBackground: true,
       preferCSSPageSize: true,
       displayHeaderFooter: false
