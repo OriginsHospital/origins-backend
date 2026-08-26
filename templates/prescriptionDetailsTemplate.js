@@ -90,7 +90,8 @@ const prescriptionDetailsTemplate = `
         }
         .doctor-signature {
             text-align: right;
-            margin: 16px 10px 8px;
+            margin: 80px 10px 12px;
+            padding-top: 48px;
             font-weight: 700;
             font-size: 16px;
         }
@@ -119,6 +120,10 @@ const prescriptionDetailsTemplate = `
             .prescribed-by,
             .doctor-signature {
                 font-size: 12pt;
+            }
+            .doctor-signature {
+                margin-top: 24mm;
+                padding-top: 16mm;
             }
             .notes-content,
             .notes-content * {

@@ -4730,6 +4730,17 @@ class AppointmentsPaymentService extends BaseService {
     return `${value} kg`;
   }
 
+  formatPrescriptionBp(bp) {
+    if (!bp || String(bp).trim() === "") {
+      return "";
+    }
+    const value = String(bp).trim();
+    if (/mm\s*of\s*hg|mmhg|mm\s*hg/i.test(value)) {
+      return value;
+    }
+    return `${value} mm of Hg`;
+  }
+
   async printPrescriptionService() {
     const validatedPayload = await printPrescriptionSchema.validateAsync(
       this._request.body
@@ -4873,7 +4884,7 @@ class AppointmentsPaymentService extends BaseService {
         edd: edd || "-",
         showLmpEdd,
         weight: this.formatPrescriptionWeight(patientDetails?.weight) || "-",
-        bp: patientDetails?.bp || "-",
+        bp: this.formatPrescriptionBp(patientDetails?.bp) || "-",
         hospitalLogoInformation: hospitalLogoHeaderTemplate,
         showLabs: labsExists,
         showScans: scanExists,
