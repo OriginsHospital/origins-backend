@@ -8,6 +8,9 @@ const ConsultationAppointmentAssociationModel = require("../models/Associations/
 const ConsultationDoctorBranchAssociation = require("../models/Associations/consultationDoctorBranchAssociation");
 const stageConstants = require("../constants/stageConstants");
 const moment = require("moment-timezone");
+const {
+  buildConsultationFeeExpiry
+} = require("../utils/consultationFeeValidity");
 const TreatmentAppointmentAssociationModel = require("../models/Associations/treatmentAppointmentAssociations");
 const TreatmentSheetsAssociationModel = require("../models/Associations/treatmentSheetsAssociations");
 const consultationAppointmentLineBillsAssociations = require("../models/Associations/consultationAppointmentLineBillsAssociations");
@@ -403,9 +406,7 @@ class AppointmentsPaymentService extends BaseService {
         (acc, init) => {
           acc[init.patientId] = {
             ...init,
-            paymentSince: moment()
-              .tz("Asia/Kolkata")
-              .diff(moment(init?.orderDate), "days")
+            ...buildConsultationFeeExpiry(init)
           };
           return acc;
         },

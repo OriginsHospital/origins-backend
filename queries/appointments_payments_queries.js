@@ -341,12 +341,24 @@ WHERE
 	odm.type = 'CONSULTATION'
 	and odm.productType = 'CONSULTATION FEE'
 	and odm.paymentStatus  = 'PAID'
-	and
-DATEDIFF(CAST(NOW() AS DATE), CAST(odm.orderDate AS DATE)) <= (
-		CASE 
-			WHEN vtm.id = 1 THEN 180   -- Fertility
-			WHEN vtm.id = 2 THEN 7     -- Antenatal
-			WHEN vtm.id = 3 THEN 7     -- Gynec
+	and (
+		CASE
+			WHEN vtm.id = 1 OR LOWER(vtm.name) LIKE 'fertility%' THEN
+				DATE_ADD(CAST(odm.orderDate AS DATE), INTERVAL 3 MONTH) > CAST(NOW() AS DATE)
+			ELSE
+				DATEDIFF(CAST(NOW() AS DATE), CAST(odm.orderDate AS DATE)) <= (
+					CASE
+						WHEN vtm.id = 2 THEN 7     -- Antenatal
+						WHEN vtm.id = 3 THEN 7     -- Gynec
+						ELSE COALESCE((
+							SELECT cfba.validity
+							FROM consultation_fee_branch_association cfba
+							WHERE cfba.patientTypeId = vtm.id
+								AND cfba.branchId = caa.branchId
+							LIMIT 1
+						), 7)
+					END
+				)
 		END
 	)
 	and pva.patientId = (
