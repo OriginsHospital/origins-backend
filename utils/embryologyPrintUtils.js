@@ -50,19 +50,86 @@ const getTitleVariants = title => {
   return [...new Set([formatted, withoutReport, title].filter(Boolean))];
 };
 
-const isTitleLikeText = (text, title) => {
-  const normalized = String(text || "")
+const normalizeForCompare = value =>
+  String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#\d+;/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(report|the|of|and|a|an)\b/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  if (!normalized) return false;
-  return getTitleVariants(title).some(
-    variant =>
-      normalized ===
-      String(variant)
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase()
+    .trim();
+
+const isMostlyUpperCase = text => {
+  const letters = String(text || "").replace(/[^a-zA-Z]/g, "");
+  if (letters.length < 3) return false;
+  return letters.replace(/[^A-Z]/g, "").length / letters.length >= 0.6;
+};
+
+const countTextCells = rowHtml =>
+  [
+    ...String(rowHtml || "").matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)
+  ].filter(cell => stripTags(cell[1])).length;
+
+const isTitleLikeText = (text, title, rawHtml = "") => {
+  const raw = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw || raw.length > 100) return false;
+  if (/[:=]/.test(raw)) return false;
+
+  const normalized = raw.toLowerCase();
+  if (
+    getTitleVariants(title).some(
+      variant =>
+        normalized ===
+        String(variant)
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase()
+    )
+  ) {
+    return true;
+  }
+
+  const textNorm = normalizeForCompare(raw);
+  const titleNorm = normalizeForCompare(title);
+  if (textNorm && titleNorm && textNorm === titleNorm) return true;
+
+  const textTokens = textNorm.split(" ").filter(Boolean);
+  const titleTokens = titleNorm.split(" ").filter(Boolean);
+  if (textTokens.length && titleTokens.length) {
+    const textSet = new Set(textTokens);
+    const overlap = titleTokens.filter(token => textSet.has(token)).length;
+    const reverse = textTokens.filter(token => titleTokens.includes(token))
+      .length;
+    const minTokenCount = Math.min(textTokens.length, titleTokens.length);
+    if (
+      overlap / titleTokens.length >= 0.5 &&
+      reverse / textTokens.length >= 0.5 &&
+      minTokenCount >= 1 &&
+      (textNorm.length >= 6 || overlap >= 2)
+    ) {
+      return true;
+    }
+  }
+
+  const headingText = raw
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const endsWithReport = /\breports?\s*$/i.test(headingText);
+  const headingMarkup =
+    /colspan\s*=/i.test(rawHtml) ||
+    /text-align\s*:\s*center/i.test(rawHtml) ||
+    /<(strong|b|h[1-6]|em)\b/i.test(rawHtml);
+  const wordCount = raw.split(/\s+/).filter(Boolean).length;
+  return (
+    endsWithReport &&
+    wordCount > 0 &&
+    wordCount <= 12 &&
+    (headingMarkup || isMostlyUpperCase(raw))
   );
 };
 
@@ -75,22 +142,28 @@ const stripExistingReportTitles = (html, title) => {
     ""
   );
 
-  const headerMarker = result.search(/alt=["']Hospital Logo["']/i);
-  const scanLimit = headerMarker === -1 ? result.length : headerMarker;
-  const leading = result.slice(0, scanLimit);
-  const rest = result.slice(scanLimit);
+  result = result.replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, (full, inner) => {
+    if (countTextCells(inner) > 1) return full;
+    return isTitleLikeText(stripTags(inner), title, full) ? "" : full;
+  });
 
-  const cleanedLeading = leading.replace(
-    /<(h[1-6]|p|div)[^>]*>([\s\S]*?)<\/\1>/gi,
-    (full, tag, inner) => {
-      if (tag.toLowerCase() === "div" && /<(div|table|img)\b/i.test(inner)) {
-        return full;
-      }
-      return isTitleLikeText(stripTags(inner), title) ? "" : full;
-    }
+  result = result.replace(
+    /<(h[1-6]|p)[^>]*>([\s\S]*?)<\/\1>/gi,
+    (full, _tag, inner) =>
+      isTitleLikeText(stripTags(inner), title, full) ? "" : full
   );
 
-  return `${cleanedLeading}${rest}`;
+  result = result.replace(/<div\b[^>]*>([\s\S]*?)<\/div>/gi, (full, inner) => {
+    if (/<(div|table|img)\b/i.test(inner)) return full;
+    return isTitleLikeText(stripTags(inner), title, full) ? "" : full;
+  });
+
+  result = result.replace(
+    /<table\b[^>]*>\s*(?:<(?:thead|tbody|tfoot)\b[^>]*>\s*<\/(?:thead|tbody|tfoot)>\s*)*<\/table>/gi,
+    ""
+  );
+
+  return result;
 };
 
 const injectEmbryologyReportTitle = (html, reportName) => {
