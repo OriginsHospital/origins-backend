@@ -1295,13 +1295,16 @@ SELECT
 						        WHEN :isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 						        ELSE pga.name
 	    					END,
-				'currentDate', DATE_FORMAT(NOW(), '%d/%m/%Y'),
+				'currentDate', DATE_FORMAT(
+					COALESCE(appointmentInformation.appointmentDate, NOW()),
+					'%d/%m/%Y'
+				),
 				'gender', CASE 
 					        WHEN :isSpouse = 0 THEN pm.gender
 					        ELSE COALESCE(pga.gender,'')
 	    				END ,
 				'patientAge',CASE 
-						        WHEN :isSpouse = 0 THEN YEAR(NOW()) - YEAR(pm.dateOfBirth)
+						        WHEN :isSpouse = 0 THEN YEAR(COALESCE(appointmentInformation.appointmentDate, NOW())) - YEAR(pm.dateOfBirth)
 						        ELSE pga.age
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
@@ -1363,6 +1366,7 @@ FROM (
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
 		pva.lmp as visitLmp,
 		pva.edd as visitEdd,
+		caa.appointmentDate as appointmentDate,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
@@ -1390,13 +1394,16 @@ SELECT
 						        WHEN :isSpouse = 0 THEN CONCAT(pm.lastName, ' ', pm.firstName)
 						        ELSE pga.name
 	    					END,
-				'currentDate', DATE_FORMAT(NOW(), '%d/%m/%Y'),
+				'currentDate', DATE_FORMAT(
+					COALESCE(appointmentInformation.appointmentDate, NOW()),
+					'%d/%m/%Y'
+				),
 				'gender', CASE 
 					        WHEN :isSpouse = 0 THEN pm.gender
 					        ELSE COALESCE(pga.gender,'')
 	    				END ,
 				'patientAge',CASE 
-						        WHEN :isSpouse = 0 THEN YEAR(NOW()) - YEAR(pm.dateOfBirth)
+						        WHEN :isSpouse = 0 THEN YEAR(COALESCE(appointmentInformation.appointmentDate, NOW())) - YEAR(pm.dateOfBirth)
 						        ELSE pga.age
 	 						END,
 				'appointmentReason', appointmentInformation.appointmentReason,
@@ -1458,6 +1465,7 @@ FROM (
 		(SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitTypeName,
 		pva.lmp as visitLmp,
 		pva.edd as visitEdd,
+		taa.appointmentDate as appointmentDate,
 		arm.isSpouse,
 		arm.name as appointmentReason,
 		COALESCE(
