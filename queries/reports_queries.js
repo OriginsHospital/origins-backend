@@ -333,6 +333,45 @@ const stockExpiryReportQuery = `
         gia.expiryDate ASC;
 `;
 
+// Revenue location = the appointment the order is billed against
+// (order_details_master.appointmentId → caa/taa.branchId).
+// Do not infer from "nearest appointment on the visit by date": a same-day
+// appointment at another branch (higher id) would steal HNK bills onto HYD.
+const otherPaymentBillingBranchSql = patientBranchExpr => `
+COALESCE(
+  (
+    SELECT z.branchId FROM (
+      SELECT caa_x.branchId AS branchId
+      FROM consultation_appointments_associations caa_x
+      INNER JOIN visit_consultations_associations vca_x ON vca_x.id = caa_x.consultationId
+      INNER JOIN patient_visits_association pva_x ON pva_x.id = vca_x.visitId
+      WHERE pva_x.patientId = popa.patientId
+        AND DATE(caa_x.appointmentDate) = DATE(opom.orderDate)
+      UNION
+      SELECT taa_x.branchId
+      FROM treatment_appointments_associations taa_x
+      INNER JOIN visit_treatment_cycles_associations vtca_x ON vtca_x.id = taa_x.treatmentCycleId
+      INNER JOIN patient_visits_association pva_x ON pva_x.id = vtca_x.visitId
+      WHERE pva_x.patientId = popa.patientId
+        AND DATE(taa_x.appointmentDate) = DATE(opom.orderDate)
+    ) z
+    INNER JOIN user_branch_association uba_match
+      ON uba_match.userId = opom.createdBy AND uba_match.branchId = z.branchId
+    LIMIT 1
+  ),
+  (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
+  ${patientBranchExpr}
+)`;
+
+const treatmentOrderBillingBranchSql = patientBranchExpr => `
+COALESCE(
+  CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
+    SELECT taa.branchId FROM treatment_appointments_associations taa
+    WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
+  ) ELSE NULL END,
+  ${patientBranchExpr}
+)`;
+
 const salesReportQuery = `
     SELECT
 	JSON_ARRAYAGG(
@@ -357,7 +396,7 @@ const salesReportQuery = `
 		where
 			DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
 			AND odm.type = 'Consultation'
-			AND caa.branchId = :branchId
+        AND caa.branchId = :branchId
 		UNION ALL
 		select
 			pppr.totalAmount
@@ -394,17 +433,7 @@ FROM
 			odm.type = 'Consultation'
 			AND odm.paymentStatus = 'PAID'
 			AND DATE(odm.orderDate) BETWEEN :fromDate AND :toDate
-			AND COALESCE(
-			  (
-			    SELECT caa_nb.branchId
-			    FROM consultation_appointments_associations caa_nb
-			    INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-			    WHERE vca_nb.visitId = vca.visitId
-			    ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-			    LIMIT 1
-			  ),
-			  caa.branchId
-			) = :branchId
+        AND caa.branchId = :branchId
 			GROUP by
 				odm.productType
 		UNION ALL
@@ -423,17 +452,7 @@ FROM
 				odm.type = 'Treatment'
 				AND odm.paymentStatus = 'PAID'
 				AND DATE(odm.orderDate) BETWEEN :fromDate AND :toDate
-				AND COALESCE(
-				  (
-				    SELECT taa_nb.branchId
-				    FROM treatment_appointments_associations taa_nb
-				    INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-				    WHERE vtca_nb.visitId = vtca.visitId
-				    ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-				    LIMIT 1
-				  ),
-				  taa.branchId
-				) = :branchId
+				AND taa.branchId = :branchId
 				GROUP by
 					odm.productType
         UNION ALL 
@@ -446,29 +465,9 @@ FROM
 			WHERE 
                 DATE(opom.orderDate) BETWEEN :fromDate AND :toDate
                 AND opom.paymentStatus = 'PAID' 
-                AND COALESCE(
-                  (
-                    SELECT z.branchId FROM (
-                      SELECT caa_x.branchId AS branchId,
-                             ABS(DATEDIFF(DATE(caa_x.appointmentDate), DATE(opom.orderDate))) AS dd
-                      FROM consultation_appointments_associations caa_x
-                      INNER JOIN visit_consultations_associations vca_x ON vca_x.id = caa_x.consultationId
-                      INNER JOIN patient_visits_association pva_x ON pva_x.id = vca_x.visitId
-                      WHERE pva_x.patientId = popa.patientId
-                      UNION ALL
-                      SELECT taa_x.branchId,
-                             ABS(DATEDIFF(DATE(taa_x.appointmentDate), DATE(opom.orderDate)))
-                      FROM treatment_appointments_associations taa_x
-                      INNER JOIN visit_treatment_cycles_associations vtca_x ON vtca_x.id = taa_x.treatmentCycleId
-                      INNER JOIN patient_visits_association pva_x ON pva_x.id = vtca_x.visitId
-                      WHERE pva_x.patientId = popa.patientId
-                    ) z
-                    ORDER BY z.dd ASC, z.branchId DESC
-                    LIMIT 1
-                  ),
-                  (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
-                  (SELECT pm.branchId FROM patient_master pm WHERE pm.id = popa.patientId LIMIT 1)
-                ) = :branchId
+                AND ${otherPaymentBillingBranchSql(
+                  `(SELECT pm.branchId FROM patient_master pm WHERE pm.id = popa.patientId LIMIT 1)`
+                )} = :branchId
                 GROUP by
                     opom.refId
         UNION ALL 
@@ -485,26 +484,11 @@ FROM
                     FROM treatment_orders_master tom
                     INNER JOIN patient_visits_association pva ON pva.id = tom.visitId
                     WHERE DATE(tom.orderDate) BETWEEN :fromDate AND :toDate
-                    AND COALESCE(
-                      CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
-                        SELECT taa.branchId FROM treatment_appointments_associations taa
-                        WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
-                      ) ELSE NULL END,
-                      (
-                        SELECT taa2.branchId FROM treatment_appointments_associations taa2
-                        INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
-                        WHERE vtca2.visitId = tom.visitId
-                        ORDER BY ABS(DATEDIFF(DATE(taa2.appointmentDate), DATE(tom.orderDate))),
-                                 taa2.appointmentDate DESC,
-                                 taa2.id DESC
-                        LIMIT 1
-                      ),
-                      (
-                        SELECT pm.branchId FROM patient_visits_association pva3
+                    AND ${treatmentOrderBillingBranchSql(
+                      `(SELECT pm.branchId FROM patient_visits_association pva3
                         INNER JOIN patient_master pm ON pm.id = pva3.patientId
-                        WHERE pva3.id = tom.visitId LIMIT 1
-                      )
-                    ) = :branchId
+                        WHERE pva3.id = tom.visitId LIMIT 1)`
+                    )} = :branchId
                 ) AS treatmentPayments 
                 GROUP BY treatmentPayments.productType
             ) as combinedQuery
@@ -518,28 +502,9 @@ const salesDataQuery = `
 	JSON_OBJECT(
         'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
         'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-        'branchId', COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        ),
-        'branch',(select name from branch_master bm where bm.id = COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        )),
+        'branchId', caa.branchId,
+        'branchCode', (select branchCode from branch_master bm where bm.id = caa.branchId),
+        'branch',(select name from branch_master bm where bm.id = caa.branchId),
         'orderId', odm.orderId ,
         'type', odm.type ,
         'date', DATE(odm.orderDate),
@@ -565,44 +530,15 @@ const salesDataQuery = `
         and odm.appointmentId IS NOT NULL
         AND odm.paymentStatus = 'PAID'
         AND odm.type = 'Consultation'
-        AND COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        ) = :branchId
+        AND caa.branchId = :branchId
     UNION ALL
     select
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', COALESCE(
-              (
-                SELECT taa_nb.branchId
-                FROM treatment_appointments_associations taa_nb
-                INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-                WHERE vtca_nb.visitId = vtca.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-                LIMIT 1
-              ),
-              taa.branchId
-            ),
-            'branch',(select name from branch_master bm where bm.id = COALESCE(
-              (
-                SELECT taa_nb.branchId
-                FROM treatment_appointments_associations taa_nb
-                INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-                WHERE vtca_nb.visitId = vtca.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-                LIMIT 1
-              ),
-              taa.branchId
-            )),
+            'branchId', taa.branchId,
+            'branchCode', (select branchCode from branch_master bm where bm.id = taa.branchId),
+            'branch',(select name from branch_master bm where bm.id = taa.branchId),
             'orderId', odm.orderId ,
             'type', odm.type ,
             'date', DATE(odm.orderDate),
@@ -629,68 +565,19 @@ const salesDataQuery = `
         and odm.appointmentId IS NOT NULL
         AND odm.paymentStatus = 'PAID'
         AND odm.type = 'Treatment'
-        AND COALESCE(
-          (
-            SELECT taa_nb.branchId
-            FROM treatment_appointments_associations taa_nb
-            INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-            WHERE vtca_nb.visitId = vtca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-            LIMIT 1
-          ),
-          taa.branchId
-        ) = :branchId
+        AND taa.branchId = :branchId
     UNION ALL
     SELECT 
     	JSON_OBJECT(
             'patientName', CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')),
             'patientId',  pm.patientId ,
-            'branchId', COALESCE(
-              (
-                SELECT z.branchId FROM (
-                  SELECT caa_x.branchId AS branchId,
-                         ABS(DATEDIFF(DATE(caa_x.appointmentDate), DATE(opom.orderDate))) AS dd
-                  FROM consultation_appointments_associations caa_x
-                  INNER JOIN visit_consultations_associations vca_x ON vca_x.id = caa_x.consultationId
-                  INNER JOIN patient_visits_association pva_x ON pva_x.id = vca_x.visitId
-                  WHERE pva_x.patientId = popa.patientId
-                  UNION ALL
-                  SELECT taa_x.branchId,
-                         ABS(DATEDIFF(DATE(taa_x.appointmentDate), DATE(opom.orderDate)))
-                  FROM treatment_appointments_associations taa_x
-                  INNER JOIN visit_treatment_cycles_associations vtca_x ON vtca_x.id = taa_x.treatmentCycleId
-                  INNER JOIN patient_visits_association pva_x ON pva_x.id = vtca_x.visitId
-                  WHERE pva_x.patientId = popa.patientId
-                ) z
-                ORDER BY z.dd ASC, z.branchId DESC
-                LIMIT 1
-              ),
-              (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
-              pm.branchId
-            ),
-            'branch',(select name from branch_master bm where bm.id = COALESCE(
-              (
-                SELECT z.branchId FROM (
-                  SELECT caa_x.branchId AS branchId,
-                         ABS(DATEDIFF(DATE(caa_x.appointmentDate), DATE(opom.orderDate))) AS dd
-                  FROM consultation_appointments_associations caa_x
-                  INNER JOIN visit_consultations_associations vca_x ON vca_x.id = caa_x.consultationId
-                  INNER JOIN patient_visits_association pva_x ON pva_x.id = vca_x.visitId
-                  WHERE pva_x.patientId = popa.patientId
-                  UNION ALL
-                  SELECT taa_x.branchId,
-                         ABS(DATEDIFF(DATE(taa_x.appointmentDate), DATE(opom.orderDate)))
-                  FROM treatment_appointments_associations taa_x
-                  INNER JOIN visit_treatment_cycles_associations vtca_x ON vtca_x.id = taa_x.treatmentCycleId
-                  INNER JOIN patient_visits_association pva_x ON pva_x.id = vtca_x.visitId
-                  WHERE pva_x.patientId = popa.patientId
-                ) z
-                ORDER BY z.dd ASC, z.branchId DESC
-                LIMIT 1
-              ),
-              (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
-              pm.branchId
-            )),
+            'branchId', ${otherPaymentBillingBranchSql("pm.branchId")},
+            'branchCode', (select branchCode from branch_master bm where bm.id = ${otherPaymentBillingBranchSql(
+              "pm.branchId"
+            )}),
+            'branch',(select name from branch_master bm where bm.id = ${otherPaymentBillingBranchSql(
+              "pm.branchId"
+            )}),
             'orderId', opom.orderId ,
             'type', opom.type ,
             'date', DATE(opom.orderDate),
@@ -709,67 +596,22 @@ const salesDataQuery = `
         INNER JOIN patient_master pm on 
             pm.id = popa.patientId
         WHERE opom.paymentStatus  = 'PAID'
-        AND COALESCE(
-          (
-            SELECT z.branchId FROM (
-              SELECT caa_x.branchId AS branchId,
-                     ABS(DATEDIFF(DATE(caa_x.appointmentDate), DATE(opom.orderDate))) AS dd
-              FROM consultation_appointments_associations caa_x
-              INNER JOIN visit_consultations_associations vca_x ON vca_x.id = caa_x.consultationId
-              INNER JOIN patient_visits_association pva_x ON pva_x.id = vca_x.visitId
-              WHERE pva_x.patientId = popa.patientId
-              UNION ALL
-              SELECT taa_x.branchId,
-                     ABS(DATEDIFF(DATE(taa_x.appointmentDate), DATE(opom.orderDate)))
-              FROM treatment_appointments_associations taa_x
-              INNER JOIN visit_treatment_cycles_associations vtca_x ON vtca_x.id = taa_x.treatmentCycleId
-              INNER JOIN patient_visits_association pva_x ON pva_x.id = vtca_x.visitId
-              WHERE pva_x.patientId = popa.patientId
-            ) z
-            ORDER BY z.dd ASC, z.branchId DESC
-            LIMIT 1
-          ),
-          (SELECT uba.branchId FROM user_branch_association uba WHERE uba.userId = opom.createdBy ORDER BY uba.id ASC LIMIT 1),
-          pm.branchId
-        ) = :branchId
+        AND ${otherPaymentBillingBranchSql("pm.branchId")} = :branchId
         AND DATE(opom.orderDate) BETWEEN :fromDate AND :toDate
     UNION ALL
    	select  
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', COALESCE(
-              CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
-                SELECT taa.branchId FROM treatment_appointments_associations taa
-                WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
-              ) ELSE NULL END,
-              (
-                SELECT taa2.branchId FROM treatment_appointments_associations taa2
-                INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
-                WHERE vtca2.visitId = tom.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa2.appointmentDate), DATE(tom.orderDate))),
-                         taa2.appointmentDate DESC,
-                         taa2.id DESC
-                LIMIT 1
-              ),
-              (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
-            ),
-            'branch',(select name from branch_master bm where bm.id = COALESCE(
-              CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
-                SELECT taa.branchId FROM treatment_appointments_associations taa
-                WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
-              ) ELSE NULL END,
-              (
-                SELECT taa2.branchId FROM treatment_appointments_associations taa2
-                INNER JOIN visit_treatment_cycles_associations vtca2 ON vtca2.id = taa2.treatmentCycleId
-                WHERE vtca2.visitId = tom.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa2.appointmentDate), DATE(tom.orderDate))),
-                         taa2.appointmentDate DESC,
-                         taa2.id DESC
-                LIMIT 1
-              ),
-              (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
-            )),
+            'branchId', ${treatmentOrderBillingBranchSql(
+              `(SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)`
+            )},
+            'branchCode', (select branchCode from branch_master bm where bm.id = ${treatmentOrderBillingBranchSql(
+              `(SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)`
+            )}),
+            'branch',(select name from branch_master bm where bm.id = ${treatmentOrderBillingBranchSql(
+              `(SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)`
+            )}),
             'orderId', tom.orderId ,
             'type', tom.type ,
             'date', DATE(tom.orderDate),
@@ -799,22 +641,9 @@ const salesDataQuery = `
     INNER JOIN patient_visits_association pva on pva.id = tom.visitId 
     where
         DATE(tom.orderDate) BETWEEN :fromDate AND :toDate
-        AND COALESCE(
-          CASE WHEN tom.productType LIKE 'APPOINTMENT%' THEN (
-            SELECT taa.branchId FROM treatment_appointments_associations taa
-            WHERE taa.id = CAST(SUBSTRING(tom.productType, 13) AS UNSIGNED)
-          ) ELSE NULL END,
-          (
-            SELECT taa3.branchId FROM treatment_appointments_associations taa3
-            INNER JOIN visit_treatment_cycles_associations vtca3 ON vtca3.id = taa3.treatmentCycleId
-            WHERE vtca3.visitId = tom.visitId
-            ORDER BY ABS(DATEDIFF(DATE(taa3.appointmentDate), DATE(tom.orderDate))),
-                     taa3.appointmentDate DESC,
-                     taa3.id DESC
-            LIMIT 1
-          ),
-          (SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)
-        ) = :branchId
+        AND ${treatmentOrderBillingBranchSql(
+          `(SELECT pm.branchId FROM patient_master pm WHERE pm.id = pva.patientId LIMIT 1)`
+        )} = :branchId
 `;
 
 const pharmacyReturnDiscountSql = `
@@ -845,28 +674,9 @@ const returnsDataQuery = `
 	JSON_OBJECT(
         'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
         'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-        'branchId', COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        ),
-        'branch',(select name from branch_master bm where bm.id = COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        )),
+        'branchId', caa.branchId,
+        'branchCode', (select branchCode from branch_master bm where bm.id = caa.branchId),
+        'branch',(select name from branch_master bm where bm.id = caa.branchId),
         'orderId', odm.orderId ,
         'type', odm.type ,
         'date', DATE(pppr.returnedDate),
@@ -889,44 +699,15 @@ const returnsDataQuery = `
     where
         DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
         AND odm.type = 'Consultation'
-        AND COALESCE(
-          (
-            SELECT caa_nb.branchId
-            FROM consultation_appointments_associations caa_nb
-            INNER JOIN visit_consultations_associations vca_nb ON vca_nb.id = caa_nb.consultationId
-            WHERE vca_nb.visitId = vca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(caa_nb.appointmentDate), DATE(odm.orderDate))), caa_nb.id DESC
-            LIMIT 1
-          ),
-          caa.branchId
-        ) = :branchId
+        AND caa.branchId = :branchId
     UNION ALL
     select
         JSON_OBJECT(
             'patientName',(select CONCAT(IFNULL(pm.firstName, ''), ' ', IFNULL(pm.lastName, '')) from patient_master pm where pm.id = pva.patientId),
             'patientId', (select pm.patientId from patient_master pm where pm.id = pva.patientId),
-            'branchId', COALESCE(
-              (
-                SELECT taa_nb.branchId
-                FROM treatment_appointments_associations taa_nb
-                INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-                WHERE vtca_nb.visitId = vtca.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-                LIMIT 1
-              ),
-              taa.branchId
-            ),
-            'branch',(select name from branch_master bm where bm.id = COALESCE(
-              (
-                SELECT taa_nb.branchId
-                FROM treatment_appointments_associations taa_nb
-                INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-                WHERE vtca_nb.visitId = vtca.visitId
-                ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-                LIMIT 1
-              ),
-              taa.branchId
-            )),
+            'branchId', taa.branchId,
+            'branchCode', (select branchCode from branch_master bm where bm.id = taa.branchId),
+            'branch',(select name from branch_master bm where bm.id = taa.branchId),
             'orderId', odm.orderId ,
             'type', odm.type ,
             'date', DATE(pppr.returnedDate),
@@ -950,17 +731,7 @@ const returnsDataQuery = `
     where
         DATE(pppr.returnedDate) BETWEEN :fromDate AND :toDate
         AND odm.type = 'Treatment'
-        AND COALESCE(
-          (
-            SELECT taa_nb.branchId
-            FROM treatment_appointments_associations taa_nb
-            INNER JOIN visit_treatment_cycles_associations vtca_nb ON vtca_nb.id = taa_nb.treatmentCycleId
-            WHERE vtca_nb.visitId = vtca.visitId
-            ORDER BY ABS(DATEDIFF(DATE(taa_nb.appointmentDate), DATE(odm.orderDate))), taa_nb.id DESC
-            LIMIT 1
-          ),
-          taa.branchId
-        ) = :branchId;
+        AND taa.branchId = :branchId;
 `;
 const patientPharmacySalesReportQuery = `
 SELECT 
