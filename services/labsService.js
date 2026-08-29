@@ -650,6 +650,60 @@ class LabsService extends BaseService {
     return Number(visitTypeId) === 2 || typeName.includes("antenatal");
   }
 
+  matchesLabImageTypeName(testName, imageType) {
+    const name = String(testName || "").toUpperCase();
+    if (!name) return false;
+
+    if (imageType === "ECG") {
+      return (
+        /(^|[^A-Z0-9])ECG([^A-Z0-9]|$)/.test(name) ||
+        name.includes("ELECTROCARDIOGRAM")
+      );
+    }
+
+    if (imageType === "NST") {
+      return (
+        /(^|[^A-Z0-9])NST([^A-Z0-9]|$)/.test(name) ||
+        name.includes("NON STRESS") ||
+        name.includes("NON-STRESS") ||
+        name.replace(/\s+/g, "").includes("NONSTRESS")
+      );
+    }
+
+    return false;
+  }
+
+  async isLabImageTypePrescribed(appointmentId, type, imageType) {
+    const isConsultation = String(type).toUpperCase() === "CONSULTATION";
+    const lineBillsTable = isConsultation
+      ? "consultation_appointment_line_bills_associations"
+      : "treatment_appointment_line_bills_associations";
+
+    const rows = await this.mysqlConnection
+      .query(
+        `SELECT ltm.name
+         FROM ${lineBillsTable} lba
+         INNER JOIN lab_test_master ltm ON ltm.id = lba.billTypeValue
+         WHERE lba.appointmentId = :appointmentId
+           AND lba.status = 'PAID'
+           AND lba.billTypeId = 1`,
+        {
+          type: Sequelize.QueryTypes.SELECT,
+          replacements: { appointmentId }
+        }
+      )
+      .catch(err => {
+        console.log("Error while checking prescribed lab image type", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return (rows || []).some(row =>
+      this.matchesLabImageTypeName(row?.name, imageType)
+    );
+  }
+
   async getVisitTypeForAppointment(appointmentId, type) {
     const isConsultation = String(type).toUpperCase() === "CONSULTATION";
     const query = isConsultation
@@ -730,17 +784,18 @@ class LabsService extends BaseService {
       }
     }
 
-    if (imageType === "NST") {
-      const visitInfo = await this.getVisitTypeForAppointment(
-        appointmentId,
-        type
+    const isPrescribed = await this.isLabImageTypePrescribed(
+      appointmentId,
+      type,
+      imageType
+    );
+    if (!isPrescribed) {
+      throw new createError.BadRequest(
+        Constants.LAB_IMAGE_TYPE_NOT_PRESCRIBED.replaceAll(
+          "{imageType}",
+          imageType
+        )
       );
-      if (
-        !visitInfo ||
-        !this.isAntenatalVisit(visitInfo.visitTypeId, visitInfo.visitType)
-      ) {
-        throw new createError.BadRequest(Constants.NST_ONLY_FOR_ANTENATAL);
-      }
     }
 
     const uploadedBy = this._request.userDetails?.id || null;

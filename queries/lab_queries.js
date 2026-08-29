@@ -16,6 +16,8 @@ pva.type as visitTypeId,
 (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
 (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = calba.appointmentId AND lpi.type = 'CONSULTATION' AND lpi.imageType = 'ECG') as ecgImageCount,
 (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = calba.appointmentId AND lpi.type = 'CONSULTATION' AND lpi.imageType = 'NST') as nstImageCount,
+MAX(CASE WHEN UPPER(ltm.name) REGEXP '(^|[^A-Z0-9])ECG([^A-Z0-9]|$)' OR UPPER(ltm.name) LIKE '%ELECTROCARDIOGRAM%' THEN 1 ELSE 0 END) as isEcgPrescribed,
+MAX(CASE WHEN UPPER(ltm.name) REGEXP '(^|[^A-Z0-9])NST([^A-Z0-9]|$)' OR UPPER(ltm.name) LIKE '%NON STRESS%' OR UPPER(ltm.name) LIKE '%NON-STRESS%' OR UPPER(REPLACE(ltm.name, ' ', '')) LIKE '%NONSTRESS%' THEN 1 ELSE 0 END) as isNstPrescribed,
 JSON_ARRAYAGG(
     JSON_OBJECT(
         'labTestId', ltm.id,
@@ -65,6 +67,8 @@ SELECT
     (SELECT vtm.name FROM visit_type_master vtm WHERE vtm.id = pva.type) as visitType,
     (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = talba.appointmentId AND lpi.type = 'TREATMENT' AND lpi.imageType = 'ECG') as ecgImageCount,
     (SELECT COUNT(*) FROM lab_patient_images lpi WHERE lpi.appointmentId = talba.appointmentId AND lpi.type = 'TREATMENT' AND lpi.imageType = 'NST') as nstImageCount,
+    MAX(CASE WHEN UPPER(ltm.name) REGEXP '(^|[^A-Z0-9])ECG([^A-Z0-9]|$)' OR UPPER(ltm.name) LIKE '%ELECTROCARDIOGRAM%' THEN 1 ELSE 0 END) as isEcgPrescribed,
+    MAX(CASE WHEN UPPER(ltm.name) REGEXP '(^|[^A-Z0-9])NST([^A-Z0-9]|$)' OR UPPER(ltm.name) LIKE '%NON STRESS%' OR UPPER(ltm.name) LIKE '%NON-STRESS%' OR UPPER(REPLACE(ltm.name, ' ', '')) LIKE '%NONSTRESS%' THEN 1 ELSE 0 END) as isNstPrescribed,
     JSON_ARRAYAGG(
     JSON_OBJECT(
         'labTestId', ltm.id,

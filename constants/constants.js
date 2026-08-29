@@ -209,6 +209,8 @@ module.exports = {
   CLONE_MASTER_DATA_SUCCESS: "Master data cloned successfully",
   NST_ONLY_FOR_ANTENATAL:
     "NST images can be uploaded only for antenatal visit types",
+  LAB_IMAGE_TYPE_NOT_PRESCRIBED:
+    "{imageType} images can be uploaded only when the doctor has prescribed {imageType}",
   LAB_PATIENT_IMAGE_REQUIRED: "Please select at least one image to upload",
   LAB_PATIENT_IMAGE_INVALID: "Please upload JPG, JPEG, PNG or WEBP images only",
   LAB_PATIENT_IMAGE_TOO_LARGE: "Each image must be less than 5MB",
