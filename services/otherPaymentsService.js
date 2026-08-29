@@ -25,9 +25,30 @@ let { patientHeaderForInvoice } = require("../templates/headerTemplates");
 const { formatAmountInWords } = require("../utils/amountInWordsUtils");
 let { invoiceTemplate } = require("../templates/invoiceTemplate");
 
-function assertAdvancePaymentHistoryEditorAllowed(request) {
+const ADMIN_ROLE_ID = 1;
+const ADMIN_EDITABLE_PAYMENT_MODES = ["CASH", "UPI", "ONLINE"];
+
+function isAdvancePaymentHistoryFullEditor(request) {
   const email = (request.userDetails?.email || "").trim().toLowerCase();
-  if (email !== Constants.ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL.toLowerCase()) {
+  return email === Constants.ADVANCE_PAYMENT_HISTORY_EDITOR_EMAIL.toLowerCase();
+}
+
+function isAdminRole(request) {
+  const roleId = Number(request.userDetails?.roleDetails?.id);
+  const roleName = String(request.userDetails?.roleDetails?.name || "")
+    .trim()
+    .toLowerCase();
+  return roleId === ADMIN_ROLE_ID || roleName === "admin";
+}
+
+function assertAdvancePaymentHistoryEditorAllowed(request) {
+  if (!isAdvancePaymentHistoryFullEditor(request)) {
+    throw new createError.Forbidden(Constants.ADVANCE_PAYMENT_EDIT_FORBIDDEN);
+  }
+}
+
+function assertAdvancePaymentModeChangeAllowed(request) {
+  if (!isAdvancePaymentHistoryFullEditor(request) && !isAdminRole(request)) {
     throw new createError.Forbidden(Constants.ADVANCE_PAYMENT_EDIT_FORBIDDEN);
   }
 }
@@ -501,7 +522,8 @@ class OtherPaymentsService extends BaseService {
 
   // Update payment history entry
   async updatePaymentHistoryService() {
-    assertAdvancePaymentHistoryEditorAllowed(this._request);
+    assertAdvancePaymentModeChangeAllowed(this._request);
+    const isFullEditor = isAdvancePaymentHistoryFullEditor(this._request);
     const { paymentHistoryId } = this._request.params;
     const {
       paidOrderAmount,
@@ -523,6 +545,48 @@ class OtherPaymentsService extends BaseService {
 
     if (!paymentHistory) {
       throw new createError.NotFound("Payment history entry not found");
+    }
+
+    // Admins may change payment mode only; full field edits stay restricted
+    if (!isFullEditor) {
+      if (!paymentMode) {
+        throw new createError.BadRequest("Payment mode is required");
+      }
+
+      const normalizedMode = String(paymentMode)
+        .trim()
+        .toUpperCase();
+      const currentMode = String(paymentHistory.paymentMode || "")
+        .trim()
+        .toUpperCase();
+
+      if (
+        normalizedMode !== currentMode &&
+        !ADMIN_EDITABLE_PAYMENT_MODES.includes(normalizedMode)
+      ) {
+        throw new createError.BadRequest(
+          "Payment mode must be CASH, UPI, or ONLINE"
+        );
+      }
+
+      const modeUpdateData = {
+        paymentMode: normalizedMode,
+        updatedBy: this._request.userDetails?.id,
+        updatedAt: new Date()
+      };
+
+      if (normalizedMode !== "SPLIT") {
+        modeUpdateData.isSplitPayment = false;
+      }
+
+      await paymentHistory.update(modeUpdateData).catch(err => {
+        console.log("Error while updating payment mode", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+      return await OtherPaymentsOrderMaster.findByPk(paymentHistoryId);
     }
 
     // Update fields
