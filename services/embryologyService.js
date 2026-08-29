@@ -40,6 +40,10 @@ const {
   injectEmbryologyReportTitle,
   EMBRYOLOGY_PDF_STYLES
 } = require("../utils/embryologyPrintUtils");
+const {
+  ensureFetIcsiRenewalDate,
+  applyRenewalDateToEmbryologyRows
+} = require("../utils/embryologyRenewalDate");
 class EmbryologyService extends BaseService {
   constructor(request, response, next) {
     super(request, response, next);
@@ -458,7 +462,7 @@ class EmbryologyService extends BaseService {
           Constants.PARAMS_ERROR.replace("{params}", "treatementCycleId")
         );
       }
-      return await this.mysqlConnection
+      const data = await this.mysqlConnection
         .query(getEmbryologyDetailsByTreatmentAppointmentId, {
           replacements: {
             appointmentId: treatementCycleId
@@ -468,6 +472,7 @@ class EmbryologyService extends BaseService {
         .catch(err => {
           console.log("Error while getting the embryology data", err);
         });
+      return applyRenewalDateToEmbryologyRows(data);
     } catch (err) {
       console.log("Error while fetching treatment embryology:", err);
       throw new createError.InternalServerError(
@@ -484,7 +489,7 @@ class EmbryologyService extends BaseService {
           Constants.PARAMS_ERROR.replace("{params}", "consultationId")
         );
       }
-      return await this.mysqlConnection
+      const data = await this.mysqlConnection
         .query(getEmbryologyDetailsByConsultationAppointmentId, {
           replacements: {
             appointmentId: consultationId
@@ -494,6 +499,7 @@ class EmbryologyService extends BaseService {
         .catch(err => {
           console.log("Error while getting the embryology data", err);
         });
+      return applyRenewalDateToEmbryologyRows(data);
     } catch (err) {
       console.log("Error while fetching treatment embryology:", err);
       throw new createError.InternalServerError(
@@ -824,6 +830,16 @@ class EmbryologyService extends BaseService {
       type
     );
 
+    const embryologyMaster = await EmbryologyMaster.findOne({
+      where: { id },
+      attributes: ["name"]
+    }).catch(() => null);
+
+    data.embryologyTemplate = ensureFetIcsiRenewalDate(
+      data.embryologyTemplate,
+      { id, name: embryologyMaster?.name }
+    );
+
     data.embryologyTemplate = data.embryologyTemplate
       .replace("{hospitalLogoInformation}", hospitalLogoHeaderTemplate)
       .replace("{patientName}", patientInfo[0].patientName)
@@ -841,11 +857,6 @@ class EmbryologyService extends BaseService {
           : patientInfo[0]?.spouseAge
       )
       .replace("{spouseName}", patientInfo[0].spouseName);
-
-    const embryologyMaster = await EmbryologyMaster.findOne({
-      where: { id },
-      attributes: ["name"]
-    }).catch(() => null);
 
     data.embryologyTemplate = injectEmbryologyReportTitle(
       data.embryologyTemplate,
@@ -1009,8 +1020,12 @@ class EmbryologyService extends BaseService {
       data.embryologyType,
       data.categoryType || categoryType
     );
+    const templateWithRenewalDate = ensureFetIcsiRenewalDate(data.template, {
+      id: data.embryologyType,
+      name: reportTitle
+    });
     const templateWithTitle = injectEmbryologyReportTitle(
-      data.template,
+      templateWithRenewalDate,
       reportTitle
     );
     const optimizedTemplate = this.optimizeTemplateForSinglePage(
