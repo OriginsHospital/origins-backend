@@ -154,6 +154,13 @@ class AppointmentPaymentRoute {
       this.getTreatmentFetSheetByIdHandler
     );
 
+    this._route.get(
+      "/treatment/getTreatmentFetCyclesByTreatmentCycleId/:id",
+      checkActiveSession,
+      tokenVerified,
+      this.getTreatmentFetCyclesByIdHandler
+    );
+
     this._route.post(
       "/treatment/updateTreatmentFetSheetByTreatmentCycleId",
       checkActiveSession,
@@ -349,6 +356,11 @@ class AppointmentPaymentRoute {
   getTreatmentFetSheetByIdHandler = asyncHandler(async (req, res, next) => {
     const controllerObj = new AppointmentsPaymentController(req, res, next);
     await controllerObj.getTreatmentFetSheetByIdHandler();
+  });
+
+  getTreatmentFetCyclesByIdHandler = asyncHandler(async (req, res, next) => {
+    const controllerObj = new AppointmentsPaymentController(req, res, next);
+    await controllerObj.getTreatmentFetCyclesByIdHandler();
   });
 
   updateTreatmentFetSheetHandler = asyncHandler(async (req, res, next) => {

@@ -528,7 +528,17 @@ SELECT JSON_OBJECT(
                 ELSE -1
             END
         ELSE -1
-    END
+    END,
+    'fetCycleCount', (
+        SELECT COUNT(*)
+        FROM treatment_fet_cycles tfc
+        WHERE tfc.treatmentCycleId = vtca.id
+    ),
+    'currentFetCycleNumber', (
+        SELECT MAX(tfc.cycleNumber)
+        FROM treatment_fet_cycles tfc
+        WHERE tfc.treatmentCycleId = vtca.id
+    )
 ) AS treatmentStatus
 FROM visit_treatment_cycles_associations vtca 
 INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId 
@@ -788,6 +798,7 @@ const fetNotStartedCheckQuery = `
 SELECT (
 	CASE 
 		WHEN tt.fetStartDate IS NULL AND vpa.fetDate IS NULL THEN TRUE
+		WHEN tt.fetEndedDate IS NOT NULL THEN TRUE
 		ELSE FALSE
 	END
 ) as statusCheck 

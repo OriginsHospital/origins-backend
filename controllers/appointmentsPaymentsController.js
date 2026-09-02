@@ -193,6 +193,15 @@ class AppointmentsPaymentController {
     });
   }
 
+  async getTreatmentFetCyclesByIdHandler() {
+    const data = await this._service.getTreatmentFetCyclesByIdService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async updateTreatmentFetSheetHandler() {
     const data = await this._service.updateTreatmentFetSheetHandler();
     this._response.status(200).send({

@@ -14,6 +14,11 @@ const TreatmentFetSheetAssociations = MySqlConnection._instance.define(
       type: Sequelize.INTEGER,
       allowNull: false
     },
+    cycleNumber: {
+      type: Sequelize.INTEGER,
+      allowNull: false,
+      defaultValue: 1
+    },
     template: {
       type: Sequelize.TEXT,
       allowNull: false

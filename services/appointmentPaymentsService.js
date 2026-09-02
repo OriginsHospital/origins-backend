@@ -84,6 +84,7 @@ const TriggerTimeStampsMaster = require("../models/Master/triggerTimeStampsMaste
 const VisitPackagesAssociation = require("../models/Associations/visitPackagesAssociation");
 const OTListMasterModel = require("../models/Master/otListMasterModel");
 const TreatmentFetSheetAssociations = require("../models/Associations/treatmentFetSheetsAssociations");
+const TreatmentFetCyclesAssociations = require("../models/Associations/treatmentFetCyclesAssociations");
 const PatientMasterModel = require("../models/Master/patientMaster");
 const hysteroscopySheetTemplate = require("../templates/hysteroscopySheetTemplate");
 const {
@@ -686,16 +687,33 @@ class AppointmentsPaymentService extends BaseService {
     };
 
     if (!lodash.isEmpty(treamentCycleInfo)) {
-      // Adding default row into FET sheet table
-      await TreatmentFetSheetAssociations.create({
-        template: JSON.stringify(template),
-        treatmentCycleId
+      const cycleNumber =
+        this._request.params.fetCycleNumber ||
+        (await this.getCurrentFetCycleNumber(treatmentCycleId));
+      const existingSheet = await TreatmentFetSheetAssociations.findOne({
+        where: {
+          treatmentCycleId,
+          cycleNumber
+        }
       }).catch(err => {
-        console.log("Error while creating the treatment fet sheet", err);
+        console.log("Error while checking existing FET sheet", err);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
         );
       });
+
+      if (lodash.isEmpty(existingSheet)) {
+        await TreatmentFetSheetAssociations.create({
+          template: JSON.stringify(template),
+          treatmentCycleId,
+          cycleNumber
+        }).catch(err => {
+          console.log("Error while creating the treatment fet sheet", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      }
     }
 
     return {
@@ -2124,15 +2142,148 @@ class AppointmentsPaymentService extends BaseService {
     });
   }
 
+  async getLatestFetCycle(treatmentCycleId, transaction) {
+    if (!treatmentCycleId) {
+      return null;
+    }
+    return TreatmentFetCyclesAssociations.findOne({
+      where: { treatmentCycleId },
+      order: [["cycleNumber", "DESC"]],
+      transaction
+    }).catch(err => {
+      console.log("Error while fetching latest FET cycle", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+  }
+
+  async getCurrentFetCycleNumber(treatmentCycleId, transaction) {
+    const latest = await this.getLatestFetCycle(treatmentCycleId, transaction);
+    return latest?.cycleNumber || 1;
+  }
+
+  async ensureFetCycleOnStart({
+    visitId,
+    treatmentCycleId,
+    fetStartDate,
+    userId,
+    transaction
+  }) {
+    if (!treatmentCycleId) {
+      return 1;
+    }
+
+    const latestCycle = await this.getLatestFetCycle(
+      treatmentCycleId,
+      transaction
+    );
+
+    if (latestCycle && !latestCycle.fetEndedDate) {
+      await latestCycle
+        .update(
+          {
+            fetStartDate,
+            fetStartedBy: userId
+          },
+          { transaction }
+        )
+        .catch(err => {
+          console.log("Error while updating open FET cycle", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+      return latestCycle.cycleNumber;
+    }
+
+    const nextCycleNumber = latestCycle ? latestCycle.cycleNumber + 1 : 1;
+    const created = await TreatmentFetCyclesAssociations.create(
+      {
+        visitId,
+        treatmentCycleId,
+        cycleNumber: nextCycleNumber,
+        fetStartDate,
+        fetStartedBy: userId
+      },
+      { transaction }
+    ).catch(err => {
+      console.log("Error while creating FET cycle record", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+    return created.cycleNumber;
+  }
+
+  async syncFetCycleOnEnd({
+    visitId,
+    treatmentCycleId,
+    fetStartDate,
+    fetEndFields,
+    transaction
+  }) {
+    if (!treatmentCycleId) {
+      return;
+    }
+
+    const openCycle = await TreatmentFetCyclesAssociations.findOne({
+      where: {
+        treatmentCycleId,
+        fetEndedDate: null
+      },
+      order: [["cycleNumber", "DESC"]],
+      transaction
+    }).catch(err => {
+      console.log("Error while fetching open FET cycle", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    if (openCycle) {
+      await openCycle.update(fetEndFields, { transaction }).catch(err => {
+        console.log("Error while ending FET cycle record", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      return;
+    }
+
+    const latestCycle = await this.getLatestFetCycle(
+      treatmentCycleId,
+      transaction
+    );
+    const nextCycleNumber = latestCycle ? latestCycle.cycleNumber + 1 : 1;
+    await TreatmentFetCyclesAssociations.create(
+      {
+        visitId,
+        treatmentCycleId,
+        cycleNumber: nextCycleNumber,
+        fetStartDate,
+        ...fetEndFields
+      },
+      { transaction }
+    ).catch(err => {
+      console.log("Error while creating ended FET cycle record", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+  }
+
   async persistShiftedSheet(
     model,
     treatmentCycleId,
     newStartDate,
-    transaction
+    transaction,
+    extraWhere = {}
   ) {
     const existingSheet = await model
       .findOne({
-        where: { treatmentCycleId },
+        where: { treatmentCycleId, ...extraWhere },
+        order: [["id", "DESC"]],
         transaction
       })
       .catch(err => {
@@ -2157,7 +2308,7 @@ class AppointmentsPaymentService extends BaseService {
       .update(
         { template: JSON.stringify(shifted) },
         {
-          where: { treatmentCycleId },
+          where: { id: existingSheet.id },
           transaction
         }
       )
@@ -3076,7 +3227,10 @@ class AppointmentsPaymentService extends BaseService {
           {
             visitId: visitId,
             fetStartDate: treatmentStartTimestamp,
-            fetStartedBy: this._request?.userDetails?.id
+            fetStartedBy: this._request?.userDetails?.id,
+            fetEndedDate: null,
+            fetEndedReason: null,
+            fetEndedBy: null
           },
           {
             where: {
@@ -3127,7 +3281,20 @@ class AppointmentsPaymentService extends BaseService {
         );
       });
 
+      const treatmentCycleInfo = await this.getVisitTreatmentCycle(
+        visitId,
+        transaction
+      );
+      const fetCycleNumber = await this.ensureFetCycleOnStart({
+        visitId,
+        treatmentCycleId: treatmentCycleInfo?.id,
+        fetStartDate: treatmentStartTimestamp,
+        userId: this._request?.userDetails?.id,
+        transaction
+      });
+
       this._request.params.startDate = treatmentStartDateFormatted;
+      this._request.params.fetCycleNumber = fetCycleNumber;
       return await this.getFetSheetsService(visitId);
     } else if (updateType == "START_ERA") {
       /*  //Same as FET but with ERA treatmentType//
@@ -3484,12 +3651,30 @@ class AppointmentsPaymentService extends BaseService {
         15
       );
       if (!lodash.isEmpty(treatmentCycleInfo)) {
+        const currentCycleNumber = await this.getCurrentFetCycleNumber(
+          treatmentCycleInfo.id,
+          transaction
+        );
         dateRange = await this.persistShiftedSheet(
           TreatmentFetSheetAssociations,
           treatmentCycleInfo.id,
           treatmentStartDateFormatted,
+          transaction,
+          { cycleNumber: currentCycleNumber }
+        );
+        const latestCycle = await this.getLatestFetCycle(
+          treatmentCycleInfo.id,
           transaction
         );
+        if (latestCycle && !latestCycle.fetEndedDate) {
+          await latestCycle.update(
+            {
+              fetStartDate: treatmentStartTimestamp,
+              fetStartedBy: this._request?.userDetails?.id
+            },
+            { transaction }
+          );
+        }
       }
 
       return {
@@ -3838,6 +4023,18 @@ class AppointmentsPaymentService extends BaseService {
           );
         });
       }
+
+      const treatmentCycleInfo = await this.getVisitTreatmentCycle(
+        visitId,
+        transaction
+      );
+      await this.syncFetCycleOnEnd({
+        visitId,
+        treatmentCycleId: treatmentCycleInfo?.id,
+        fetStartDate: existingFetRecord?.fetStartDate || inferredFetStartDate,
+        fetEndFields,
+        transaction
+      });
     } else if (updateType === "END_ERA") {
       /*
         1. UpdateEntry in the Trigger TimeStamps
@@ -4368,17 +4565,22 @@ class AppointmentsPaymentService extends BaseService {
 
   async getTreatmentFetSheetsByIdService() {
     const { id } = this._request.params;
+    const cycleNumber = this._request.query?.cycleNumber;
     if (!id) {
       throw new createError.BadRequest(
         Constants.PARAMS_ERROR.replace("{params}", "Treatment Cycle Id")
       );
     }
 
+    const where = { treatmentCycleId: id };
+    if (cycleNumber) {
+      where.cycleNumber = Number(cycleNumber);
+    }
+
     const sheet = await TreatmentFetSheetAssociations.findOne({
-      where: {
-        treatmentCycleId: id
-      },
-      attributes: ["treatmentCycleId", "template"]
+      where,
+      order: [["cycleNumber", "DESC"], ["id", "DESC"]],
+      attributes: ["treatmentCycleId", "template", "cycleNumber"]
     }).catch(err => {
       console.log("Error while getting the treatment Fet Sheet Template", err);
       throw new createError.InternalServerError(
@@ -4389,14 +4591,76 @@ class AppointmentsPaymentService extends BaseService {
     return sheet;
   }
 
+  async getTreatmentFetCyclesByIdService() {
+    const { id } = this._request.params;
+    if (!id) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "Treatment Cycle Id")
+      );
+    }
+
+    const cycles = await TreatmentFetCyclesAssociations.findAll({
+      where: { treatmentCycleId: id },
+      order: [["cycleNumber", "ASC"]]
+    }).catch(err => {
+      console.log("Error while getting FET cycle records", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    const sheets = await TreatmentFetSheetAssociations.findAll({
+      where: { treatmentCycleId: id },
+      attributes: ["treatmentCycleId", "template", "cycleNumber"],
+      order: [["cycleNumber", "ASC"], ["id", "ASC"]]
+    }).catch(err => {
+      console.log("Error while getting FET sheets for cycles", err);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    const sheetByCycle = new Map();
+    (sheets || []).forEach(sheet => {
+      const key = sheet.cycleNumber || 1;
+      if (!sheetByCycle.has(key)) {
+        sheetByCycle.set(key, sheet);
+      }
+    });
+
+    if (!cycles.length && sheets.length) {
+      return sheets.map((sheet, index) => ({
+        treatmentCycleId: Number(id),
+        cycleNumber: sheet.cycleNumber || index + 1,
+        fetStartDate: null,
+        fetEndedDate: null,
+        fetEndedReason: null,
+        template: sheet.template,
+        isActive: index === sheets.length - 1
+      }));
+    }
+
+    return (cycles || []).map(cycle => {
+      const json = cycle.toJSON ? cycle.toJSON() : cycle;
+      return {
+        ...json,
+        template: sheetByCycle.get(json.cycleNumber)?.template || null,
+        isActive: !json.fetEndedDate
+      };
+    });
+  }
+
   async updateTreatmentFetSheetHandler() {
     const { template, id } = await treatmentSheetUpdateSchema.validateAsync(
       this._request.body
     );
+    const currentCycleNumber = await this.getCurrentFetCycleNumber(id);
     const exists = await TreatmentFetSheetAssociations.findOne({
       where: {
-        treatmentCycleId: id
-      }
+        treatmentCycleId: id,
+        cycleNumber: currentCycleNumber
+      },
+      order: [["id", "DESC"]]
     }).catch(err => {
       console.log("Error while getting the treatment fet sheet data", err);
       throw new createError.InternalServerError(
@@ -4411,7 +4675,7 @@ class AppointmentsPaymentService extends BaseService {
         },
         {
           where: {
-            treatmentCycleId: id
+            id: exists.id
           }
         }
       ).catch(err => {
@@ -4423,7 +4687,8 @@ class AppointmentsPaymentService extends BaseService {
     } else {
       await TreatmentFetSheetAssociations.create({
         template: template,
-        treatmentCycleId: id
+        treatmentCycleId: id,
+        cycleNumber: currentCycleNumber
       }).catch(err => {
         console.log("Error while creating the treatment fet sheet", err);
         throw new createError.InternalServerError(
