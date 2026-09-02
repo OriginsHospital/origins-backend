@@ -4593,14 +4593,19 @@ class AppointmentsPaymentService extends BaseService {
 
   async getTreatmentFetCyclesByIdService() {
     const { id } = this._request.params;
-    if (!id) {
+    const visitId = this._request.query?.visitId
+      ? Number(this._request.query.visitId)
+      : null;
+    if (!id && !visitId) {
       throw new createError.BadRequest(
         Constants.PARAMS_ERROR.replace("{params}", "Treatment Cycle Id")
       );
     }
 
+    const cycleWhere = visitId ? { visitId } : { treatmentCycleId: id };
+
     const cycles = await TreatmentFetCyclesAssociations.findAll({
-      where: { treatmentCycleId: id },
+      where: cycleWhere,
       order: [["cycleNumber", "ASC"]]
     }).catch(err => {
       console.log("Error while getting FET cycle records", err);
@@ -4609,20 +4614,38 @@ class AppointmentsPaymentService extends BaseService {
       );
     });
 
-    const sheets = await TreatmentFetSheetAssociations.findAll({
-      where: { treatmentCycleId: id },
-      attributes: ["treatmentCycleId", "template", "cycleNumber"],
-      order: [["cycleNumber", "ASC"], ["id", "ASC"]]
-    }).catch(err => {
-      console.log("Error while getting FET sheets for cycles", err);
-      throw new createError.InternalServerError(
-        Constants.SOMETHING_ERROR_OCCURRED
-      );
-    });
+    let treatmentCycleIds = [];
+    if (visitId) {
+      const visitTreatments = await VisitTreatmentsAssociations.findAll({
+        where: { visitId },
+        attributes: ["id"]
+      }).catch(err => {
+        console.log("Error while getting visit treatment cycles for FET", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+      treatmentCycleIds = (visitTreatments || []).map(row => row.id);
+    } else if (id) {
+      treatmentCycleIds = [Number(id)];
+    }
+
+    const sheets = treatmentCycleIds.length
+      ? await TreatmentFetSheetAssociations.findAll({
+          where: { treatmentCycleId: treatmentCycleIds },
+          attributes: ["treatmentCycleId", "template", "cycleNumber"],
+          order: [["cycleNumber", "ASC"], ["id", "ASC"]]
+        }).catch(err => {
+          console.log("Error while getting FET sheets for cycles", err);
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        })
+      : [];
 
     const sheetByCycle = new Map();
     (sheets || []).forEach(sheet => {
-      const key = sheet.cycleNumber || 1;
+      const key = Number(sheet.cycleNumber) || 1;
       if (!sheetByCycle.has(key)) {
         sheetByCycle.set(key, sheet);
       }
@@ -4630,7 +4653,7 @@ class AppointmentsPaymentService extends BaseService {
 
     if (!cycles.length && sheets.length) {
       return sheets.map((sheet, index) => ({
-        treatmentCycleId: Number(id),
+        treatmentCycleId: sheet.treatmentCycleId || Number(id),
         cycleNumber: sheet.cycleNumber || index + 1,
         fetStartDate: null,
         fetEndedDate: null,
@@ -4642,9 +4665,12 @@ class AppointmentsPaymentService extends BaseService {
 
     return (cycles || []).map(cycle => {
       const json = cycle.toJSON ? cycle.toJSON() : cycle;
+      const sheet = sheetByCycle.get(Number(json.cycleNumber));
       return {
         ...json,
-        template: sheetByCycle.get(json.cycleNumber)?.template || null,
+        treatmentCycleId:
+          json.treatmentCycleId || sheet?.treatmentCycleId || Number(id),
+        template: sheet?.template || null,
         isActive: !json.fetEndedDate
       };
     });
