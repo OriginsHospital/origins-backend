@@ -86,6 +86,23 @@ const GrnItemsAssociationsModel = StockMySQLConnection._instance.define(
       type: Sequelize.DataTypes.BOOLEAN,
       allowNull: false,
       default: false
+    },
+    isDeleted: {
+      type: Sequelize.DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    deletedQuantity: {
+      type: Sequelize.DataTypes.BIGINT,
+      allowNull: true
+    },
+    deletedBy: {
+      type: Sequelize.DataTypes.INTEGER,
+      allowNull: true
+    },
+    deletedAt: {
+      type: Sequelize.DataTypes.DATE,
+      allowNull: true
     }
   },
   {

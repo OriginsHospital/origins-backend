@@ -41,6 +41,10 @@ const GrnDetailsMasterModel = StockMySQLConnection._instance.define(
     invoiceNumber: {
       type: Sequelize.DataTypes.STRING(100),
       allowNull: true
+    },
+    createdBy: {
+      type: Sequelize.DataTypes.INTEGER,
+      allowNull: true
     }
   },
   {

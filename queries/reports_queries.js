@@ -818,13 +818,13 @@ WITH itemQuantity AS (
     SELECT
         im.id,
         COALESCE(SUM(CASE
-            WHEN gm.id IS NOT NULL AND gm.branchId IN (:branchId) THEN gia.totalQuantity
+            WHEN gm.id IS NOT NULL AND gm.branchId IN (:branchId) AND IFNULL(gia.isDeleted, 0) = 0 THEN gia.totalQuantity
             ELSE 0
         END), 0) AS totalQuantity
     FROM
         stockmanagement.item_master im
     LEFT JOIN stockmanagement.grn_items_associations gia 
-        ON gia.itemId = im.id AND gia.isReturned = 0
+        ON gia.itemId = im.id AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
     LEFT JOIN stockmanagement.grn_master gm 
         ON gm.id = gia.grnId 
     WHERE
@@ -844,10 +844,18 @@ itemInformation AS (
                         'invoiceNumber', gm.invoiceNumber,
                         'batchNo', gia.batchNo,
                         'supplierName', (SELECT sm.supplier FROM stockmanagement.supplier_master sm WHERE sm.id = gm.supplierId),
-                        'availableQuantity', gia.totalQuantity,
+                        'availableQuantity', CASE
+                            WHEN IFNULL(gia.isDeleted, 0) = 1 THEN COALESCE(gia.deletedQuantity, gia.totalQuantity, 0)
+                            ELSE gia.totalQuantity
+                        END,
                         'branchId', gm.branchId,
                         'expiryDate', gia.expiryDate,
-                        'branchName', (select bm.name from branch_master bm where bm.id = gm.branchId) 
+                        'branchName', (select bm.name from branch_master bm where bm.id = gm.branchId),
+                        'dateOfEntry', DATE_FORMAT(COALESCE(gm.createdAt, gm.date), '%Y-%m-%d %H:%i:%s'),
+                        'enteredBy', (SELECT u.fullName FROM defaultdb.users u WHERE u.id = gm.createdBy),
+                        'isDeleted', IF(IFNULL(gia.isDeleted, 0) = 1, 1, 0),
+                        'deletedAt', DATE_FORMAT(gia.deletedAt, '%Y-%m-%d %H:%i:%s'),
+                        'deletedBy', (SELECT u.fullName FROM defaultdb.users u WHERE u.id = gia.deletedBy)
                     )
             END
         ) AS grnDetails
@@ -866,10 +874,7 @@ SELECT
     im.id AS itemId,
     im.itemName, 
     COALESCE(iq.totalQuantity, 0) AS totalQuantity,
-    CASE 
-        WHEN iq.totalQuantity = 0 OR iq.totalQuantity IS NULL THEN JSON_ARRAY()
-        ELSE ii.grnDetails
-    END AS grnDetails
+    COALESCE(ii.grnDetails, JSON_ARRAY()) AS grnDetails
 FROM
     stockmanagement.item_master im
 LEFT JOIN itemQuantity iq ON iq.id = im.id
@@ -1047,6 +1052,7 @@ LEFT JOIN soldByItemBranch sold ON sold.itemId = gia.itemId AND sold.branchId = 
 WHERE
   im.isActive = 1
   AND gia.isReturned = 0
+  AND IFNULL(gia.isDeleted, 0) = 0
   AND (:fromDate IS NULL OR DATE(gm.date) >= :fromDate)
   AND (:toDate IS NULL OR DATE(gm.date) <= :toDate)
   AND (:branchId IS NULL OR gm.branchId = :branchId)

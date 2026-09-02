@@ -44,6 +44,8 @@ branch_item_stock AS (
 	FROM stockmanagement.grn_items_associations gia
 	INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
 	WHERE gm.branchId = :branchId
+		AND gia.isReturned = 0
+		AND IFNULL(gia.isDeleted, 0) = 0
 	GROUP BY gia.itemId, gm.branchId
 ),
 pharmacy_paid_orders AS (
@@ -240,6 +242,7 @@ WHERE gia.itemId = (
 	END
 )
 AND CAST(NOW() as DATE) < gia.expiryDate and gm.branchId = :branchId
+AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
 group by gia.grnId , gia.expiryDate, gia.itemId  
 order by gia.expiryDate
 `;
@@ -269,7 +272,7 @@ const reduceQuantityQuery = `
 		WHEN :type  = 'Consultation' THEN (select billTypeValue from defaultdb.consultation_appointment_line_bills_associations calba where calba.id = :id)
 		WHEN :type  =  'Treatment' THEN (select billTypeValue from defaultdb.treatment_appointment_line_bills_associations talba where talba.id = :id )
 	END
-) and grnId = :grnId
+) and grnId = :grnId AND IFNULL(isDeleted, 0) = 0
 `;
 
 const restoreQuantityQuery = `
@@ -279,7 +282,7 @@ const restoreQuantityQuery = `
 		WHEN :type  = 'Consultation' THEN (select billTypeValue from defaultdb.consultation_appointment_line_bills_associations calba where calba.id = :id)
 		WHEN :type  =  'Treatment' THEN (select billTypeValue from defaultdb.treatment_appointment_line_bills_associations talba where talba.id = :id )
 	END
-) and grnId = :grnId
+) and grnId = :grnId AND IFNULL(isDeleted, 0) = 0
 `;
 const geneatePaymentBreakUpDetailsQuery = `
 	select
@@ -326,23 +329,32 @@ END
 `;
 
 const verifyGrnItemLineBranchQuery = `
-  SELECT gia.id
+  SELECT gia.id, gia.totalQuantity
   FROM stockmanagement.grn_items_associations gia
   INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-  WHERE gia.id = :grnItemAssociationId AND gm.branchId = :branchId AND gia.isReturned = 0
+  WHERE gia.id = :grnItemAssociationId AND gm.branchId = :branchId AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
 `;
 
 const deleteGrnItemLinesForItemBranchQuery = `
-  DELETE gia FROM stockmanagement.grn_items_associations gia
+  UPDATE stockmanagement.grn_items_associations gia
   INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-  WHERE gia.itemId = :itemId AND gm.branchId = :branchId AND gia.isReturned = 0
+  SET
+    gia.deletedQuantity = gia.totalQuantity,
+    gia.totalQuantity = 0,
+    gia.isDeleted = 1,
+    gia.deletedBy = :deletedBy,
+    gia.deletedAt = NOW()
+  WHERE gia.itemId = :itemId
+    AND gm.branchId = :branchId
+    AND gia.isReturned = 0
+    AND IFNULL(gia.isDeleted, 0) = 0
 `;
 
 const getGrnStockLinesForItemBranchQuery = `
   SELECT gia.id, gia.totalQuantity
   FROM stockmanagement.grn_items_associations gia
   INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
-  WHERE gia.itemId = :itemId AND gm.branchId = :branchId AND gia.isReturned = 0
+  WHERE gia.itemId = :itemId AND gm.branchId = :branchId AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
   ORDER BY gia.id
 `;
 
@@ -350,7 +362,7 @@ const reassignGrnStockItemIdForBranchQuery = `
   UPDATE stockmanagement.grn_items_associations gia
   INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
   SET gia.itemId = :newItemId
-  WHERE gia.itemId = :oldItemId AND gm.branchId = :branchId AND gia.isReturned = 0
+  WHERE gia.itemId = :oldItemId AND gm.branchId = :branchId AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
 `;
 
 const getGrnTransferPreviewByIdQuery = `
@@ -368,7 +380,7 @@ const getGrnTransferPreviewByIdQuery = `
   INNER JOIN stockmanagement.grn_items_associations gia ON gia.grnId = gm.id
   INNER JOIN stockmanagement.item_master im ON im.id = gia.itemId
   INNER JOIN defaultdb.branch_master bm ON bm.id = gm.branchId
-  WHERE gm.id = :grnId AND gia.isReturned = 0
+  WHERE gm.id = :grnId AND gia.isReturned = 0 AND IFNULL(gia.isDeleted, 0) = 0
   GROUP BY gm.id, gm.grnNo, gm.branchId, gm.invoiceNumber, bm.name, bm.branchCode, gia.itemId, im.itemName
   ORDER BY im.itemName;
 `;
@@ -397,6 +409,7 @@ const getGrnItemStockLinesForTransferQuery = `
   WHERE gia.grnId = :grnId
     AND gia.itemId = :itemId
     AND gia.isReturned = 0
+    AND IFNULL(gia.isDeleted, 0) = 0
     AND gia.totalQuantity > 0
   ORDER BY gia.expiryDate ASC, gia.id ASC;
 `;

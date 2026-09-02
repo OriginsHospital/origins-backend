@@ -996,9 +996,15 @@ class PharmacyService {
         }
       }
 
-      const grnData = await GrnDetailsMasterModel.create(grnDetails, {
-        transaction: t
-      }).catch(err => {
+      const grnData = await GrnDetailsMasterModel.create(
+        {
+          ...grnDetails,
+          createdBy: this._request?.userDetails?.id ?? null
+        },
+        {
+          transaction: t
+        }
+      ).catch(err => {
         console.log("error while saving grn details", err);
         throw new createError.InternalServerError(
           Constants.SOMETHING_ERROR_OCCURRED
@@ -1460,9 +1466,18 @@ class PharmacyService {
       );
     }
 
-    await GrnItemsAssociationsModel.destroy({
-      where: { id: grnItemAssociationId }
-    }).catch(err => {
+    await GrnItemsAssociationsModel.update(
+      {
+        isDeleted: true,
+        deletedBy: this._request?.userDetails?.id ?? null,
+        deletedAt: new Date(),
+        deletedQuantity: verified[0].totalQuantity,
+        totalQuantity: 0
+      },
+      {
+        where: { id: grnItemAssociationId }
+      }
+    ).catch(err => {
       console.log("Error deleting GRN stock line", err);
       throw new createError.InternalServerError(
         Constants.SOMETHING_ERROR_OCCURRED
@@ -1488,7 +1503,11 @@ class PharmacyService {
 
     const queryResult = await this.stocksqlConnection
       .query(deleteGrnItemLinesForItemBranchQuery, {
-        replacements: { itemId, branchId }
+        replacements: {
+          itemId,
+          branchId,
+          deletedBy: this._request?.userDetails?.id ?? null
+        }
       })
       .catch(err => {
         console.log("Error deleting GRN stock lines for item", err);
@@ -1841,7 +1860,8 @@ class PharmacyService {
           supplierEmail: sourceGrn.supplierEmail,
           supplierAddress: sourceGrn.supplierAddress,
           supplierGstNumber: sourceGrn.supplierGstNumber,
-          invoiceNumber: transferInvoiceNumber
+          invoiceNumber: transferInvoiceNumber,
+          createdBy: transferByUserId ?? null
         },
         { transaction: t }
       ).catch(err => {

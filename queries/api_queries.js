@@ -21,6 +21,7 @@ SELECT
     INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
     WHERE gia.itemId = im.id
       AND gia.isReturned = 0
+      AND IFNULL(gia.isDeleted, 0) = 0
   ), 0) AS quantity
 FROM stockmanagement.item_master im
 LEFT JOIN stockmanagement.item_price_master ipm ON im.id = ipm.itemId
@@ -53,6 +54,7 @@ SELECT
     INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
     WHERE gia.itemId = im.id
       AND gia.isReturned = 0
+      AND IFNULL(gia.isDeleted, 0) = 0
       AND gm.branchId IN (:branchId)
   ), 0) AS quantity
 FROM stockmanagement.item_master im
@@ -64,6 +66,7 @@ WHERE im.isActive = 1
     INNER JOIN stockmanagement.grn_master gm ON gm.id = gia.grnId
     WHERE gia.itemId = im.id
       AND gia.isReturned = 0
+      AND IFNULL(gia.isDeleted, 0) = 0
       AND gm.branchId IN (:branchId)
       AND gia.totalQuantity > 0
       AND CAST(NOW() AS DATE) < gia.expiryDate

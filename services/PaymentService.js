@@ -263,7 +263,8 @@ class PaymentService extends BaseService {
           supplierEmail: source.supplierEmail,
           supplierAddress: source.supplierAddress,
           supplierGstNumber: source.supplierGstNumber,
-          invoiceNumber: refundInvoiceNumber
+          invoiceNumber: refundInvoiceNumber,
+          createdBy: this._request?.userDetails?.id ?? null
         },
         { transaction }
       ).catch(err => {
