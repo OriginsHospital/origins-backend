@@ -139,6 +139,7 @@ WITH appointments as (
         caa.consultationDoctorId = :doctorId
         AND caa.appointmentDate = :date
         AND caa.noShow = 0
+        AND pva.isActive = 1
     UNION ALL
     SELECT
         taa.id as appointmentId,
@@ -241,6 +242,7 @@ WITH appointments as (
         taa.consultationDoctorId = :doctorId
         AND taa.appointmentDate = :date
         AND taa.noShow = 0
+        AND pva.isActive = 1
     )
     select * from appointments where stage IN ('Doctor', 'Seen', 'Done') order by isCompleted ASC ,timeStart ASC ;
 `;

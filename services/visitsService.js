@@ -152,6 +152,26 @@ class VisitsService {
           transaction: t
         }
       );
+
+      await visitConsultationsAssociations
+        .create(
+          {
+            visitId: newVisit.id,
+            type: "Initial Consultation",
+            createdBy: createdBy
+          },
+          { transaction: t }
+        )
+        .catch(err => {
+          console.log(
+            "Error while creating initial consultation for new visit",
+            err.message
+          );
+          throw new createError.InternalServerError(
+            Constants.SOMETHING_ERROR_OCCURRED
+          );
+        });
+
       return newVisit.dataValues;
     });
   }
@@ -287,79 +307,30 @@ class VisitsService {
     await this.assertFetEndedBeforeClosingVisit(paramVisitId);
 
     await this.mysqlConnection.transaction(async t => {
-      /* TODO: Check if Pending payments exists for visitId after payment flow */
-
-      // //check isPackageExists or not
-      // const isPackageExistData = await this.mysqlConnection
-      //   .query(isPackageExistsQueryForTreatment, {
-      //     type: Sequelize.QueryTypes.SELECT,
-      //     replacements: {
-      //       treatmentCycleId: validatedVisitData?.treatmentCycleId
-      //     },
-      //     transaction: t
-      //   })
-      //   .catch(err => {
-      //     console.log(
-      //       "Error while getting packageExists Data for patient",
-      //       err.message
-      //     );
-      //     throw new createError.InternalServerError(
-      //       Constants.SOMETHING_ERROR_OCCURRED
-      //     );
-      //   });
-
-      // //check pending payments
-      // const appointmentPaymentServiceObj = new AppointmentsPaymentService(
-      //   this._request,
-      //   this._response,
-      //   this._next
-      // );
-      // if (isPackageExistData[0].isPackageExists) {
-      //   console.log("red:", isPackageExistData[0].isPackageExists);
-      //   const packagePayments = await appointmentPaymentServiceObj.getPendingPaymentAmountForPackageService(
-      //     validatedVisitData?.patientId,
-      //     new Date().toISOString().split("T")[0]
-      //   );
-      //   console.log("packagePayments:", packagePayments);
-      //   if (packagePayments?.totalPendingAmount > 0) {
-      //     throw new createError.BadRequest(
-      //       Constants.PENDING_PAYMENTS_FOR_VISIT_CLOSE
-      //     );
-      //   }
-      // } else {
-      //   const withoutPackagePayments = await appointmentPaymentServiceObj.getPendingPaymentWithoutPackageService(
-      //     validatedVisitData?.type,
-      //     validatedVisitData?.appointmentId
-      //   );
-      //   console.log("withoutPackagePayments:", withoutPackagePayments);
-      //   if (withoutPackagePayments?.totalPendingAmount > 0) {
-      //     throw new createError.BadRequest(
-      //       Constants.PENDING_PAYMENTS_FOR_VISIT_CLOSE
-      //     );
-      //   }
-      // }
-
-      // update closing visit
-      const closedBy = this._request.userDetails?.id;
-      await this.mysqlConnection
-        .query(UpdateActiveQuery, {
-          type: Sequelize.QueryTypes.UPDATE,
-          replacements: {
-            visitId: paramVisitId,
-            visitClosedStatus: validatedVisitData?.visitClosedStatus,
-            visitClosedReason: validatedVisitData?.visitClosedReason,
-            closedBy: closedBy
-          },
-          transaction: t
-        })
-        .catch(err => {
-          console.log("Error while updating visits isActive", err.message);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
+      await this.deactivateVisit(paramVisitId, validatedVisitData, t);
     });
     return Constants.VISIT_CLOSED_SUCCESSFULLY;
+  }
+
+  async deactivateVisit(visitId, validatedVisitData, transaction) {
+    const closedBy = this._request.userDetails?.id;
+    await this.mysqlConnection
+      .query(UpdateActiveQuery, {
+        type: Sequelize.QueryTypes.UPDATE,
+        replacements: {
+          visitId,
+          visitClosedStatus: validatedVisitData?.visitClosedStatus,
+          visitClosedReason: validatedVisitData?.visitClosedReason,
+          closedBy
+        },
+        transaction
+      })
+      .catch(err => {
+        console.log("Error while updating visits isActive", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
   }
 
   async closeVisitByConsultationService() {
@@ -385,42 +356,10 @@ class VisitsService {
       throw new createError.BadRequest(Constants.NO_ACTIVE_VISIT_EXIST);
     }
 
+    await this.assertFetEndedBeforeClosingVisit(paramVisitId);
+
     await this.mysqlConnection.transaction(async t => {
-      // check if treatment exists for visitId
-      const existingVisitTreatments = await visitTreatmentsAssociations
-        .findAll({
-          where: { visitId: paramVisitId }
-        })
-        .catch(err => {
-          console.log("Error while getting visit treatments:", err.message);
-          throw new createError.InternalServerError(err.message);
-        });
-
-      if (!lodash.isEmpty(existingVisitTreatments)) {
-        throw new createError.BadRequest(
-          Constants.TREATMENT_EXISTS_CLOSE_IN_TREATMENT
-        );
-      }
-
-      // update closing visit
-      const closedBy = this._request.userDetails?.id;
-      await this.mysqlConnection
-        .query(UpdateActiveQuery, {
-          type: Sequelize.QueryTypes.UPDATE,
-          replacements: {
-            visitId: paramVisitId,
-            visitClosedStatus: validatedVisitData?.visitClosedStatus,
-            visitClosedReason: validatedVisitData?.visitClosedReason,
-            closedBy: closedBy
-          },
-          transaction: t
-        })
-        .catch(err => {
-          console.log("Error while updating visits isActive", err.message);
-          throw new createError.InternalServerError(
-            Constants.SOMETHING_ERROR_OCCURRED
-          );
-        });
+      await this.deactivateVisit(paramVisitId, validatedVisitData, t);
     });
     return Constants.VISIT_CLOSED_SUCCESSFULLY;
   }
@@ -735,12 +674,31 @@ class VisitsService {
     return newAppointmentId;
   }
 
+  async assertVisitIsActive(visitId) {
+    const visitExist = await patientVisitsAssociation
+      .findOne({ where: { id: visitId } })
+      .catch(err => {
+        console.log("Error while getting visit exist check", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    if (!visitExist) {
+      throw new createError.BadRequest(Constants.VISIT_DOES_NOT_EXIST);
+    }
+    if (!visitExist?.isActive) {
+      throw new createError.BadRequest(Constants.NO_ACTIVE_VISIT_EXIST);
+    }
+    return visitExist;
+  }
+
   async createConsultationOrTreatmentService() {
     const createdByUserId = this._request?.userDetails?.id;
     const validatedInfoData = await createConsultationOrTreatmentSchema.validateAsync(
       this._request.body
     );
     const { createType, visitId, packageAmount, type } = validatedInfoData;
+    await this.assertVisitIsActive(visitId);
     if (createType === "Consultation") {
       const ExistsInitialConsultation = `select vca.id,vca.type from defaultdb.visit_consultations_associations vca 
           INNER JOIN defaultdb.patient_visits_association pva ON vca.visitId = pva.id where pva.id=:visitId`;
@@ -761,7 +719,10 @@ class VisitsService {
         item => item.type === "Initial Consultation"
       );
 
-      if (type === "Intial Consultation" && hasInitialConsultation) {
+      if (
+        (type === "Initial Consultation" || type === "Intial Consultation") &&
+        hasInitialConsultation
+      ) {
         throw new createError.InternalServerError(
           "Initial Consultation Already exists!"
         );

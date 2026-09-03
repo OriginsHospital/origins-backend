@@ -143,6 +143,62 @@ class AppointmentsPaymentService extends BaseService {
     }
   }
 
+  async assertActiveVisitById(visitId) {
+    const visitExist = await patientVisitsAssociation
+      .findOne({ where: { id: visitId } })
+      .catch(err => {
+        console.log("Error while getting visit exist check", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    if (!visitExist) {
+      throw new createError.BadRequest(Constants.VISIT_DOES_NOT_EXIST);
+    }
+    if (!visitExist?.isActive) {
+      throw new createError.BadRequest(Constants.NO_ACTIVE_VISIT_EXIST);
+    }
+    return visitExist;
+  }
+
+  async assertActiveVisitForConsultation(consultationId) {
+    const consultation = await visitConsultationsAssociations
+      .findOne({ where: { id: consultationId } })
+      .catch(err => {
+        console.log(
+          "Error while fetching consultation for booking",
+          err.message
+        );
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+    if (!consultation) {
+      throw new createError.BadRequest(
+        Constants.CONSULTATION_NOT_FOUND_FOR_VISIT
+      );
+    }
+    await this.assertActiveVisitById(consultation.visitId);
+  }
+
+  async assertActiveVisitForTreatmentCycle(treatmentCycleId) {
+    const treatmentCycle = await VisitTreatmentsAssociations.findOne({
+      where: { id: treatmentCycleId }
+    }).catch(err => {
+      console.log(
+        "Error while fetching treatment cycle for booking",
+        err.message
+      );
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+    if (!treatmentCycle) {
+      throw new createError.BadRequest(Constants.TREATMEMT_NOT_FOUND_FOR_VISIT);
+    }
+    await this.assertActiveVisitById(treatmentCycle.visitId);
+  }
+
   /*
         Returns the doctors List on the specified date who are not on leave
     */
@@ -275,6 +331,8 @@ class AppointmentsPaymentService extends BaseService {
     const payload = await consultationBookAppointmentSchema.validateAsync(
       this._request.body
     );
+
+    await this.assertActiveVisitForConsultation(payload.consultationId);
 
     const patientAppointmentAlreadyExists = await this.mysqlConnection
       .query(checkAppointmentExistsOnSameDateQuery, {
@@ -1573,6 +1631,8 @@ class AppointmentsPaymentService extends BaseService {
     const payload = await treatmentBookAppointmentSchema.validateAsync(
       this._request.body
     );
+
+    await this.assertActiveVisitForTreatmentCycle(payload.treatmentCycleId);
 
     const patientAppointmentAlreadyExists = await this.mysqlConnection
       .query(checkAppointmentExistsOnSameDateQuery, {
