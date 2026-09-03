@@ -33,6 +33,11 @@ const { getPatientInfoForTemplate } = require("../queries/lab_queries");
 const PatientScanFormFAssociation = require("../models/Associations/patientScanFormFAssociation");
 const { scanHeaderTemplate } = require("../templates/headerTemplates");
 const BaseService = require("./baseService");
+const {
+  compactScanTemplateForPrint,
+  prepareScanReportForPdf,
+  computeFitToSinglePageScale
+} = require("../utils/scanPrintUtils");
 
 const puppeteer = require("puppeteer");
 
@@ -365,6 +370,8 @@ class ScanService extends BaseService {
       hospitalLogoHeaderTemplate
     );
 
+    data.scanTemplate = compactScanTemplateForPrint(data.scanTemplate);
+
     return data;
   }
 
@@ -453,6 +460,12 @@ class ScanService extends BaseService {
           scanId: scanId
         }
       });
+
+      if (getSavedScanResult?.scanResult) {
+        getSavedScanResult.scanResult = compactScanTemplateForPrint(
+          getSavedScanResult.scanResult
+        );
+      }
 
       return getSavedScanResult;
     } catch (error) {
@@ -824,33 +837,71 @@ class ScanService extends BaseService {
       throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
     }
 
+    const reportHtml = prepareScanReportForPdf(data.scanResult);
     const browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"]
     });
-    const page = await browser.newPage();
-    await page.setContent(data.scanResult, {
-      waitUntil: ["load", "domcontentloaded", "networkidle0"]
-    });
-    const pdf_buffer = await page.pdf({
-      format: "a4",
-      scale: parseFloat("1"),
-      margin: { top: `0.1in`, bottom: `0.1in`, left: `0.2in`, right: `0.2in` },
-      printBackground: true
-    });
-    await browser.close();
 
-    this._response.set({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename=${"scanTemplate" +
-        "_" +
-        appointmentId +
-        ".pdf"}`,
-      "Content-Length": pdf_buffer.length,
-      filename: `${"scanTemplate"}_${appointmentId}.pdf`
-    });
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({
+        width: 794,
+        height: 1123,
+        deviceScaleFactor: 1
+      });
+      await page.emulateMediaType("print");
+      await page.setContent(reportHtml, {
+        waitUntil: ["load", "domcontentloaded", "networkidle0"]
+      });
+      await page.evaluate(async () => {
+        await Promise.all(
+          Array.from(document.images).map(img =>
+            img.complete
+              ? null
+              : new Promise(resolve => {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                })
+          )
+        );
+      });
 
-    this._response.send(pdf_buffer);
+      const contentHeight = await page.evaluate(() =>
+        Math.max(
+          document.body ? document.body.scrollHeight : 0,
+          document.documentElement ? document.documentElement.scrollHeight : 0
+        )
+      );
+      const scale = computeFitToSinglePageScale(contentHeight);
+
+      const pdf_buffer = await page.pdf({
+        format: "a4",
+        scale,
+        margin: {
+          top: "8mm",
+          bottom: "8mm",
+          left: "10mm",
+          right: "10mm"
+        },
+        printBackground: true,
+        displayHeaderFooter: false
+      });
+
+      this._response.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename=${"scanTemplate" +
+          "_" +
+          appointmentId +
+          ".pdf"}`,
+        "Content-Length": pdf_buffer.length,
+        filename: `${"scanTemplate"}_${appointmentId}.pdf`
+      });
+
+      this._response.send(pdf_buffer);
+    } finally {
+      await browser.close();
+    }
   }
 
   async getUptResultsService() {

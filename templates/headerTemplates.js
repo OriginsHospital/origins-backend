@@ -2,13 +2,13 @@ const scanHeaderTemplate = `
 <div style="border: 1px solid #000; padding: 5px; margin: auto; font-family: Arial, sans-serif; font-size: 14px;pointer-events: none; user-select: none;">
     <div style="display: flex; justify-content: space-between;">
         <div>
-            <p><strong>ID</strong> : {patientId}</p>
-            <p><strong>Age</strong> : {age}Y/{gender}</p>
-            <p><strong>Date</strong> : {requestDateTime} </p>
+            <p style="margin: 2px 0;"><strong>ID</strong> : {patientId}</p>
+            <p style="margin: 2px 0;"><strong>Age</strong> : {age}Y/{gender}</p>
+            <p style="margin: 2px 0;"><strong>Date</strong> : {requestDateTime} </p>
         </div>
         <div>
-            <p><strong>Name</strong> : {patientName}</p>
-            <p><strong>Mobile</strong> : {mobileNumber}</p>
+            <p style="margin: 2px 0;"><strong>Name</strong> : {patientName}</p>
+            <p style="margin: 2px 0;"><strong>Mobile</strong> : {mobileNumber}</p>
         </div>
     </div>
 </div>
