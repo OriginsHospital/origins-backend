@@ -502,6 +502,57 @@ WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
 ORDER BY patientName ASC, timeStart ASC, appointmentId ASC
 `;
 
+/** OI + TI / IUI Self / IUI Donor follicular study sheets for a date and branch. */
+const getFollicularSheetsByDateQuery = `
+SELECT
+  taa.id AS appointmentId,
+  taa.treatmentCycleId,
+  vtca.treatmentTypeId AS treatmentTypeId,
+  COALESCE(ttm.name, '') AS treatmentType,
+  'Treatment' AS appointmentType,
+  CONCAT(pm.lastName, ' ', COALESCE(pm.firstName, '')) AS patientName,
+  DATE_FORMAT(pm.dateOfBirth, '%Y-%m-%d') AS dateOfBirth,
+  TIMESTAMPDIFF(YEAR, pm.dateOfBirth, CURDATE()) AS patientAge,
+  DATE_FORMAT(pva.lmp, '%Y-%m-%d') AS lmp,
+  DATE_FORMAT(taa.appointmentDate, '%Y-%m-%d') AS appointmentDate,
+  COALESCE(
+    (SELECT arm.name FROM appointment_reason_master arm WHERE arm.id = taa.appointmentReasonId),
+    ''
+  ) AS appointmentReason,
+  COALESCE(
+    (SELECT cdm.name FROM consultation_doctor_master cdm WHERE cdm.userId = taa.consultationDoctorId),
+    ''
+  ) AS doctorName,
+  taa.branchId,
+  COALESCE(bm.branchCode, bm.name) AS branchCode,
+  TIME_FORMAT(taa.timeStart, '%H:%i') AS timeStart,
+  TIME_FORMAT(taa.timeEnd, '%H:%i') AS timeEnd,
+  tsa.template AS treatmentSheetTemplate,
+  CAST(IF(tsa.id IS NOT NULL, 1, 0) AS UNSIGNED) AS hasSheet
+FROM treatment_appointments_associations taa
+INNER JOIN visit_treatment_cycles_associations vtca ON vtca.id = taa.treatmentCycleId
+INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId
+INNER JOIN patient_master pm ON pm.id = pva.patientId
+LEFT JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+LEFT JOIN (
+  SELECT tsa1.treatmentCycleId, tsa1.template, tsa1.id
+  FROM treatment_sheets_associations tsa1
+  INNER JOIN (
+    SELECT treatmentCycleId, MAX(id) AS maxId
+    FROM treatment_sheets_associations
+    GROUP BY treatmentCycleId
+  ) latest
+    ON latest.treatmentCycleId = tsa1.treatmentCycleId
+   AND latest.maxId = tsa1.id
+) tsa ON tsa.treatmentCycleId = taa.treatmentCycleId
+LEFT JOIN branch_master bm ON bm.id = taa.branchId
+WHERE DATE(taa.appointmentDate) = DATE(:appointmentDate)
+  AND (:branchId IS NULL OR taa.branchId = :branchId)
+  AND vtca.treatmentTypeId IN (1, 2, 3)
+  AND taa.noShow = 0
+ORDER BY vtca.treatmentTypeId ASC, patientName ASC, timeStart ASC, appointmentId ASC
+`;
+
 /** Hystero/Lap reports for treatment appointments on a given date and branch. */
 const getHysteroLapByDateQuery = `
 SELECT
@@ -681,6 +732,7 @@ module.exports = {
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
+  getFollicularSheetsByDateQuery,
   getHysteroLapByDateQuery,
   getDischargeCardsByDateQuery,
   getUptResultsQuery

@@ -36,6 +36,15 @@ class ScanController {
     });
   }
 
+  async getFollicularSheetsByDateHandler() {
+    const data = await this._service.getFollicularSheetsByDateService();
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getHysteroLapByDateHandler() {
     const data = await this._service.getHysteroLapByDateService();
     this._response.status(200).send({

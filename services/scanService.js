@@ -9,6 +9,7 @@ const {
   getScanReportsQuery,
   getPrescriptionsByDateQuery,
   getOpuSheetsByDateQuery,
+  getFollicularSheetsByDateQuery,
   getHysteroLapByDateQuery,
   getDischargeCardsByDateQuery,
   getUptResultsQuery
@@ -159,6 +160,57 @@ class ScanService extends BaseService {
       });
 
     return data;
+  }
+
+  parseFollicularSheetFromTemplate(template) {
+    if (!template) return null;
+    let parsed = template;
+    if (typeof template === "string") {
+      try {
+        parsed = JSON.parse(template);
+      } catch (err) {
+        console.log("Error while parsing follicular treatment sheet", err);
+        return null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed.follicularSheet || null;
+  }
+
+  async getFollicularSheetsByDateService() {
+    const { appointmentDate } = this._request.params;
+    const { branchId } = this._request.query;
+    if (lodash.isEmpty(String(appointmentDate || "").trim())) {
+      throw new createError.BadRequest(
+        Constants.PARAMS_ERROR.replace("{params}", "appointmentDate")
+      );
+    }
+    const data = await this.mysqlConnection
+      .query(getFollicularSheetsByDateQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: {
+          appointmentDate: appointmentDate,
+          branchId: branchId || null
+        }
+      })
+      .catch(err => {
+        console.log("Error while getting follicular sheets by date", err);
+        throw createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return (data || []).map(row => {
+      const follicularSheet = this.parseFollicularSheetFromTemplate(
+        row.treatmentSheetTemplate
+      );
+      const { treatmentSheetTemplate, ...rest } = row;
+      return {
+        ...rest,
+        follicularSheet,
+        hasSheet: follicularSheet ? 1 : Number(row.hasSheet) || 0
+      };
+    });
   }
 
   async getScanReportsService() {
