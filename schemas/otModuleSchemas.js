@@ -9,7 +9,11 @@ const savePersonListSchema = Joi.object({
     .required(),
   phoneNumber: Joi.string()
     .max(100)
-    .required()
+    .required(),
+  isActive: Joi.number()
+    .integer()
+    .valid(0, 1)
+    .optional()
 });
 
 const editPersonListSchema = Joi.object({

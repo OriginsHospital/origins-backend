@@ -61,13 +61,14 @@ class OTModuleService {
     const {
       personName,
       designationId,
-      phoneNumber
+      phoneNumber,
+      isActive
     } = await savePersonListSchema.validateAsync(this._request.body);
     return await OTPersonMasterModel.create({
       personName,
       designationId,
       phoneNumber,
-      isActive: 1
+      isActive: isActive ?? 1
     }).catch(err => {
       console.log("Error while saving details of OT person ", err);
       throw new createError.InternalServerError(
