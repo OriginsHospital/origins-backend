@@ -495,7 +495,17 @@ SELECT JSON_OBJECT(
     'END_FET', 
     CASE 
         WHEN :treatmentType IN (4, 5, 6, 7, 8) THEN 
-        	CASE WHEN tt.fetEndedDate IS NULL THEN 0 ELSE 1 END
+        	CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM treatment_fet_cycles tfc_open
+                    WHERE tfc_open.visitId = vtca.visitId
+                      AND tfc_open.fetEndedDate IS NULL
+                ) THEN 0
+                WHEN tt.fetStartDate IS NOT NULL AND tt.fetEndedDate IS NULL THEN 0
+                WHEN tt.fetEndedDate IS NOT NULL THEN 1
+                ELSE 0
+            END
         ELSE -1 
     END,
     'START_HYSTEROSCOPY', 

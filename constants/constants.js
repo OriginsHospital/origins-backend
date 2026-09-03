@@ -115,6 +115,8 @@ module.exports = {
   FET_CONSENTS_DOES_NOT_EXISTS: "FET Consents Does not Exists",
   FET_ALREADY_STARTED: "FET Already Started",
   FET_NOT_ALREADY_STARTED: "FET Not Already Started",
+  FET_IN_PROGRESS_CLOSE_VISIT:
+    "FET is still in progress. Please end FET before closing the visit.",
   ERA_CONSENTS_DOES_NOT_EXISTS: "ERA Consents Does not Exists",
   ERA_ALREADY_STARTED: "ERA Already Started",
   ERA_NOT_ALREADY_STARTED: "ERA Not Already Started",

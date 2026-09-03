@@ -126,11 +126,31 @@ FROM visit_packages_associations
 WHERE visitId = :visitId;
 `;
 
+const getOpenFetCycleForVisitQuery = `
+SELECT tfc.cycleNumber
+FROM treatment_fet_cycles tfc
+WHERE tfc.visitId = :visitId
+  AND tfc.fetEndedDate IS NULL
+ORDER BY tfc.cycleNumber DESC
+LIMIT 1
+`;
+
+const getOpenFetFromTimestampsQuery = `
+SELECT tt.fetStartDate
+FROM treatment_timestamps tt
+WHERE tt.visitId = :visitId
+  AND tt.fetStartDate IS NOT NULL
+  AND tt.fetEndedDate IS NULL
+LIMIT 1
+`;
+
 module.exports = {
   isActiveQuery,
   getDonarInformationQuery,
   isPackageExistsQueryForTreatment,
   UpdateActiveQuery,
   isPackageExistsQueryForVisit,
-  donorPaymentCheckQuery
+  donorPaymentCheckQuery,
+  getOpenFetCycleForVisitQuery,
+  getOpenFetFromTimestampsQuery
 };

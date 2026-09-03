@@ -8,7 +8,9 @@ const {
   getDonarInformationQuery,
   isPackageExistsQueryForTreatment,
   UpdateActiveQuery,
-  donorPaymentCheckQuery
+  donorPaymentCheckQuery,
+  getOpenFetCycleForVisitQuery,
+  getOpenFetFromTimestampsQuery
 } = require("../queries/visit_queries");
 const patientVisitsAssociation = require("../models/Associations/patientVisitsAssociation");
 const { assertPackageEditAllowed } = require("../constants/packageEditAccess");
@@ -72,6 +74,45 @@ class VisitsService {
         );
       });
     return checkActive[0].activeCount;
+  }
+
+  async assertFetEndedBeforeClosingVisit(visitId) {
+    const openFetCycle = await this.mysqlConnection
+      .query(getOpenFetCycleForVisitQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { visitId }
+      })
+      .catch(err => {
+        console.log("Error while checking open FET cycle for visit close", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!lodash.isEmpty(openFetCycle)) {
+      const cycleNumber = openFetCycle[0]?.cycleNumber;
+      throw new createError.BadRequest(
+        cycleNumber
+          ? `FET Cycle ${cycleNumber} is still in progress. Please end FET before closing the visit.`
+          : Constants.FET_IN_PROGRESS_CLOSE_VISIT
+      );
+    }
+
+    const openFetTimestamp = await this.mysqlConnection
+      .query(getOpenFetFromTimestampsQuery, {
+        type: Sequelize.QueryTypes.SELECT,
+        replacements: { visitId }
+      })
+      .catch(err => {
+        console.log("Error while checking FET timestamps for visit close", err);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!lodash.isEmpty(openFetTimestamp)) {
+      throw new createError.BadRequest(Constants.FET_IN_PROGRESS_CLOSE_VISIT);
+    }
   }
 
   async createVisitService() {
@@ -242,6 +283,8 @@ class VisitsService {
     if (!visitExist?.isActive) {
       throw new createError.BadRequest(Constants.NO_ACTIVE_VISIT_EXIST);
     }
+
+    await this.assertFetEndedBeforeClosingVisit(paramVisitId);
 
     await this.mysqlConnection.transaction(async t => {
       /* TODO: Check if Pending payments exists for visitId after payment flow */
