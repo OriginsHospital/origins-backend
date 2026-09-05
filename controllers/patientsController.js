@@ -212,6 +212,15 @@ class PatientsController {
     });
   }
 
+  async updateFutureCycleHandler() {
+    const data = await this._service.updateFutureCycleService(this._request);
+    this._response.status(200).send({
+      status: 200,
+      message: Constants.SUCCESS,
+      data: data
+    });
+  }
+
   async getFutureCyclesHandler() {
     const data = await this._service.getFutureCyclesService(this._request);
     this._response.status(200).send({

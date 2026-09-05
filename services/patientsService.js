@@ -12,6 +12,7 @@ const {
   saveDischargeSummarySheet,
   savePickUpSheet,
   saveFutureCycleSchema,
+  updateFutureCycleSchema,
   referringDoctorSchema,
   updateReferringDoctorSchema
 } = require("../schemas/patientSchemas");
@@ -30,6 +31,7 @@ const {
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
+  updateFutureCycleDetailsQuery,
   patientHasStartedTreatmentQuery,
   patientActiveTreatmentTypeQuery
 } = require("../queries/patient_queries");
@@ -1349,6 +1351,148 @@ class PatientsService extends BaseService {
         if (err.message && err.message.includes("patient_future_cycles")) {
           throw new createError.InternalServerError(
             "Future cycles table is missing. Please run database migration 038_create_patient_future_cycles.sql"
+          );
+        }
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    return Constants.DATA_UPDATED_SUCCESS;
+  }
+
+  _canEditFutureCycleDetails() {
+    const roleDetails = this._request.userDetails?.roleDetails || {};
+    const roleId = Number(roleDetails.id);
+    const roleName = String(
+      roleDetails.name || roleDetails.roleName || roleDetails.role || ""
+    )
+      .trim()
+      .toLowerCase();
+    return (
+      roleId === 1 ||
+      roleName === "admin" ||
+      roleName.includes("admin") ||
+      roleName === "doctor" ||
+      roleName.includes("doctor")
+    );
+  }
+
+  _splitPatientDisplayName(patientName) {
+    const trimmed = String(patientName || "")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (!trimmed) {
+      return { firstName: "", lastName: null };
+    }
+    const parts = trimmed.split(" ");
+    if (parts.length === 1) {
+      return { firstName: parts[0], lastName: null };
+    }
+    // Display format is lastName + ' ' + firstName
+    return {
+      lastName: parts[0],
+      firstName: parts.slice(1).join(" ")
+    };
+  }
+
+  async updateFutureCycleService() {
+    if (!this._canEditFutureCycleDetails()) {
+      throw new createError.Forbidden(
+        "Only Admin and Doctor roles can edit future cycle details"
+      );
+    }
+
+    const { error, value } = updateFutureCycleSchema.validate(
+      this._request.body,
+      {
+        convert: true
+      }
+    );
+    if (error) {
+      throw new createError.BadRequest(error.details[0].message);
+    }
+
+    const patient = await PatientMasterModel.findByPk(
+      value.patientMasterId
+    ).catch(() => null);
+    if (!patient) {
+      throw new createError.BadRequest(Constants.DATA_NOT_FOUND);
+    }
+
+    const existingCycle = await this.mysqlConnection
+      .query(
+        `SELECT id FROM patient_future_cycles WHERE patientId = :patientId LIMIT 1`,
+        {
+          replacements: { patientId: value.patientMasterId },
+          type: Sequelize.QueryTypes.SELECT
+        }
+      )
+      .catch(err => {
+        console.log("Error checking future cycle record", err.message);
+        throw new createError.InternalServerError(
+          Constants.SOMETHING_ERROR_OCCURRED
+        );
+      });
+
+    if (!existingCycle?.length) {
+      throw new createError.BadRequest("Future cycle record not found");
+    }
+
+    const duplicatePatientId = await PatientMasterModel.findOne({
+      where: {
+        patientId: value.patientId,
+        id: { [Sequelize.Op.ne]: value.patientMasterId }
+      }
+    }).catch(() => null);
+
+    if (duplicatePatientId) {
+      throw new createError.BadRequest(
+        "Patient ID already exists for another patient"
+      );
+    }
+
+    const { firstName, lastName } = this._splitPatientDisplayName(
+      value.patientName
+    );
+    if (!firstName) {
+      throw new createError.BadRequest("Patient name is required");
+    }
+
+    await PatientMasterModel.update(
+      {
+        firstName,
+        lastName,
+        mobileNo: value.mobileNo,
+        cityId: value.cityId ?? null,
+        branchId: value.branchId,
+        patientId: value.patientId
+      },
+      { where: { id: value.patientMasterId } }
+    ).catch(err => {
+      console.log("Error updating patient for future cycle", err.message);
+      throw new createError.InternalServerError(
+        Constants.SOMETHING_ERROR_OCCURRED
+      );
+    });
+
+    await this.mysqlConnection
+      .query(updateFutureCycleDetailsQuery, {
+        replacements: {
+          patientId: value.patientMasterId,
+          cycleMonth: value.cycleMonth,
+          cycleYear: value.cycleYear,
+          treatmentTypeId: value.treatmentTypeId ?? null
+        }
+      })
+      .catch(err => {
+        console.log("Error updating future cycle details", err.message);
+        if (
+          err.message &&
+          err.message.includes("Unknown column 'treatmentTypeId'")
+        ) {
+          throw new createError.InternalServerError(
+            "Future cycles treatment type column is missing. Please run database migration 039_add_treatment_type_to_future_cycles.sql"
           );
         }
         throw new createError.InternalServerError(

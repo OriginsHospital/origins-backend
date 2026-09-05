@@ -324,22 +324,39 @@ SELECT
     pm.patientId,
     pm.photoPath,
     CONCAT(pm.lastName, ' ', pm.firstName) AS patientName,
+    pm.firstName,
+    pm.lastName,
     pfc.cycleMonth,
     pfc.cycleYear,
     pm.mobileNo,
+    pm.cityId,
     JSON_OBJECT('id', pm.cityId, 'name', COALESCE(cm.name, '')) AS city,
     pm.branchId,
     (SELECT bm.branchCode FROM branch_master bm WHERE bm.id = pm.branchId) AS branch,
     (SELECT bm.name FROM branch_master bm WHERE bm.id = pm.branchId) AS branchName,
     DATE_FORMAT(pfc.createdAt, '%d-%m-%Y') AS scheduledOn,
-    (
-        SELECT ttm.name
-        FROM visit_treatment_cycles_associations vtca
-        INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId AND pva.isActive = 1
-        INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
-        WHERE pva.patientId = pm.id
-        ORDER BY vtca.createdAt DESC, vtca.id DESC
-        LIMIT 1
+    COALESCE(
+        pfc.treatmentTypeId,
+        (
+            SELECT vtca.treatmentTypeId
+            FROM visit_treatment_cycles_associations vtca
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId AND pva.isActive = 1
+            WHERE pva.patientId = pm.id
+            ORDER BY vtca.createdAt DESC, vtca.id DESC
+            LIMIT 1
+        )
+    ) AS treatmentTypeId,
+    COALESCE(
+        (SELECT ttm.name FROM treatment_type_master ttm WHERE ttm.id = pfc.treatmentTypeId),
+        (
+            SELECT ttm.name
+            FROM visit_treatment_cycles_associations vtca
+            INNER JOIN patient_visits_association pva ON pva.id = vtca.visitId AND pva.isActive = 1
+            INNER JOIN treatment_type_master ttm ON ttm.id = vtca.treatmentTypeId
+            WHERE pva.patientId = pm.id
+            ORDER BY vtca.createdAt DESC, vtca.id DESC
+            LIMIT 1
+        )
     ) AS treatmentType
 FROM patient_future_cycles pfc
 INNER JOIN patient_master pm ON pm.id = pfc.patientId
@@ -357,6 +374,15 @@ ON DUPLICATE KEY UPDATE
     updatedAt = CURRENT_TIMESTAMP
 `;
 
+const updateFutureCycleDetailsQuery = `
+UPDATE patient_future_cycles
+SET
+    cycleMonth = :cycleMonth,
+    cycleYear = :cycleYear,
+    treatmentTypeId = :treatmentTypeId,
+    updatedAt = CURRENT_TIMESTAMP
+WHERE patientId = :patientId
+`;
 const patientHasStartedTreatmentQuery = `
 SELECT EXISTS (
     SELECT 1
@@ -388,6 +414,7 @@ module.exports = {
   searchPatientByAadhaarQuery,
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
+  updateFutureCycleDetailsQuery,
   patientHasStartedTreatmentQuery,
   patientActiveTreatmentTypeQuery
 };

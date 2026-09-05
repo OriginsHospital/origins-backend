@@ -151,6 +151,13 @@ class PatientsRoute {
       this.saveFutureCycle
     );
 
+    this._route.put(
+      "/futureCycles",
+      checkActiveSession,
+      tokenVerified,
+      this.updateFutureCycle
+    );
+
     this._route.get(
       "/futureCycles",
       checkActiveSession,
@@ -293,6 +300,11 @@ class PatientsRoute {
   saveFutureCycle = asyncHandler(async (req, res, next) => {
     const controllerObj = new PatientsController(req, res, next);
     await controllerObj.saveFutureCycleHandler();
+  });
+
+  updateFutureCycle = asyncHandler(async (req, res, next) => {
+    const controllerObj = new PatientsController(req, res, next);
+    await controllerObj.updateFutureCycleHandler();
   });
 
   getFutureCycles = asyncHandler(async (req, res, next) => {
