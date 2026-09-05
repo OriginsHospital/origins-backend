@@ -237,7 +237,11 @@ const saveFutureCycleSchema = Joi.object({
     .integer()
     .min(2000)
     .max(2100)
-    .required()
+    .required(),
+  treatmentTypeId: Joi.number()
+    .integer()
+    .allow(null)
+    .optional()
 });
 
 const updateFutureCycleSchema = Joi.object({

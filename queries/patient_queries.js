@@ -365,11 +365,12 @@ WHERE 1=1
 `;
 
 const upsertFutureCycleQuery = `
-INSERT INTO patient_future_cycles (patientId, cycleMonth, cycleYear, createdBy)
-VALUES (:patientId, :cycleMonth, :cycleYear, :createdBy)
+INSERT INTO patient_future_cycles (patientId, cycleMonth, cycleYear, treatmentTypeId, createdBy)
+VALUES (:patientId, :cycleMonth, :cycleYear, :treatmentTypeId, :createdBy)
 ON DUPLICATE KEY UPDATE
     cycleMonth = VALUES(cycleMonth),
     cycleYear = VALUES(cycleYear),
+    treatmentTypeId = VALUES(treatmentTypeId),
     createdBy = VALUES(createdBy),
     updatedAt = CURRENT_TIMESTAMP
 `;
@@ -383,6 +384,22 @@ SET
     updatedAt = CURRENT_TIMESTAMP
 WHERE patientId = :patientId
 `;
+
+// If no treatment type is set and the scheduled month/year is in the past,
+// roll the cycle forward to the current calendar month/year.
+const rollForwardPastEmptyTreatmentFutureCyclesQuery = `
+UPDATE patient_future_cycles
+SET
+    cycleMonth = MONTH(CURDATE()),
+    cycleYear = YEAR(CURDATE()),
+    updatedAt = CURRENT_TIMESTAMP
+WHERE treatmentTypeId IS NULL
+  AND (
+    cycleYear < YEAR(CURDATE())
+    OR (cycleYear = YEAR(CURDATE()) AND cycleMonth < MONTH(CURDATE()))
+  )
+`;
+
 const patientHasStartedTreatmentQuery = `
 SELECT EXISTS (
     SELECT 1
@@ -415,6 +432,7 @@ module.exports = {
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
   updateFutureCycleDetailsQuery,
+  rollForwardPastEmptyTreatmentFutureCyclesQuery,
   patientHasStartedTreatmentQuery,
   patientActiveTreatmentTypeQuery
 };

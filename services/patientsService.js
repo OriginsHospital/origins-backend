@@ -32,6 +32,7 @@ const {
   getFutureCyclesQuery,
   upsertFutureCycleQuery,
   updateFutureCycleDetailsQuery,
+  rollForwardPastEmptyTreatmentFutureCyclesQuery,
   patientHasStartedTreatmentQuery,
   patientActiveTreatmentTypeQuery
 } = require("../queries/patient_queries");
@@ -1343,6 +1344,7 @@ class PatientsService extends BaseService {
           patientId: patientMasterId,
           cycleMonth: value.cycleMonth,
           cycleYear: value.cycleYear,
+          treatmentTypeId: value.treatmentTypeId ?? null,
           createdBy: userId
         }
       })
@@ -1351,6 +1353,14 @@ class PatientsService extends BaseService {
         if (err.message && err.message.includes("patient_future_cycles")) {
           throw new createError.InternalServerError(
             "Future cycles table is missing. Please run database migration 038_create_patient_future_cycles.sql"
+          );
+        }
+        if (
+          err.message &&
+          err.message.includes("Unknown column 'treatmentTypeId'")
+        ) {
+          throw new createError.InternalServerError(
+            "Future cycles treatment type column is missing. Please run database migration 039_add_treatment_type_to_future_cycles.sql"
           );
         }
         throw new createError.InternalServerError(
@@ -1505,6 +1515,19 @@ class PatientsService extends BaseService {
 
   async getFutureCyclesService() {
     const { branchId, cycleMonth, cycleYear, status } = this._request.query;
+
+    // Auto-roll past months to current month when treatment type is still empty
+    await this.mysqlConnection
+      .query(rollForwardPastEmptyTreatmentFutureCyclesQuery, {
+        type: Sequelize.QueryTypes.UPDATE
+      })
+      .catch(err => {
+        console.log(
+          "Error while rolling forward past empty-treatment future cycles",
+          err.message
+        );
+        // Non-fatal: still return the list even if roll-forward fails
+      });
 
     let query = getFutureCyclesQuery;
     const replacements = {};
