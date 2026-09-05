@@ -1504,10 +1504,34 @@ class PatientsService extends BaseService {
   }
 
   async getFutureCyclesService() {
-    const { branchId, cycleMonth, cycleYear } = this._request.query;
+    const { branchId, cycleMonth, cycleYear, status } = this._request.query;
 
     let query = getFutureCyclesQuery;
     const replacements = {};
+
+    // status=started → patients who had a future cycle and then started treatment
+    // default / pending → still waiting (no active visit treatment yet)
+    const normalizedStatus = String(status || "pending")
+      .trim()
+      .toLowerCase();
+    const treatmentStartedExists = `
+      EXISTS (
+        SELECT 1
+        FROM visit_treatment_cycles_associations vtca
+        INNER JOIN patient_visits_association pva
+          ON pva.id = vtca.visitId AND pva.isActive = 1
+        WHERE pva.patientId = pm.id
+      )
+    `;
+    if (
+      normalizedStatus === "started" ||
+      normalizedStatus === "treatmentstarted" ||
+      normalizedStatus === "treatment_started"
+    ) {
+      query += ` AND ${treatmentStartedExists}`;
+    } else {
+      query += ` AND NOT ${treatmentStartedExists}`;
+    }
 
     if (branchId) {
       query += ` AND pm.branchId = :branchId`;
