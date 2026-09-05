@@ -520,7 +520,23 @@ CASE
                 LIMIT 1
             )
         ELSE null
-    END as treatmentCycleId
+    END as treatmentCycleId,
+(
+    SELECT JSON_OBJECT(
+        'id', pfc.id,
+        'cycleMonth', pfc.cycleMonth,
+        'cycleYear', pfc.cycleYear,
+        'treatmentTypeId', pfc.treatmentTypeId,
+        'treatmentType', (
+            SELECT ttm.name
+            FROM treatment_type_master ttm
+            WHERE ttm.id = pfc.treatmentTypeId
+        )
+    )
+    FROM patient_future_cycles pfc
+    WHERE pfc.patientId = pInfo.id
+    LIMIT 1
+) AS futureCycleDetails
 from patientInfo pInfo
 LEFT JOIN patient_visits_association pva ON pva.id = pInfo.activeVisitId
 LEFT JOIN visit_type_master vtm ON vtm.id = pva.type;
